@@ -55,7 +55,10 @@ export type StructuredCall<S extends z.ZodType> = {
   schema: S;
   system?: string;
   prompt: string;
-  image?: { mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif"; base64: string } | null;
+  image?:
+    | { mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif"; base64: string }
+    | { url: string }
+    | null;
   maxTokens?: number;
   effort?: "low" | "medium" | "high";
   meta: LogMeta;
@@ -85,7 +88,13 @@ export async function structuredCall<S extends z.ZodType>(call: StructuredCall<S
   const anthropic = getClient();
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
   if (call.image) {
-    content.push({ type: "image", source: { type: "base64", media_type: call.image.mediaType, data: call.image.base64 } });
+    content.push({
+      type: "image",
+      source:
+        "url" in call.image
+          ? { type: "url", url: call.image.url }
+          : { type: "base64", media_type: call.image.mediaType, data: call.image.base64 },
+    });
   }
   content.push({ type: "text", text: call.prompt });
 
