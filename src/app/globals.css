@@ -10,8 +10,8 @@
   --ink-soft: #5e4c3f;
   --line: #e4d9cb;
   --ragi: #6b3f2a;
-  --jaggery: #c8862a;
-  --leaf: #3f7a3a;
+  --jaggery: #9a6316;
+  --leaf: #356b31;
   --red: #b42318;
   --red-bg: #fde8e6;
   --amber: #9a5b00;
@@ -24,7 +24,7 @@
 }
 
 :root[data-platform="meta"] { --accent: #4f46e5; --accent-soft: #eceafd; }
-:root[data-platform="amazon"] { --accent: #c25e00; --accent-soft: #fdebd8; }
+:root[data-platform="amazon"] { --accent: #a54f00; --accent-soft: #fdebd8; }
 :root[data-platform="flipkart"] { --accent: #2160d8; --accent-soft: #e3ecfc; }
 
 @media (prefers-color-scheme: dark) {
@@ -135,4 +135,53 @@ body {
 }
 @utility prose-serif {
   @apply font-serif leading-relaxed;
+}
+
+/* Markdown guide content */
+.guide-md {
+  font-family: var(--font-serif);
+  line-height: 1.7;
+}
+.guide-md h2 {
+  font-family: var(--font-sans);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 1.75rem 0 0.5rem;
+  letter-spacing: -0.01em;
+}
+.guide-md h3 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  margin: 1.25rem 0 0.25rem;
+}
+.guide-md p,
+.guide-md ul,
+.guide-md ol,
+.guide-md table {
+  margin: 0.6rem 0;
+}
+.guide-md ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+}
+.guide-md ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+}
+.guide-md strong {
+  color: var(--ink);
+}
+.guide-md table {
+  display: block;
+  overflow-x: auto;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  border-collapse: collapse;
+}
+.guide-md th,
+.guide-md td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  text-align: left;
+  vertical-align: top;
 }

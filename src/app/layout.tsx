@@ -43,9 +43,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                     "use server";
                     await signOut({ redirectTo: "/login" });
                   }}
-                  className="hidden shrink-0 items-center gap-2 text-sm text-ink-soft md:flex"
+                  className="flex shrink-0 items-center gap-2 text-sm text-ink-soft"
                 >
-                  <span className="max-w-48 truncate" title={email}>
+                  <span className="hidden max-w-48 truncate md:inline" title={email}>
                     {email}
                   </span>
                   <button type="submit" className="rounded-md px-2 py-1 font-semibold hover:bg-surface-2 hover:text-ink">
