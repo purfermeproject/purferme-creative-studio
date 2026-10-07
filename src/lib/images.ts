@@ -80,7 +80,10 @@ export async function generateImage(opts: { prompt: string; size: ImageSize; ref
         const cause = (e as { cause?: { code?: string; message?: string } }).cause;
         throw new UserFacingError(`Couldn't reach OpenAI from this computer (${cause?.code ?? cause?.message ?? e.message}). Check your internet, VPN, proxy or antivirus, then try again.`);
       }
-      if (e instanceof OpenAI.APIError) throw new UserFacingError(`The image service had a problem (${e.status ?? "network"}). Try again in a moment.`);
+      if (e instanceof OpenAI.APIError) {
+        console.error("OpenAI image error:", e);
+        throw new UserFacingError(`OpenAI returned an error${e.status ? ` (${e.status})` : ""}: ${e.message}`);
+      }
       throw e;
     }
   }

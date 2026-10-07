@@ -78,7 +78,11 @@ function friendlyApiError(e: unknown): Error {
     console.error("OpenAI connection error:", e, (e as { cause?: unknown }).cause);
     return new UserFacingError(`Couldn't reach OpenAI from this computer (${connectionCause(e)}). Check your internet, VPN, proxy or antivirus, then try again.`);
   }
-  if (e instanceof OpenAI.APIError) return new UserFacingError(`OpenAI had a problem (${e.status ?? "network"}). Try again in a moment.`);
+  if (e instanceof OpenAI.APIError) {
+    // Errors sent inside the stream have no HTTP status; OpenAI's own message says what went wrong.
+    console.error("OpenAI error:", e);
+    return new UserFacingError(`OpenAI returned an error${e.status ? ` (${e.status})` : ""}: ${e.message}`);
+  }
   if (e instanceof Anthropic.AuthenticationError) return new UserFacingError("The Anthropic API key was rejected. Ask an admin to check ANTHROPIC_API_KEY.");
   if (e instanceof Anthropic.RateLimitError) return new UserFacingError("The model is rate-limited right now. Wait a minute and try again.");
   if (e instanceof Anthropic.NotFoundError) return new UserFacingError(`Model "${MODEL}" wasn't found. Ask an admin to check ANTHROPIC_MODEL.`);
@@ -193,6 +197,7 @@ export function errorMessage(e: unknown): string {
 }
 
 let openaiClient: OpenAI | null = null;
+let openaiCanStream = true;
 
 /** Same contract as the Anthropic path: stream, validate with zod, retry once, log usage. */
 async function openaiStructuredCall<S extends z.ZodType>(call: StructuredCall<S>): Promise<z.infer<S>> {
@@ -213,22 +218,41 @@ async function openaiStructuredCall<S extends z.ZodType>(call: StructuredCall<S>
   }
   content.push({ type: "input_text", text: call.prompt });
 
+  const params = {
+    model: OPENAI_TEXT_MODEL,
+    ...(call.system ? { instructions: call.system } : {}),
+    input: [{ role: "user" as const, content }],
+    max_output_tokens: call.maxTokens ?? 32000,
+    text: { format: { type: "json_schema" as const, name: "result", schema: jsonSchema, strict: false } },
+  };
+
   let lastProblem = "";
   for (let attempt = 0; attempt < 2; attempt++) {
     let response: OpenAI.Responses.Response;
     try {
-      const stream = openaiClient.responses.stream({
-        model: OPENAI_TEXT_MODEL,
-        ...(call.system ? { instructions: call.system } : {}),
-        input: [{ role: "user", content }],
-        max_output_tokens: call.maxTokens ?? 32000,
-        text: { format: { type: "json_schema", name: "result", schema: jsonSchema, strict: false } },
-      });
-      if (call.onText) stream.on("response.output_text.delta", (e) => call.onText!(e.delta));
-      response = await stream.finalResponse();
+      if (!openaiCanStream) {
+        response = await openaiClient.responses.create(params);
+      } else {
+        try {
+          const stream = openaiClient.responses.stream(params);
+          if (call.onText) stream.on("response.output_text.delta", (e) => call.onText!(e.delta));
+          response = await stream.finalResponse();
+        } catch (e) {
+          // Some OpenAI accounts must be verified before they can stream newer models.
+          // Fall back to a normal (non-streamed) request and remember for next time.
+          if (e instanceof OpenAI.APIError && /verif|stream/i.test(e.message)) {
+            console.warn("OpenAI won't stream for this account; using non-streamed requests:", e.message);
+            openaiCanStream = false;
+            response = await openaiClient.responses.create(params);
+          } else {
+            throw e;
+          }
+        }
+      }
     } catch (e) {
       // The SDK throws its own error when the JSON can't be parsed; treat that as invalid output and retry.
       if (e instanceof OpenAI.APIError || e instanceof UserFacingError) throw friendlyApiError(e);
+      console.error("OpenAI response problem:", e);
       lastProblem = e instanceof Error ? e.message : String(e);
       continue;
     }
