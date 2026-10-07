@@ -189,6 +189,26 @@ export async function structuredCall<S extends z.ZodType>(call: StructuredCall<S
   throw new UserFacingError(`The model returned an invalid response twice (${lastProblem}). Try again.`);
 }
 
+/**
+ * OpenAI strict mode needs every property listed as required and no extra keys.
+ * Optional properties become nullable instead (nulls are dropped again before zod validation).
+ */
+export function toOpenAIStrictSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(toOpenAIStrictSchema);
+  if (!node || typeof node !== "object") return node;
+  const n = Object.fromEntries(Object.entries(node).map(([k, v]) => [k, toOpenAIStrictSchema(v)])) as Record<string, unknown>;
+  if (n.type === "object" && n.properties && typeof n.properties === "object") {
+    const props = n.properties as Record<string, Record<string, unknown>>;
+    const required = new Set((n.required as string[] | undefined) ?? []);
+    for (const key of Object.keys(props)) {
+      if (!required.has(key)) props[key] = { anyOf: [props[key], { type: "null" }] };
+    }
+    n.required = Object.keys(props);
+    n.additionalProperties = false;
+  }
+  return n;
+}
+
 /** Models sometimes write null for optional fields; treat null as "not provided" before validating. */
 export function dropNulls(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(dropNulls);
@@ -214,8 +234,9 @@ async function openaiStructuredCall<S extends z.ZodType>(call: StructuredCall<S>
     throw new UserFacingError("No AI key is set. Add OPENAI_API_KEY (or ANTHROPIC_API_KEY) to .env.local and restart the app.");
   }
   openaiClient ??= new OpenAI();
-  const { $schema: _ignored, ...jsonSchema } = zod.toJSONSchema(call.schema) as Record<string, unknown>;
+  const { $schema: _ignored, ...rawSchema } = zod.toJSONSchema(call.schema) as Record<string, unknown>;
   void _ignored;
+  const jsonSchema = toOpenAIStrictSchema(rawSchema) as Record<string, unknown>;
 
   const content: OpenAI.Responses.ResponseInputContent[] = [];
   if (call.image) {
@@ -232,7 +253,7 @@ async function openaiStructuredCall<S extends z.ZodType>(call: StructuredCall<S>
     ...(call.system ? { instructions: call.system } : {}),
     input: [{ role: "user" as const, content }],
     max_output_tokens: call.maxTokens ?? 32000,
-    text: { format: { type: "json_schema" as const, name: "result", schema: jsonSchema, strict: false } },
+    text: { format: { type: "json_schema" as const, name: "result", schema: jsonSchema, strict: true } },
   };
 
   let lastProblem = "";
