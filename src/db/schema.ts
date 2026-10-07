@@ -90,6 +90,7 @@ export const creatives = pgTable("creatives", {
   scanResult: jsonb("scan_result").$type<ScanResult>().notNull().default({ hits: [] }),
   status: text("status").$type<CreativeStatus>().notNull().default("Draft"),
   qaChecked: integer("qa_checked").array().notNull().default([]),
+  imageIds: uuid("image_ids").array().notNull().default([]),
   createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -117,6 +118,17 @@ export const generationLogs = pgTable("generation_logs", {
   model: text("model").notNull(),
   inputTokens: integer("input_tokens").notNull().default(0),
   outputTokens: integer("output_tokens").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Generated images, stored in the database so they work without extra storage setup. */
+export const assets = pgTable("assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mime: text("mime").notNull(),
+  dataBase64: text("data_base64").notNull(),
+  prompt: text("prompt").notNull().default(""),
+  model: text("model").notNull().default(""),
+  createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -95,7 +95,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
             </Link>
           </p>
           <h1 className="text-4xl font-extrabold tracking-tight">Usage and cost</h1>
-          <p className="hint mt-1">Estimated from token counts at list prices (USD). Your Anthropic invoice is the source of truth.</p>
+          <p className="hint mt-1">Text costs are estimated at Anthropic list prices (USD). Image costs show as $0 here; check your OpenAI usage page for those.</p>
         </div>
         <nav aria-label="Period" className="flex gap-2">
           {[7, 30, 90].map((d) => (

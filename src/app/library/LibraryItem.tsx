@@ -2,6 +2,7 @@
 
 import { useOptimistic, useState, useTransition } from "react";
 import { ConceptCard } from "@/components/ConceptCard";
+import { ImageMaker, type MadeImage } from "@/components/ImageMaker";
 import type { Creative } from "@/db/schema";
 import { conceptToText } from "@/lib/concepts";
 import { approvalGate, requiredQaItems } from "@/lib/qa";
@@ -41,6 +42,7 @@ export function LibraryItem({ creative: c, productName, defaultOpen }: { creativ
   const [qa, setQaOptimistic] = useOptimistic(c.qaChecked, (_cur: number[], next: number[]) => next);
   const [message, setMessage] = useState<{ text: string; missing?: string[]; ok?: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [images, setImages] = useState<MadeImage[]>(c.imageIds.map((id) => ({ id, url: `/api/assets/${id}` })));
 
   const required = requiredQaItems(c.platform);
   const done = required.filter((i) => qa.includes(i.n)).length;
@@ -86,6 +88,7 @@ export function LibraryItem({ creative: c, productName, defaultOpen }: { creativ
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {reds ? <span className="chip-red">{reds} to fix</span> : null}
           {ambers ? <span className="chip-amber">{ambers} to check</span> : null}
+          {images.length ? <span className="chip">{images.length} {images.length === 1 ? "image" : "images"}</span> : null}
           <span className={STATUS_CHIP[c.status]} data-testid="status-chip">
             {c.status}
           </span>
@@ -93,7 +96,16 @@ export function LibraryItem({ creative: c, productName, defaultOpen }: { creativ
       </summary>
 
       <div className="grid gap-4 border-t border-line p-4 lg:grid-cols-[1fr_22rem]">
-        <ConceptCard concept={toConcept(c)} platform={c.platform} scan={c.scanResult} />
+        <ConceptCard
+          concept={toConcept(c)}
+          platform={c.platform}
+          scan={c.scanResult}
+          extra={
+            c.productId ? (
+              <ImageMaker concept={toConcept(c)} platform={c.platform} creativeType={c.creativeType} productId={c.productId} creativeId={c.id} images={images} onImages={setImages} />
+            ) : null
+          }
+        />
 
         <aside className="space-y-4">
           <div className="card space-y-3 bg-surface-2" data-testid="approve-panel">

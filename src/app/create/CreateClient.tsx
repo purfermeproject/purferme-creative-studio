@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ConceptCard } from "@/components/ConceptCard";
+import { ImageMaker, type MadeImage } from "@/components/ImageMaker";
 import { conceptToText, type ScoredConcept } from "@/lib/concepts";
 import { AUTO } from "@/lib/prompts";
 import type { Concept } from "@/lib/schemas";
@@ -11,7 +12,7 @@ import { saveCreative } from "./actions";
 
 type ProductOption = { id: string; name: string; status: "ready" | "hold" | "blocked"; statusReason: string; hasPackImage: boolean };
 type Img = { mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif"; base64: string; name: string };
-type Item = { key: string; concept: ScoredConcept; badge?: string; saved?: string; busy?: string; error?: string };
+type Item = { key: string; concept: ScoredConcept; badge?: string; saved?: string; busy?: string; error?: string; images?: MadeImage[] };
 type Progress = { chars: number; concepts: number; total: number; label: string } | null;
 
 let keySeq = 0;
@@ -142,7 +143,7 @@ export function CreateClient({
 
   async function save(item: Item) {
     patch(item.key, { busy: "Saving…", error: undefined });
-    const res = await saveCreative({ concept: stripScored(item.concept), platform, productId, creativeType });
+    const res = await saveCreative({ concept: stripScored(item.concept), platform, productId, creativeType, imageIds: (item.images ?? []).map((i) => i.id) });
     if (res.ok) patch(item.key, { busy: undefined, saved: res.id });
     else patch(item.key, { busy: undefined, error: res.message });
   }
@@ -297,6 +298,18 @@ export function CreateClient({
             platform={it.concept.platform}
             scan={it.concept.scan}
             badge={it.badge ? <span className="chip border-jaggery/40 text-jaggery">{it.badge}</span> : null}
+            extra={
+              <ImageMaker
+                concept={stripScored(it.concept)}
+                platform={it.concept.platform}
+                creativeType={it.concept.platform === platform ? creativeType : it.concept.format}
+                productId={productId}
+                creativeId={it.saved ?? null}
+                packImage={image ? { mediaType: image.mediaType, base64: image.base64 } : null}
+                images={it.images ?? []}
+                onImages={(images) => patch(it.key, { images })}
+              />
+            }
             actions={
               <>
                 {it.saved ? (

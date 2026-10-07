@@ -11,6 +11,7 @@ export function ConceptCard({
   actions,
   badge,
   testId,
+  extra,
 }: {
   concept: Concept;
   platform: Platform;
@@ -18,6 +19,7 @@ export function ConceptCard({
   actions?: ReactNode;
   badge?: ReactNode;
   testId?: string;
+  extra?: ReactNode;
 }) {
   const hasAudio = c.frames.some((f) => f.audio);
   return (
@@ -136,6 +138,8 @@ export function ConceptCard({
           <ScanSummary result={scan} />
         </div>
       </div>
+
+      {extra}
 
       {actions ? <div className="flex flex-wrap gap-2 border-t border-line pt-4">{actions}</div> : null}
     </article>

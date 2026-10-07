@@ -14,9 +14,10 @@ const SaveInput = z.object({
   platform: z.enum(PLATFORMS),
   productId: z.string().uuid(),
   creativeType: z.string().min(1),
+  imageIds: z.array(z.string().uuid()).max(20).default([]),
 });
 
-export async function saveCreative(input: z.infer<typeof SaveInput>): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
+export async function saveCreative(input: z.input<typeof SaveInput>): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
   try {
     const user = await requireUser();
     const v = SaveInput.parse(input);
@@ -45,6 +46,7 @@ export async function saveCreative(input: z.infer<typeof SaveInput>): Promise<{ 
         claims: c.claims,
         whyItFits: c.why_it_fits,
         scanResult: scored.scan,
+        imageIds: v.imageIds,
         createdBy: user,
       })
       .returning({ id: schema.creatives.id });

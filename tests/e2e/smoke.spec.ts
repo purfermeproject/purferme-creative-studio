@@ -135,3 +135,23 @@ test("Claim checker highlights terms instantly and runs a deep check", async ({ 
   await page.getByRole("button", { name: "Run deep check" }).click();
   await expect(page.getByTestId("deep-result")).toContainText("Suggested rewrite");
 });
+
+test("Make image creates a picture that stays with the saved ad", async ({ page }) => {
+  await signIn(page);
+  await choosePlatform(page, "Meta");
+  await page.getByRole("button", { name: /Generate/ }).click();
+  const card = page.getByTestId("concept-0");
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await card.getByRole("button", { name: "Make image" }).click();
+  const img = card.getByTestId("image-maker").locator("img");
+  await expect(img).toHaveCount(1);
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+  await card.getByRole("button", { name: "Save", exact: true }).click();
+  await card.getByRole("link", { name: /Saved/ }).click();
+  const item = page.locator("details[open][data-testid^=creative-]");
+  await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(1);
+  await item.getByRole("button", { name: "Make another image" }).click();
+  await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(2);
+  await page.reload();
+  await expect(page.locator("details[open][data-testid^=creative-]").getByTestId("image-maker").locator("img")).toHaveCount(2);
+});

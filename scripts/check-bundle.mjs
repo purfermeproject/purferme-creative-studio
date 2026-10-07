@@ -4,12 +4,13 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const root = ".next/static";
-const SECRET_ENV = ["ANTHROPIC_API_KEY", "AUTH_SECRET", "DATABASE_URL", "AUTH_GOOGLE_SECRET", "AUTH_RESEND_KEY", "BLOB_READ_WRITE_TOKEN", "SUPABASE_SERVICE_ROLE_KEY"];
+const SECRET_ENV = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AUTH_SECRET", "DATABASE_URL", "AUTH_GOOGLE_SECRET", "AUTH_RESEND_KEY", "BLOB_READ_WRITE_TOKEN", "SUPABASE_SERVICE_ROLE_KEY"];
 const patterns = [
   ...SECRET_ENV.map((name) => ({ label: `env var name ${name}`, test: (s) => s.includes(name) })),
   { label: "Anthropic key (sk-ant-)", test: (s) => /sk-ant-[A-Za-z0-9_-]{10,}/.test(s) },
   { label: "Postgres connection string", test: (s) => /postgres(ql)?:\/\/[^"'\s]*@/.test(s) },
   { label: "@anthropic-ai/sdk in client code", test: (s) => s.includes("anthropic-version") },
+  { label: "OpenAI key (sk-proj-)", test: (s) => /sk-proj-[A-Za-z0-9_-]{10,}/.test(s) },
   // Actual secret values from the build environment, when present.
   ...SECRET_ENV.filter((n) => (process.env[n] ?? "").length >= 12).map((n) => ({
     label: `value of ${n}`,

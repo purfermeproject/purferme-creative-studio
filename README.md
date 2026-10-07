@@ -37,6 +37,8 @@ Copy `.env.example` to `.env.local` and fill it in. Never prefix secrets with `N
 | `ANTHROPIC_API_KEY` | yes (unless mock) | From console.anthropic.com. Server-side only. |
 | `ANTHROPIC_MODEL` | no | Defaults to `claude-sonnet-5-5`. |
 | `ANTHROPIC_MOCK` | no | `true` returns sample output with no API calls (tests, demos). A banner shows when it's on. |
+| `OPENAI_API_KEY` | for images | Powers **Make image** on each idea (OpenAI image model, with the product's pack photo as reference). |
+| `OPENAI_IMAGE_MODEL` | no | Defaults to `gpt-image-2.5-flare`. |
 | `AUTH_SECRET` | yes | `npx auth secret` or `openssl rand -base64 32`. |
 | `ALLOWED_EMAILS` | yes | Comma-separated team emails. Anyone else is refused. |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | one sign-in method | Google OAuth client (see below). |
