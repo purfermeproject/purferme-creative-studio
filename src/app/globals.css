@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/* Brand: ragi brown, jaggery amber, leaf green on a clean light background.
+   The selected platform tints --accent (Meta indigo, Amazon amber-orange, Flipkart blue). */
+:root {
+  --bg: #fbf8f3;
+  --surface: #ffffff;
+  --surface-2: #f3ede4;
+  --ink: #2b1d14;
+  --ink-soft: #5e4c3f;
+  --line: #e4d9cb;
+  --ragi: #6b3f2a;
+  --jaggery: #c8862a;
+  --leaf: #3f7a3a;
+  --red: #b42318;
+  --red-bg: #fde8e6;
+  --amber: #9a5b00;
+  --amber-bg: #fdf0d5;
+  --green-bg: #e5f2e0;
+  --accent: #4f46e5;
+  --accent-ink: #ffffff;
+  --accent-soft: #eceafd;
+  color-scheme: light;
+}
+
+:root[data-platform="meta"] { --accent: #4f46e5; --accent-soft: #eceafd; }
+:root[data-platform="amazon"] { --accent: #c25e00; --accent-soft: #fdebd8; }
+:root[data-platform="flipkart"] { --accent: #2160d8; --accent-soft: #e3ecfc; }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17110d;
+    --surface: #211912;
+    --surface-2: #2b2119;
+    --ink: #f3ebe2;
+    --ink-soft: #c4b4a5;
+    --line: #3d3027;
+    --ragi: #d9a27f;
+    --jaggery: #e3a54b;
+    --leaf: #8cc47f;
+    --red: #ff8a80;
+    --red-bg: #3d1a17;
+    --amber: #f2c069;
+    --amber-bg: #3a2a10;
+    --green-bg: #1d2e1a;
+    --accent-ink: #0d0a08;
+    color-scheme: dark;
+  }
+  :root[data-platform="meta"] { --accent: #a5a1ff; --accent-soft: #26244a; }
+  :root[data-platform="amazon"] { --accent: #ffad5c; --accent-soft: #3d2610; }
+  :root[data-platform="flipkart"] { --accent: #7eaaff; --accent-soft: #172745; }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-ragi: var(--ragi);
+  --color-jaggery: var(--jaggery);
+  --color-leaf: var(--leaf);
+  --color-red: var(--red);
+  --color-red-bg: var(--red-bg);
+  --color-amber: var(--amber);
+  --color-amber-bg: var(--amber-bg);
+  --color-green-bg: var(--green-bg);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-literata), ui-serif, Georgia, serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Shared form + card primitives */
+@utility card {
+  @apply rounded-2xl border border-line bg-surface p-5;
+}
+@utility label {
+  @apply mb-1 block text-sm font-semibold text-ink;
+}
+@utility hint {
+  @apply text-sm text-ink-soft;
+}
+@utility input {
+  @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink placeholder:text-ink-soft/70;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-accent text-accent-ink hover:brightness-110;
+}
+@utility btn-secondary {
+  @apply btn border border-line bg-surface text-ink hover:bg-surface-2;
+}
+@utility btn-danger {
+  @apply btn border border-red/40 bg-red-bg text-red hover:brightness-95;
+}
+@utility chip {
+  @apply inline-flex items-center rounded-full border border-line bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-ink-soft;
+}
+@utility chip-red {
+  @apply chip border-red/30 bg-red-bg text-red;
+}
+@utility chip-amber {
+  @apply chip border-amber/30 bg-amber-bg text-amber;
+}
+@utility chip-green {
+  @apply chip border-leaf/30 bg-green-bg text-leaf;
+}
+@utility prose-serif {
+  @apply font-serif leading-relaxed;
+}
