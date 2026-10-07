@@ -29,7 +29,8 @@ export function mockConcepts(input: GenerationInput, productName: string, greenC
     copy: {
       headline: "Your chai's new crunch-mate",
       body: `Crunchy, chocolatey and ${claim.toLowerCase()}. Made for real days.`,
-      body_alt: "Every ingredient % on our website. Scan the QR to see where it came from.",
+      // Echo the extra direction so tests can inject copy (e.g. a red term) into a concept.
+      body_alt: input.extra?.trim() ? input.extra.trim() : "Every ingredient % on our website. Scan the QR to see where it came from.",
       cta: "Shop now",
     },
     ai_prompt: `Photoreal close-up of the ${productName} pack (match the attached reference exactly) beside a cup of masala chai, soft window light.`,
