@@ -10,4 +10,10 @@ export default async function globalSetup() {
   const env = { ...process.env, DATABASE_URL: url };
   execSync("npx drizzle-kit migrate", { stdio: "inherit", env });
   execSync("npx tsx scripts/seed.ts --reset", { stdio: "inherit", env });
+
+  // The seed has every product ready; the tests need one blocked and one on hold.
+  const db = postgres(url, { max: 1 });
+  await db`update products set status = 'blocked', status_reason = 'Flipkart lists it as baby food 6–24 months; the IMS Act bans promoting foods for under-2s.' where slug = 'sunrise'`;
+  await db`update products set status = 'hold', status_reason = 'Out of stock; claims not reviewed.' where slug = 'greenx'`;
+  await db.end();
 }
