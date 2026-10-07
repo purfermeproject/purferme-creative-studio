@@ -53,16 +53,28 @@ export async function generateImage(opts: { prompt: string; size: ImageSize; ref
   } else {
     const openai = getClient();
     try {
-      const res = opts.reference
-        ? await openai.images.edit({
-            model: IMAGE_MODEL,
-            prompt: opts.prompt,
-            image: [await toFile(opts.reference.data, `${opts.reference.name}.${opts.reference.mime.split("/")[1] ?? "png"}`, { type: opts.reference.mime })],
-            input_fidelity: "high",
-            size: opts.size,
-            n: 1,
-          })
-        : await openai.images.generate({ model: IMAGE_MODEL, prompt: opts.prompt, size: opts.size, n: 1 });
+      const ref = opts.reference;
+      const edit = async (withFidelity: boolean) =>
+        openai.images.edit({
+          model: IMAGE_MODEL,
+          prompt: opts.prompt,
+          image: [await toFile(ref!.data, `${ref!.name}.${ref!.mime.split("/")[1] ?? "png"}`, { type: ref!.mime })],
+          // Only the gpt-image-1 family accepts input_fidelity; newer models keep the reference faithfully by default.
+          ...(withFidelity ? { input_fidelity: "high" as const } : {}),
+          size: opts.size,
+          n: 1,
+        });
+      let res;
+      if (ref) {
+        try {
+          res = await edit(IMAGE_MODEL.startsWith("gpt-image-1"));
+        } catch (e) {
+          if (e instanceof OpenAI.BadRequestError && /input_fidelity/i.test(e.message)) res = await edit(false);
+          else throw e;
+        }
+      } else {
+        res = await openai.images.generate({ model: IMAGE_MODEL, prompt: opts.prompt, size: opts.size, n: 1 });
+      }
       const b64 = res.data?.[0]?.b64_json;
       if (!b64) throw new UserFacingError("The image service returned no image. Try again.");
       mime = "image/png";
