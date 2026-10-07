@@ -5,8 +5,9 @@ import type { ScanResult } from "./compliance";
 /** Canned responses for ANTHROPIC_MOCK=true (tests, demos without an API key). */
 export function mockConcepts(input: GenerationInput, productName: string, greenClaims: string[]): Concept[] {
   const video = isVideoType(input.creativeType);
-  const personas = [input.persona, "College student", "Couple sharing breakfast", "Picky grandparent"];
-  const angles = [input.angle, "Coffee/chai ritual", "Ingredient % transparency", "Tiffin and lunchbox"];
+  const pick = (v: string, fallback: string) => (v === "auto" ? fallback : v);
+  const personas = [pick(input.persona, "Working professional 25–35, city"), "College student", "Couple sharing breakfast", "Picky grandparent"];
+  const angles = [pick(input.angle, "Taste first"), "Coffee/chai ritual", "Ingredient % transparency", "Tiffin and lunchbox"];
   const claim = greenClaims[0] ?? "Made with millets";
   return Array.from({ length: input.n }, (_, i) => ({
     title: `${angles[i]} · ${personas[i]}`,

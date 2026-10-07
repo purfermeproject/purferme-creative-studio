@@ -7,7 +7,7 @@ import { conceptToText } from "@/lib/concepts";
 import { approvalGate, requiredQaItems } from "@/lib/qa";
 import type { Concept } from "@/lib/schemas";
 import { CREATIVE_STATUSES, PLATFORM_LABELS, type CreativeStatus } from "@/lib/types";
-import { deleteCreative, rescan, setQa, setStatus } from "./actions";
+import { deleteCreative, rescan, setQa, setQaAll, setStatus } from "./actions";
 
 const STATUS_CHIP: Record<CreativeStatus, string> = {
   Draft: "chip",
@@ -38,16 +38,16 @@ function toConcept(c: Creative): Concept {
 
 export function LibraryItem({ creative: c, productName, defaultOpen }: { creative: Creative; productName: string; defaultOpen: boolean }) {
   const [pending, start] = useTransition();
-  const [qa, setQaOptimistic] = useOptimistic(c.qaChecked, (cur: number[], [n, on]: [number, boolean]) =>
-    on ? [...new Set([...cur, n])] : cur.filter((x) => x !== n),
-  );
+  const [qa, setQaOptimistic] = useOptimistic(c.qaChecked, (_cur: number[], next: number[]) => next);
   const [message, setMessage] = useState<{ text: string; missing?: string[]; ok?: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const required = requiredQaItems(c.platform);
   const done = required.filter((i) => qa.includes(i.n)).length;
   const gate = approvalGate({ platform: c.platform, scanResult: c.scanResult, qaChecked: qa });
-  const reds = c.scanResult.hits.filter((h) => h.severity === "red").length;
+  const redHits = c.scanResult.hits.filter((h) => h.severity === "red");
+  const reds = redHits.length;
+  const allTicked = done === required.length;
   const ambers = c.scanResult.hits.filter((h) => h.severity === "amber").length;
 
   function changeStatus(status: CreativeStatus) {
@@ -60,8 +60,16 @@ export function LibraryItem({ creative: c, productName, defaultOpen }: { creativ
 
   function toggle(n: number, on: boolean) {
     start(async () => {
-      setQaOptimistic([n, on]);
+      setQaOptimistic(on ? [...new Set([...qa, n])] : qa.filter((x) => x !== n));
       const res = await setQa(c.id, n, on);
+      if (!res.ok) setMessage({ text: res.message });
+    });
+  }
+
+  function toggleAll(on: boolean) {
+    start(async () => {
+      setQaOptimistic(on ? required.map((i) => i.n) : []);
+      const res = await setQaAll(c.id, on);
       if (!res.ok) setMessage({ text: res.message });
     });
   }
@@ -76,11 +84,8 @@ export function LibraryItem({ creative: c, productName, defaultOpen }: { creativ
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {reds ? <span className="chip-red">{reds} red</span> : null}
-          {ambers ? <span className="chip-amber">{ambers} amber</span> : null}
-          <span className="chip">
-            QA {done}/{required.length}
-          </span>
+          {reds ? <span className="chip-red">{reds} to fix</span> : null}
+          {ambers ? <span className="chip-amber">{ambers} to check</span> : null}
           <span className={STATUS_CHIP[c.status]} data-testid="status-chip">
             {c.status}
           </span>
@@ -91,27 +96,40 @@ export function LibraryItem({ creative: c, productName, defaultOpen }: { creativ
         <ConceptCard concept={toConcept(c)} platform={c.platform} scan={c.scanResult} />
 
         <aside className="space-y-4">
-          <div className="card space-y-3 bg-surface-2">
-            <label className="label" htmlFor={`status-${c.id}`}>
-              Status
-            </label>
-            <select id={`status-${c.id}`} className="input" value={c.status} disabled={pending} onChange={(e) => changeStatus(e.target.value as CreativeStatus)}>
-              {CREATIVE_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            {!gate.ok && c.status !== "Killed" && !message?.missing ? (
-              <div className="text-sm text-ink-soft" data-testid="gate-missing">
-                <p className="font-semibold text-ink">Before it can be approved:</p>
-                <ul className="mt-1 list-disc pl-5">
-                  {gate.missing.map((m) => (
-                    <li key={m}>{m}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+          <div className="card space-y-3 bg-surface-2" data-testid="approve-panel">
+            {c.status === "Draft" ? (
+              <>
+                <p className="font-bold">Ready to approve?</p>
+                {redHits.length ? (
+                  <div className="rounded-lg border border-red/30 bg-red-bg p-3 text-sm text-red" data-testid="gate-missing">
+                    <p className="font-semibold">Fix first: these words aren&apos;t allowed</p>
+                    <ul className="mt-1 list-disc pl-5">
+                      {redHits.map((h) => (
+                        <li key={h.label}>
+                          “{h.matches.join("”, “")}” ({h.label})
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-1">Make a new version in Create ads (use Regenerate), then save that one instead.</p>
+                  </div>
+                ) : null}
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1 size-4 accent-(--accent)" checked={allTicked} onChange={(e) => toggleAll(e.target.checked)} />
+                  <span>
+                    I&apos;ve checked this ad against the {required.length}-point pre-launch list
+                    {!allTicked && done > 0 ? ` (${done} of ${required.length} ticked)` : ""}
+                  </span>
+                </label>
+                <button className="btn-primary w-full" disabled={pending || !gate.ok} onClick={() => changeStatus("Approved")}>
+                  Approve
+                </button>
+                {!gate.ok && !redHits.length ? <p className="hint">Tick the pre-launch box to approve.</p> : null}
+              </>
+            ) : (
+              <p className="font-bold">
+                Status: <span className={STATUS_CHIP[c.status]}>{c.status}</span>
+              </p>
+            )}
             {message ? (
               <div role={message.ok ? "status" : "alert"} className={`text-sm ${message.ok ? "text-leaf" : "text-red"}`}>
                 <p className="font-semibold">{message.text}</p>
@@ -124,22 +142,36 @@ export function LibraryItem({ creative: c, productName, defaultOpen }: { creativ
                 ) : null}
               </div>
             ) : null}
+            <div className="flex items-center gap-2 border-t border-line pt-3">
+              <label className="text-sm text-ink-soft" htmlFor={`status-${c.id}`}>
+                Change status
+              </label>
+              <select id={`status-${c.id}`} className="input py-1 text-sm" value={c.status} disabled={pending} onChange={(e) => changeStatus(e.target.value as CreativeStatus)}>
+                {CREATIVE_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <fieldset className="card space-y-2 bg-surface-2">
-            <legend className="sr-only">QA checklist</legend>
-            <p className="font-bold">
-              QA checklist <span className="font-normal text-ink-soft">({done}/{required.length})</span>
-            </p>
-            {required.map((item) => (
-              <label key={item.n} className="flex items-start gap-2 text-sm">
-                <input type="checkbox" className="mt-1 size-4 accent-(--accent)" checked={qa.includes(item.n)} onChange={(e) => toggle(item.n, e.target.checked)} />
-                <span>
-                  <span className="font-semibold">{item.n}.</span> {item.text}
-                </span>
-              </label>
-            ))}
-          </fieldset>
+          <details className="card bg-surface-2">
+            <summary className="cursor-pointer text-sm font-semibold">
+              Pre-launch list <span className="font-normal text-ink-soft">({done}/{required.length} ticked)</span>
+            </summary>
+            <fieldset className="mt-3 space-y-2">
+              <legend className="sr-only">Pre-launch checklist</legend>
+              {required.map((item) => (
+                <label key={item.n} className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" className="mt-1 size-4 accent-(--accent)" checked={qa.includes(item.n)} onChange={(e) => toggle(item.n, e.target.checked)} />
+                  <span>
+                    <span className="font-semibold">{item.n}.</span> {item.text}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          </details>
 
           <div className="flex flex-wrap gap-2">
             <button
@@ -153,7 +185,7 @@ export function LibraryItem({ creative: c, productName, defaultOpen }: { creativ
               {copied ? "Copied" : "Copy as text"}
             </button>
             <button className="btn-secondary px-3 py-1.5 text-sm" disabled={pending} onClick={() => start(async () => void (await rescan(c.id)))}>
-              Re-scan with current terms
+              Re-check words
             </button>
             <button
               className="btn-danger px-3 py-1.5 text-sm"

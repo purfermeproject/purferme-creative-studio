@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ConceptCard } from "@/components/ConceptCard";
 import { conceptToText, type ScoredConcept } from "@/lib/concepts";
+import { AUTO } from "@/lib/prompts";
 import type { Concept } from "@/lib/schemas";
 import { PLATFORM_LABELS, type Platform } from "@/lib/types";
 import { saveCreative } from "./actions";
@@ -66,8 +67,8 @@ export function CreateClient({
   const firstReady = products.find((p) => p.status === "ready");
   const [productId, setProductId] = useState(products.find((p) => p.name.startsWith("Chocolate") && p.status === "ready")?.id ?? firstReady?.id ?? "");
   const [creativeType, setCreativeType] = useState(creativeTypes[0] ?? "");
-  const [angle, setAngle] = useState(angles[0] ?? "");
-  const [persona, setPersona] = useState(personas[0] ?? "");
+  const [angle, setAngle] = useState(AUTO);
+  const [persona, setPersona] = useState(AUTO);
   const [language, setLanguage] = useState(languages[0] ?? "English");
   const [n, setN] = useState(3);
   const [extra, setExtra] = useState("");
@@ -165,20 +166,22 @@ export function CreateClient({
     reader.readAsDataURL(file);
   }
 
-  const select = (id: string, label: string, value: string, set: (v: string) => void, options: string[]) => (
+  const select = (id: string, label: string, value: string, set: (v: string) => void, options: { value: string; label: string }[]) => (
     <div>
       <label htmlFor={id} className="label">
         {label}
       </label>
       <select id={id} className="input" value={value} onChange={(e) => set(e.target.value)}>
         {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
+          <option key={o.value} value={o.value}>
+            {o.label}
           </option>
         ))}
       </select>
     </div>
   );
+  const plain = (xs: string[]) => xs.map((x) => ({ value: x, label: x }));
+  const changedOptions = [angle !== AUTO, persona !== AUTO, language !== (languages[0] ?? "English"), n !== 3, Boolean(extra.trim()), Boolean(image)].filter(Boolean).length;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
@@ -204,48 +207,61 @@ export function CreateClient({
           </select>
           {blocked ? (
             <p role="alert" className={`mt-2 rounded-lg border p-3 text-sm ${product.status === "blocked" ? "border-red/30 bg-red-bg text-red" : "border-amber/30 bg-amber-bg text-amber"}`} data-testid="product-blocked">
-              <strong>{product.status === "blocked" ? "Blocked" : "On hold"}:</strong> {product.statusReason || "No reason given."} It can&apos;t be generated until an admin sets it to ready.
+              <strong>{product.status === "blocked" ? "Blocked" : "On hold"}:</strong> {product.statusReason || "No reason given."} Set it to ready in Settings to generate.
             </p>
           ) : null}
         </div>
-        {select("ctype", "Creative type", creativeType, setCreativeType, creativeTypes)}
-        {select("angle", "Angle", angle, setAngle, angles)}
-        {select("persona", "Persona", persona, setPersona, personas)}
-        {select("language", "Language", language, setLanguage, languages)}
-        <fieldset>
-          <legend className="label">Number of concepts</legend>
-          <div className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">
-            {[2, 3, 4].map((k) => (
-              <label key={k} className={`cursor-pointer rounded-md py-1.5 text-center font-semibold has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-accent ${n === k ? "bg-accent text-accent-ink" : "text-ink-soft"}`}>
-                <input type="radio" name="n" value={k} checked={n === k} onChange={() => setN(k)} className="sr-only" />
-                {k}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <div>
-          <label htmlFor="extra" className="label">
-            Extra direction <span className="font-normal text-ink-soft">(optional)</span>
-          </label>
-          <textarea id="extra" className="input" rows={2} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="e.g. Diwali gifting, 10% off this week" />
-        </div>
-        <div>
-          <label htmlFor="photo" className="label">
-            Product photo <span className="font-normal text-ink-soft">(optional)</span>
-          </label>
-          <input id="photo" type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="text-sm" onChange={(e) => onImage(e.target.files?.[0])} />
-          <p className="hint mt-1">
-            {image
-              ? `Using ${image.name} so render prompts match the real pack.`
-              : product?.hasPackImage
-                ? "Using the saved pack image from Admin. Upload one to override."
-                : "Attach the pack so render prompts describe it accurately."}
-          </p>
-          {imageError ? <p className="mt-1 text-sm text-red">{imageError}</p> : null}
-        </div>
-        <button type="submit" className="btn-primary w-full" disabled={busy || !product || Boolean(blocked) || !creativeType}>
-          {busy ? "Generating…" : `Generate ${n} concepts`}
+        {select("ctype", "Type of ad", creativeType, setCreativeType, plain(creativeTypes))}
+
+        <button type="submit" className="btn-primary w-full py-3 text-lg" disabled={busy || !product || Boolean(blocked) || !creativeType}>
+          {busy ? "Writing ideas…" : `Generate ${n} ad ideas`}
         </button>
+
+        <details className="group rounded-lg border border-line" >
+          <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-ink-soft hover:text-ink">
+            <span className="inline-block transition-transform group-open:rotate-90" aria-hidden>
+              ▸
+            </span>{" "}
+            More options{changedOptions ? ` (${changedOptions} changed)` : ""}
+          </summary>
+          <div className="space-y-4 border-t border-line p-3">
+            <p className="hint">Leave these alone and the AI picks a varied mix for you.</p>
+            {select("angle", "Angle (what the ad is about)", angle, setAngle, [{ value: AUTO, label: "Let AI choose (varied)" }, ...plain(angles)])}
+            {select("persona", "Who it's for", persona, setPersona, [{ value: AUTO, label: "Let AI choose (varied)" }, ...plain(personas)])}
+            {select("language", "Language", language, setLanguage, plain(languages))}
+            <fieldset>
+              <legend className="label">How many ideas</legend>
+              <div className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">
+                {[2, 3, 4].map((k) => (
+                  <label key={k} className={`cursor-pointer rounded-md py-1.5 text-center font-semibold has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-accent ${n === k ? "bg-accent text-accent-ink" : "text-ink-soft"}`}>
+                    <input type="radio" name="n" value={k} checked={n === k} onChange={() => setN(k)} className="sr-only" />
+                    {k}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div>
+              <label htmlFor="extra" className="label">
+                Anything else? <span className="font-normal text-ink-soft">(optional)</span>
+              </label>
+              <textarea id="extra" className="input" rows={2} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="e.g. Diwali gifting, 10% off this week" />
+            </div>
+            <div>
+              <label htmlFor="photo" className="label">
+                Pack photo <span className="font-normal text-ink-soft">(optional)</span>
+              </label>
+              <input id="photo" type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="text-sm" onChange={(e) => onImage(e.target.files?.[0])} />
+              <p className="hint mt-1">
+                {image
+                  ? `Using ${image.name} so the scenes describe the real pack.`
+                  : product?.hasPackImage
+                    ? "Using the pack photo saved in Settings. Upload one to override."
+                    : "Add the pack so scenes describe it accurately."}
+              </p>
+              {imageError ? <p className="mt-1 text-sm text-red">{imageError}</p> : null}
+            </div>
+          </div>
+        </details>
       </form>
 
       <section aria-label="Concepts" aria-live="polite" aria-busy={busy} className="space-y-4">
@@ -269,8 +285,8 @@ export function CreateClient({
         ) : null}
         {!progress && items.length === 0 && !error ? (
           <div className="card border-dashed text-center">
-            <p className="text-lg font-bold">No concepts yet</p>
-            <p className="hint mt-1">Pick a product and creative type, then generate. Every concept is scanned against the claims library before you see it.</p>
+            <p className="text-lg font-bold">No ideas yet</p>
+            <p className="hint mt-1">Pick a product and type of ad, then click Generate. Every idea is checked for risky claims before you see it.</p>
           </div>
         ) : null}
         {items.map((it, idx) => (
@@ -285,11 +301,11 @@ export function CreateClient({
               <>
                 {it.saved ? (
                   <Link href={`/library?highlight=${it.saved}`} className="btn-secondary">
-                    Saved · open in library
+                    Saved · view in Saved ads
                   </Link>
                 ) : (
                   <button className="btn-primary" onClick={() => save(it)} disabled={Boolean(it.busy)}>
-                    Save to library
+                    Save
                   </button>
                 )}
                 <button className="btn-secondary" onClick={() => copyText(it)}>

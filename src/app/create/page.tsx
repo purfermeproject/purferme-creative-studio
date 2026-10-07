@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getBrand, getPlatformRule, getProducts } from "@/lib/data";
 import { getPlatform } from "@/lib/platform";
 import { PLATFORM_LABELS } from "@/lib/types";
@@ -16,9 +17,29 @@ export default async function CreatePage() {
   const [products, brand, rule] = await Promise.all([getProducts(), getBrand(), getPlatformRule(platform)]);
   return (
     <div className="space-y-6">
+      <ol className="grid gap-2 sm:grid-cols-3" aria-label="How it works">
+        {[
+          ["1", "Make", "Pick a product and type of ad. Get ready-to-shoot ideas, checked for risky claims."],
+          ["2", "Save and approve", "Keep the ideas you like in Saved ads, then approve them."],
+          ["3", "Learn", "After they run, enter the numbers in Results to see what to kill or scale."],
+        ].map(([n, t, d]) => (
+          <li key={n} className="flex gap-3 rounded-xl border border-line bg-surface p-3">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-ink">{n}</span>
+            <span className="text-sm">
+              <strong className="block">{t}</strong>
+              <span className="text-ink-soft">{d}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
       <div>
         <h1 className="text-4xl font-extrabold tracking-tight">Create ads for {PLATFORM_LABELS[platform]}</h1>
-        <p className="prose-serif mt-1 text-ink-soft">{INTRO[platform]}</p>
+        <p className="prose-serif mt-1 text-ink-soft">
+          {INTRO[platform]}{" "}
+          <Link href="/guide" className="font-sans text-sm font-semibold text-accent hover:underline">
+            How {PLATFORM_LABELS[platform]} differs →
+          </Link>
+        </p>
       </div>
       <CreateClient
         key={platform}

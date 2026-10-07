@@ -220,8 +220,8 @@ export function ResultsClient({ platform, thresholds, creatives }: { platform: P
           </h2>
           <p className="hint">
             {isMeta
-              ? "Export from Meta Ads Manager at ad level as CSV (include amount spent, impressions, 3-second video plays, link CTR, results, cost per result, frequency)."
-              : `Upload a ${PLATFORM_LABELS[platform]} ${platform === "amazon" ? "search-term" : "campaign"} report as CSV. Check the column mapping, then review the verdict per row.`}
+              ? "Drop in a CSV exported from Meta Ads Manager (ad level). You get a verdict for every ad."
+              : `Drop in a ${PLATFORM_LABELS[platform]} ${platform === "amazon" ? "search-term" : "campaign"} report (CSV). You get a verdict for every row.`}
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -240,10 +240,12 @@ export function ResultsClient({ platform, thresholds, creatives }: { platform: P
         ) : null}
         {csv ? (
           <>
-            <fieldset className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <legend className="label mb-2">
-                Column mapping for {csv.file} ({csv.rows.length} rows)
-              </legend>
+            <details open={Boolean(mapped?.some((r) => !r.input))} className="rounded-lg border border-line p-3">
+              <summary className="cursor-pointer text-sm font-semibold">
+                {csv.file}: {csv.rows.length} rows · columns matched automatically{mapped?.some((r) => !r.input) ? " (some are missing, check below)" : ""}
+              </summary>
+            <fieldset className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <legend className="sr-only">Column matching</legend>
               {fields.map((fd) => (
                 <div key={fd.key}>
                   <label htmlFor={`map-${fd.key}`} className="text-sm font-semibold">
@@ -260,6 +262,7 @@ export function ResultsClient({ platform, thresholds, creatives }: { platform: P
                 </div>
               ))}
             </fieldset>
+            </details>
             {mapped ? (
               <>
                 <div className="overflow-x-auto">

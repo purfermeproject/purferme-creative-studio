@@ -15,7 +15,7 @@ import {
   uploadPackImage,
 } from "./actions";
 
-export const metadata = { title: "Admin · Puŕ Fermé Creative Studio" };
+export const metadata = { title: "Settings · Puŕ Fermé Creative Studio" };
 
 const STATUS_CHIP = { ready: "chip-green", hold: "chip-amber", blocked: "chip-red" } as const;
 
@@ -66,7 +66,7 @@ export default async function AdminPage() {
     <div className="space-y-12">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight">Admin</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight">Settings</h1>
           <p className="hint mt-1">Claims, rules and settings that drive generation and checks. Changes apply immediately.</p>
         </div>
         <nav aria-label="Admin sections" className="flex flex-wrap gap-2 text-sm">

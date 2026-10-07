@@ -26,24 +26,24 @@ test("Meta: generate 3 UGC concepts with streamed progress and save one", async 
   await signIn(page);
   await choosePlatform(page, "Meta");
   await page.getByLabel("Product", { exact: true }).selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
-  await page.getByLabel("Creative type").selectOption("9:16 UGC-style video (15–30s)");
-  await page.getByRole("button", { name: "Generate 3 concepts" }).click();
+  await page.getByLabel("Type of ad").selectOption("9:16 UGC-style video (15–30s)");
+  await page.getByRole("button", { name: "Generate 3 ad ideas" }).click();
   await expect(page.getByTestId("progress")).toBeVisible();
   await expect(page.getByTestId("concept-2")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("concept-3")).toHaveCount(0);
   const first = page.getByTestId("concept-0");
   await expect(first.getByText("Why it fits Meta")).toBeVisible();
-  await first.getByRole("button", { name: "Save to library" }).click();
+  await first.getByRole("button", { name: "Save", exact: true }).click();
   await expect(first.getByRole("link", { name: /Saved/ })).toBeVisible();
 });
 
 test("Amazon: creative types change and video scripts have on-screen text in every frame", async ({ page }) => {
   await signIn(page);
   await choosePlatform(page, "Amazon");
-  const types = await page.getByLabel("Creative type").locator("option").allTextContents();
+  const types = await page.getByLabel("Type of ad").locator("option").allTextContents();
   expect(types).toContain("Sponsored Brands video (16:9, muted)");
   expect(types).not.toContain("9:16 UGC-style video (15–30s)");
-  await page.getByLabel("Creative type").selectOption("Sponsored Brands video (16:9, muted)");
+  await page.getByLabel("Type of ad").selectOption("Sponsored Brands video (16:9, muted)");
   await page.getByRole("button", { name: /Generate/ }).click();
   const card = page.getByTestId("concept-0");
   await expect(card).toBeVisible({ timeout: 60_000 });
@@ -64,19 +64,39 @@ test("Sunrise Bowl cannot be generated and shows why", async ({ page }) => {
 test("a concept with 'gluten free' is flagged red and cannot be approved", async ({ page }) => {
   await signIn(page);
   await choosePlatform(page, "Meta");
-  await page.getByLabel(/Extra direction/).fill("Gluten free cookies for your chai");
+  await page.getByText("More options").click();
+  await page.getByLabel(/Anything else/).fill("Gluten free cookies for your chai");
   await page.getByRole("button", { name: /Generate/ }).click();
   const card = page.getByTestId("concept-0");
   await expect(card.getByTestId("scan-hits")).toContainText("Gluten free", { timeout: 60_000 });
-  await card.getByRole("button", { name: "Save to library" }).click();
+  await card.getByRole("button", { name: "Save", exact: true }).click();
   await card.getByRole("link", { name: /Saved/ }).click();
   const item = page.locator("details[open][data-testid^=creative-]");
-  for (const box of await item.getByRole("checkbox").all()) await box.check();
-  await item.getByLabel("Status").selectOption("Approved");
+  // Simple path: the banned words are listed and Approve stays disabled even after ticking the list.
+  await expect(item.getByTestId("gate-missing")).toContainText("gluten free");
+  await item.getByLabel(/pre-launch list/).check();
+  await expect(item.getByRole("button", { name: "Approve" })).toBeDisabled();
+  // The server enforces it too, if someone forces the status.
+  await item.getByLabel("Change status").selectOption("Approved");
   await expect(item.getByRole("alert")).toContainText("Can't move to Approved yet");
   await expect(item.getByRole("alert")).toContainText("Gluten free");
   await page.reload();
   await expect(page.locator("details[open][data-testid^=creative-]").getByTestId("status-chip")).toHaveText("Draft");
+});
+
+test("a clean idea can be approved with one tick and one click", async ({ page }) => {
+  await signIn(page);
+  await choosePlatform(page, "Meta");
+  await page.getByRole("button", { name: /Generate/ }).click();
+  const card = page.getByTestId("concept-0");
+  await expect(card.getByTestId("scan-clean")).toBeVisible({ timeout: 60_000 });
+  await card.getByRole("button", { name: "Save", exact: true }).click();
+  await card.getByRole("link", { name: /Saved/ }).click();
+  const item = page.locator("details[open][data-testid^=creative-]");
+  await expect(item.getByRole("button", { name: "Approve" })).toBeDisabled();
+  await item.getByLabel(/pre-launch list/).check();
+  await item.getByRole("button", { name: "Approve" }).click();
+  await expect(item.getByTestId("status-chip")).toHaveText("Approved");
 });
 
 test("Admin: moving a product from hold to ready makes it generatable immediately", async ({ page }) => {

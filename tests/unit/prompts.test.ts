@@ -77,3 +77,20 @@ describe("other prompt builders", () => {
     expect(buildWeeklyBriefPrompt(SEED_BRAND, [{ verdict: "Scale" }])).toContain('"verdict": "Scale"');
   });
 });
+
+describe("auto angle and persona", () => {
+  it("lets the model choose from the brand lists and asks for variety", () => {
+    const p = buildGenerationPrompt(SEED_BRAND, choc, rule("meta"), {
+      n: 3,
+      platform: "meta",
+      creativeType: "9:16 UGC-style video (15–30s)",
+      angle: "auto",
+      persona: "auto",
+      language: "English",
+    });
+    expect(p).toContain("angle = your choice: pick the strongest for this product and platform from Taste first;");
+    expect(p).toContain("persona = your choice: pick the best fits from Working professional");
+    expect(p).toContain("Give each concept a different angle or persona");
+    expect(p).not.toContain("Use the chosen angle and persona for the first concept");
+  });
+});

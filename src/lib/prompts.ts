@@ -1,7 +1,7 @@
 import type { Platform } from "./types";
 import { PLATFORM_LABELS } from "./types";
 
-type BrandLike = { brandContext: string; hardRules: string; tone?: string };
+type BrandLike = { brandContext: string; hardRules: string; tone?: string; angles?: string[]; personas?: string[] };
 type ProductLike = {
   slug: string;
   name: string;
@@ -27,12 +27,24 @@ export type GenerationInput = {
   hasPackImage?: boolean;
 };
 
+/** Angle/persona value meaning "let the model choose a varied mix". */
+export const AUTO = "auto";
+
 export const isVideoType = (creativeType: string) => /video/i.test(creativeType);
 
 /** Section 6 prompt. Built only from database content passed in. */
 export function buildGenerationPrompt(brand: BrandLike, product: ProductLike, rule: RuleLike, input: GenerationInput): string {
   const extra = input.extra?.trim() ? `Extra direction: ${input.extra.trim()}` : "";
   const notes = [product.notes, product.allergens].filter(Boolean).join(" ");
+  const autoAngle = input.angle === AUTO;
+  const autoPersona = input.persona === AUTO;
+  const angle = autoAngle ? `your choice: pick the strongest for this product and platform from ${list(brand.angles ?? [])}` : input.angle;
+  const persona = autoPersona ? `your choice: pick the best fits from ${list(brand.personas ?? [])}` : input.persona;
+  const firstLine =
+    autoAngle || autoPersona
+      ? "Give each concept a different angle or persona (and vary format, setting or language too) so no two look alike."
+      : `Use the chosen angle and persona for the first concept; vary at least two of persona, angle, format,
+setting or language across the others so no two look alike.`;
   const shape = isVideoType(input.creativeType)
     ? "This is a video type: give 4–7 frames with timestamps (slot like \"0–2s\") totalling 15–30s, with visual, on-screen text and audio for every frame."
     : "This is an image/banner type: one frame per image (max 7) or per banner size; leave audio out.";
@@ -51,10 +63,9 @@ NOTES: ${notes || "(none)"}
 PLATFORM: ${PLATFORM_LABELS[input.platform]}. CREATIVE TYPE: ${input.creativeType}.
 ${rule.rules}
 
-DIRECTION: angle = ${input.angle}; persona = ${input.persona}; language = ${input.language}
+DIRECTION: angle = ${angle}; persona = ${persona}; language = ${input.language}
 (write on-screen text and audio in this language; Hinglish = Hindi in Latin script mixed with English). ${extra}
-Use the chosen angle and persona for the first concept; vary at least two of persona, angle, format,
-setting or language across the others so no two look alike.
+${firstLine}
 Video: 4–7 frames with timestamps totalling 15–30s. Image sets: one frame per image (max 7) or per banner size.
 List every claim used with its tier. Never include a red claim. Product details must match exactly.
 ${shape}

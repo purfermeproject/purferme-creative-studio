@@ -91,7 +91,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
         <div>
           <p className="text-sm">
             <Link href="/admin" className="font-semibold text-accent hover:underline">
-              ← Admin
+              ← Settings
             </Link>
           </p>
           <h1 className="text-4xl font-extrabold tracking-tight">Usage and cost</h1>

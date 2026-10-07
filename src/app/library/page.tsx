@@ -4,7 +4,7 @@ import { getPlatform } from "@/lib/platform";
 import { CREATIVE_STATUSES, PLATFORMS, PLATFORM_LABELS } from "@/lib/types";
 import { LibraryItem } from "./LibraryItem";
 
-export const metadata = { title: "Library · Puŕ Fermé Creative Studio" };
+export const metadata = { title: "Saved ads · Puŕ Fermé Creative Studio" };
 
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
@@ -23,9 +23,9 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight">Library</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight">Saved ads</h1>
           <p className="hint mt-1">
-            A creative can only be approved when its scan has no red flags and every QA item is ticked. Unticking an item sends it back to Draft.
+            Ideas you saved. Open one to approve it: it needs no banned words and a tick on the pre-launch list.
           </p>
         </div>
         <a href={`/api/library/export?${exportQs}`} className="btn-secondary shrink-0" download>

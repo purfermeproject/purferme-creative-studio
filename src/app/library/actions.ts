@@ -6,7 +6,7 @@ import { requireUser } from "@/auth";
 import { db, schema } from "@/db";
 import { conceptText, scan } from "@/lib/compliance";
 import { getTerms } from "@/lib/data";
-import { canMoveTo, QA_ITEMS } from "@/lib/qa";
+import { canMoveTo, QA_ITEMS, requiredQaItems } from "@/lib/qa";
 import { CREATIVE_STATUSES, type CreativeStatus } from "@/lib/types";
 
 type Res = { ok: true } | { ok: false; message: string; missing?: string[] };
@@ -60,6 +60,25 @@ export async function setQa(id: string, item: number, checked: boolean): Promise
     else set.delete(item);
     const qaChecked = [...set].sort((a, b) => a - b);
     // Unticking an item on an approved creative sends it back to Draft.
+    const demote = !checked && !["Draft", "Killed"].includes(row.c.status);
+    await db
+      .update(schema.creatives)
+      .set({ qaChecked, ...(demote ? { status: "Draft" as const } : {}), updatedAt: new Date() })
+      .where(eq(schema.creatives.id, id));
+    revalidatePath("/library");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Couldn't save the checklist." };
+  }
+}
+
+/** Tick (or untick) every required checklist item in one go. */
+export async function setQaAll(id: string, checked: boolean): Promise<Res> {
+  try {
+    await requireUser();
+    const row = await load(id);
+    if (!row) return { ok: false, message: "That ad no longer exists." };
+    const qaChecked = checked ? requiredQaItems(row.c.platform).map((i) => i.n) : [];
     const demote = !checked && !["Draft", "Killed"].includes(row.c.status);
     await db
       .update(schema.creatives)
