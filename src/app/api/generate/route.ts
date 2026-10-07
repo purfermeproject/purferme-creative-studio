@@ -3,6 +3,7 @@ import { requireUser } from "@/auth";
 import { errorMessage, structuredCall, UserFacingError } from "@/lib/ai";
 import { scoreConcept } from "@/lib/concepts";
 import { getBrand, getPlatformRule, getProduct, getTerms } from "@/lib/data";
+import { loadReference } from "@/lib/images";
 import { mockConcepts } from "@/lib/mocks";
 import { buildGenerationPrompt, buildVariationsPrompt } from "@/lib/prompts";
 import { ConceptSchema, GenerationResponseSchema } from "@/lib/schemas";
@@ -60,7 +61,18 @@ export async function POST(req: Request) {
     return Response.json({ error: "Missing the concept to regenerate or vary." }, { status: 400 });
   }
 
-  const image = input.image ?? (product.packImageUrl ? { url: product.packImageUrl } : null);
+  let image: Parameters<typeof structuredCall>[0]["image"] = input.image ?? null;
+  if (!image && product.packImageUrl) {
+    if (product.packImageUrl.startsWith("/")) {
+      const ref = await loadReference(product.packImageUrl);
+      const mt = ref?.mime;
+      if (ref && (mt === "image/png" || mt === "image/jpeg" || mt === "image/webp" || mt === "image/gif")) {
+        image = { mediaType: mt, base64: ref.data.toString("base64") };
+      }
+    } else {
+      image = { url: product.packImageUrl };
+    }
+  }
   const n = input.mode === "regenerate" ? 1 : input.mode === "variations" ? 6 : input.n;
   let prompt: string;
   if (input.mode === "variations") {

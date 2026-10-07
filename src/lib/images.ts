@@ -1,4 +1,5 @@
 import "server-only";
+import { eq } from "drizzle-orm";
 import OpenAI, { toFile } from "openai";
 import { db, schema } from "@/db";
 import { UserFacingError, isMock } from "./ai";
@@ -20,6 +21,11 @@ export type Reference = { data: Buffer; mime: string; name: string } | null;
 /** Fetches a saved pack image so it can be sent as the reference photo. */
 export async function loadReference(url: string | null | undefined): Promise<Reference> {
   if (!url) return null;
+  const local = /^\/api\/assets\/([0-9a-f-]{36})$/i.exec(url);
+  if (local) {
+    const [a] = await db.select({ mime: schema.assets.mime, data: schema.assets.dataBase64 }).from(schema.assets).where(eq(schema.assets.id, local[1]));
+    return a ? { data: Buffer.from(a.data, "base64"), mime: a.mime, name: "pack" } : null;
+  }
   try {
     const res = await fetch(url);
     if (!res.ok) return null;

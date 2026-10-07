@@ -154,15 +154,19 @@ export default async function AdminPage() {
                     <input name="allergens" defaultValue={p.allergens} className="input" />
                   </Field>
                   <Field label="Pack image URL">
-                    <input name="packImageUrl" defaultValue={p.packImageUrl ?? ""} className="input" type="url" />
+                    <input name="packImageUrl" defaultValue={p.packImageUrl ?? ""} className="input" />
                   </Field>
                 </div>
               </ActionForm>
               <div className="mt-4 flex flex-wrap items-start justify-between gap-4 border-t border-line pt-4">
-                <ActionForm action={uploadPackImage} submitLabel="Upload pack image" submitClassName="btn-secondary">
+                {p.packImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.packImageUrl} alt={`${p.name} pack`} className="h-28 w-28 rounded-lg border border-line bg-surface-2 object-contain" />
+                ) : null}
+                <ActionForm action={uploadPackImage} submitLabel="Upload pack photo" submitClassName="btn-secondary">
                   <input type="hidden" name="id" value={p.id} />
                   <label className="label" htmlFor={`file-${p.id}`}>
-                    Or upload a pack image
+                    Upload a pack photo (used to make images match the real pack)
                   </label>
                   <input id={`file-${p.id}`} name="file" type="file" accept="image/*" className="text-sm" />
                 </ActionForm>

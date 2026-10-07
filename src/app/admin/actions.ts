@@ -92,11 +92,18 @@ export async function uploadPackImage(_: ActionState, fd: FormData): Promise<Act
     if (!(file instanceof File) || file.size === 0) return fail("Choose an image file first.");
     if (!file.type.startsWith("image/")) return fail("That file isn't an image. Use a PNG, JPG or WebP.");
     if (file.size > 5 * 1024 * 1024) return fail("Images must be under 5 MB.");
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      return fail("Image storage isn't set up yet (BLOB_READ_WRITE_TOKEN). Paste a public image URL instead.");
+    let url: string;
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      url = (await put(`packs/${id}-${file.name}`, file, { access: "public", addRandomSuffix: true })).url;
+    } else {
+      // No cloud storage configured (e.g. running locally): keep it in the database.
+      const [asset] = await db
+        .insert(schema.assets)
+        .values({ mime: file.type, dataBase64: Buffer.from(await file.arrayBuffer()).toString("base64"), prompt: "pack photo" })
+        .returning({ id: schema.assets.id });
+      url = `/api/assets/${asset.id}`;
     }
-    const blob = await put(`packs/${id}-${file.name}`, file, { access: "public", addRandomSuffix: true });
-    await db.update(schema.products).set({ packImageUrl: blob.url, updatedAt: new Date() }).where(eq(schema.products.id, id));
+    await db.update(schema.products).set({ packImageUrl: url, updatedAt: new Date() }).where(eq(schema.products.id, id));
     refresh();
     return ok("Pack image uploaded.");
   }) as Promise<ActionState>;
