@@ -178,7 +178,7 @@ export async function structuredCall<S extends z.ZodType>(call: StructuredCall<S
     }
     const text = message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
     try {
-      const parsed = call.schema.safeParse(JSON.parse(text));
+      const parsed = call.schema.safeParse(dropNulls(JSON.parse(text)));
       if (parsed.success) return parsed.data;
       lastProblem = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     } catch {
@@ -187,6 +187,15 @@ export async function structuredCall<S extends z.ZodType>(call: StructuredCall<S
     call.onText?.("\n");
   }
   throw new UserFacingError(`The model returned an invalid response twice (${lastProblem}). Try again.`);
+}
+
+/** Models sometimes write null for optional fields; treat null as "not provided" before validating. */
+export function dropNulls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(dropNulls);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null).map(([k, v]) => [k, dropNulls(v)]));
+  }
+  return value;
 }
 
 export function errorMessage(e: unknown): string {
@@ -264,7 +273,7 @@ async function openaiStructuredCall<S extends z.ZodType>(call: StructuredCall<S>
       continue;
     }
     try {
-      const parsed = call.schema.safeParse(JSON.parse(response.output_text));
+      const parsed = call.schema.safeParse(dropNulls(JSON.parse(response.output_text)));
       if (parsed.success) return parsed.data;
       lastProblem = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     } catch {
