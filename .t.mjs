@@ -1,0 +1,16 @@
+import { chromium } from "@playwright/test";
+const S = "/tmp/claude-0/-home-user/91b0bc89-91ac-5cca-980f-69eea859a542/scratchpad/shots/";
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+page.on("pageerror", (e) => console.log("PAGEERROR", e.message));
+await page.goto("http://localhost:3000/login");
+await page.fill("#dev-email", "test@example.com");
+await page.click("text=Sign in >> nth=-1");
+await page.waitForURL("**/create");
+await page.goto("http://localhost:3000/check");
+await page.fill("#copy", "Gluten free cookies, packed with protein. Are you overweight? Made with foxtail millet.");
+console.log(await page.getByTestId("scan-hits").innerText());
+await page.click("text=Run deep check");
+await page.getByTestId("deep-result").waitFor();
+await page.screenshot({ path: S + "check.png" });
+await browser.close();

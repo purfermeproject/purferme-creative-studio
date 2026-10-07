@@ -56,6 +56,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             </div>
           </header>
         ) : null}
+        {email && process.env.ANTHROPIC_MOCK === "true" ? (
+          <p className="bg-amber-bg px-4 py-1.5 text-center text-sm font-semibold text-amber">
+            Mock AI mode: generation and checks return sample output, not real model responses (ANTHROPIC_MOCK=true).
+          </p>
+        ) : null}
         <main id="main" className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
           {children}
         </main>
