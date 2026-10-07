@@ -1,5 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+import { z as zod } from "zod";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { createHash } from "node:crypto";
 import type { z } from "zod";
@@ -7,7 +9,20 @@ import { db, schema } from "@/db";
 import type { Platform } from "./types";
 
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
-export const isMock = () => process.env.ANTHROPIC_MOCK === "true";
+export const OPENAI_TEXT_MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
+export const isMock = () => process.env.ANTHROPIC_MOCK === "true" || process.env.AI_MOCK === "true";
+
+/**
+ * Which service writes the text. AI_PROVIDER forces it; otherwise Anthropic when
+ * its key is set, else OpenAI when its key is set.
+ */
+export function textProvider(): "anthropic" | "openai" {
+  const forced = process.env.AI_PROVIDER;
+  if (forced === "anthropic" || forced === "openai") return forced;
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (process.env.OPENAI_API_KEY) return "openai";
+  return "anthropic";
+}
 
 /** An error whose message is safe and useful to show the team. */
 export class UserFacingError extends Error {}
@@ -15,7 +30,7 @@ export class UserFacingError extends Error {}
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
-    throw new UserFacingError("The Anthropic API key isn't set (ANTHROPIC_API_KEY). Ask an admin to add it in Vercel.");
+    throw new UserFacingError("No AI key is set. Add OPENAI_API_KEY (or ANTHROPIC_API_KEY) to .env.local and restart the app.");
   }
   client ??= new Anthropic();
   return client;
@@ -43,6 +58,11 @@ async function logUsage(meta: LogMeta, prompt: string, model: string, inputToken
 
 function friendlyApiError(e: unknown): Error {
   if (e instanceof UserFacingError) return e;
+  if (e instanceof OpenAI.AuthenticationError) return new UserFacingError("OpenAI rejected the key. Check OPENAI_API_KEY in .env.local.");
+  if (e instanceof OpenAI.RateLimitError) return new UserFacingError("OpenAI is rate-limiting or your credit has run out. Check your OpenAI billing, then try again.");
+  if (e instanceof OpenAI.NotFoundError) return new UserFacingError(`OpenAI model "${OPENAI_TEXT_MODEL}" isn't available on your account. Set OPENAI_MODEL in .env.local (e.g. gpt-5.5 or gpt-4.1).`);
+  if (e instanceof OpenAI.BadRequestError) return new UserFacingError(`OpenAI rejected the request: ${e.message}`);
+  if (e instanceof OpenAI.APIError) return new UserFacingError(`OpenAI had a problem (${e.status ?? "network"}). Try again in a moment.`);
   if (e instanceof Anthropic.AuthenticationError) return new UserFacingError("The Anthropic API key was rejected. Ask an admin to check ANTHROPIC_API_KEY.");
   if (e instanceof Anthropic.RateLimitError) return new UserFacingError("The model is rate-limited right now. Wait a minute and try again.");
   if (e instanceof Anthropic.NotFoundError) return new UserFacingError(`Model "${MODEL}" wasn't found. Ask an admin to check ANTHROPIC_MODEL.`);
@@ -84,6 +104,8 @@ export async function structuredCall<S extends z.ZodType>(call: StructuredCall<S
     await logUsage(call.meta, call.prompt, "mock", Math.ceil(call.prompt.length / 4), Math.ceil(json.length / 4));
     return call.schema.parse(value);
   }
+
+  if (textProvider() === "openai") return openaiStructuredCall(call);
 
   const anthropic = getClient();
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
@@ -148,4 +170,63 @@ export function errorMessage(e: unknown): string {
   if (err instanceof UserFacingError) return err.message;
   console.error(err);
   return "Something went wrong on the server. Try again; if it keeps happening, check the server logs.";
+}
+
+let openaiClient: OpenAI | null = null;
+
+/** Same contract as the Anthropic path: stream, validate with zod, retry once, log usage. */
+async function openaiStructuredCall<S extends z.ZodType>(call: StructuredCall<S>): Promise<z.infer<S>> {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new UserFacingError("No AI key is set. Add OPENAI_API_KEY (or ANTHROPIC_API_KEY) to .env.local and restart the app.");
+  }
+  openaiClient ??= new OpenAI();
+  const { $schema: _ignored, ...jsonSchema } = zod.toJSONSchema(call.schema) as Record<string, unknown>;
+  void _ignored;
+
+  const content: OpenAI.Responses.ResponseInputContent[] = [];
+  if (call.image) {
+    content.push({
+      type: "input_image",
+      detail: "auto",
+      image_url: "url" in call.image ? call.image.url : `data:${call.image.mediaType};base64,${call.image.base64}`,
+    });
+  }
+  content.push({ type: "input_text", text: call.prompt });
+
+  let lastProblem = "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let response: OpenAI.Responses.Response;
+    try {
+      const stream = openaiClient.responses.stream({
+        model: OPENAI_TEXT_MODEL,
+        ...(call.system ? { instructions: call.system } : {}),
+        input: [{ role: "user", content }],
+        max_output_tokens: call.maxTokens ?? 32000,
+        text: { format: { type: "json_schema", name: "result", schema: jsonSchema, strict: false } },
+      });
+      if (call.onText) stream.on("response.output_text.delta", (e) => call.onText!(e.delta));
+      response = await stream.finalResponse();
+    } catch (e) {
+      // The SDK throws its own error when the JSON can't be parsed; treat that as invalid output and retry.
+      if (e instanceof OpenAI.APIError || e instanceof UserFacingError) throw friendlyApiError(e);
+      lastProblem = e instanceof Error ? e.message : String(e);
+      continue;
+    }
+
+    await logUsage(call.meta, call.prompt, response.model, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
+
+    if (response.status === "incomplete") {
+      lastProblem = response.incomplete_details?.reason === "content_filter" ? "OpenAI's safety filter stopped the response." : "The response was cut off before it finished.";
+      continue;
+    }
+    try {
+      const parsed = call.schema.safeParse(JSON.parse(response.output_text));
+      if (parsed.success) return parsed.data;
+      lastProblem = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    } catch {
+      lastProblem = "The response wasn't valid JSON.";
+    }
+    call.onText?.("\n");
+  }
+  throw new UserFacingError(`The model returned an invalid response twice (${lastProblem}). Try again.`);
 }

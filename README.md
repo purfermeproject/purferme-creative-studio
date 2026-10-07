@@ -34,10 +34,12 @@ Copy `.env.example` to `.env.local` and fill it in. Never prefix secrets with `N
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string. Use the **pooled** URL on Vercel. |
-| `ANTHROPIC_API_KEY` | yes (unless mock) | From console.anthropic.com. Server-side only. |
+| `ANTHROPIC_API_KEY` | one AI key | From console.anthropic.com. When set, Claude writes the ads. |
 | `ANTHROPIC_MODEL` | no | Defaults to `claude-sonnet-5-5`. |
 | `ANTHROPIC_MOCK` | no | `true` returns sample output with no API calls (tests, demos). A banner shows when it's on. |
-| `OPENAI_API_KEY` | for images | Powers **Make image** on each idea (OpenAI image model, with the product's pack photo as reference). |
+| `OPENAI_API_KEY` | one AI key | Powers **Make image**, and writes the ads too when there's no Anthropic key. |
+| `OPENAI_MODEL` | no | Text model when OpenAI writes the ads. Defaults to `gpt-5.5`. |
+| `AI_PROVIDER` | no | `openai` or `anthropic` to force which service writes the ads. |
 | `OPENAI_IMAGE_MODEL` | no | Defaults to `gpt-image-2.5-flare`. |
 | `AUTH_SECRET` | yes | `npx auth secret` or `openssl rand -base64 32`. |
 | `ALLOWED_EMAILS` | yes | Comma-separated team emails. Anyone else is refused. |
