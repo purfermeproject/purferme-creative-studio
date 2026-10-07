@@ -162,7 +162,11 @@ export function marketplaceVerdict(
   return {
     verdict: "Hold",
     notEnoughData,
-    reasons: [`ACoS ${fmt(input.acos)}% is between target (${fmt(input.targetAcos)}%) and the cut line (${fmt(cutLine)}%).`],
+    reasons: [
+      input.acos > cutLine
+        ? `ACoS ${fmt(input.acos)}% is over the cut line (${fmt(cutLine)}%), but ${fmt(input.clicks)} clicks isn't enough to cut yet.`
+        : `ACoS ${fmt(input.acos)}% is between target (${fmt(input.targetAcos)}%) and the cut line (${fmt(cutLine)}%).`,
+    ],
     warnings,
     nextStep: "Keep it running and check again once it has more clicks.",
   };
