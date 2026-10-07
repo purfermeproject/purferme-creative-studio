@@ -45,7 +45,8 @@ export async function generateImage(opts: { prompt: string; size: ImageSize; ref
   let inputTokens = 0;
   let outputTokens = 0;
 
-  if (isMock()) {
+  // With an OpenAI key, images are always real, even while text generation is in mock mode.
+  if (isMock() && !process.env.OPENAI_API_KEY) {
     mime = "image/svg+xml";
     data = Buffer.from(mockImageSvg(opts.size, opts.label)).toString("base64");
     model = "mock";
