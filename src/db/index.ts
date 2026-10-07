@@ -1,21 +1,37 @@
-import { drizzle } from "drizzle-orm/postgres-js";
+import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-const globalForDb = globalThis as unknown as { pgClient?: ReturnType<typeof postgres> };
+type DB = PostgresJsDatabase<typeof schema>;
+const globalForDb = globalThis as unknown as { studioDb?: DB };
 
-function makeClient() {
+function makeDb(): DB {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    throw new Error("DATABASE_URL is not set. Copy .env.example to .env.local and fill it in.");
+    throw new Error("DATABASE_URL is not set. Locally: add it to .env.local. On Vercel: connect a Neon database under Storage.");
   }
   // Serverless (Vercel) gets a small pool; prepare:false keeps it compatible
   // with pooled connection strings (Neon/Supabase poolers).
-  return postgres(url, { max: process.env.VERCEL ? 1 : 10, prepare: false });
+  const client = postgres(url, { max: process.env.VERCEL ? 1 : 10, prepare: false });
+  return drizzle(client, { schema });
 }
 
-const client = globalForDb.pgClient ?? makeClient();
-if (process.env.NODE_ENV !== "production") globalForDb.pgClient = client;
+/** The real database instance (created on first call). */
+export function getDb(): DB {
+  globalForDb.studioDb ??= makeDb();
+  return globalForDb.studioDb;
+}
 
-export const db = drizzle(client, { schema });
+/**
+ * Created on first use, not at import, so `next build` works without a database
+ * (Vercel builds before the database env var is needed).
+ */
+export const db: DB = new Proxy({} as DB, {
+  get(_target, prop) {
+    const real = getDb();
+    const value = Reflect.get(real, prop);
+    return typeof value === "function" ? value.bind(real) : value;
+  },
+});
+
 export { schema };

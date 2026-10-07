@@ -4,7 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import Resend from "next-auth/providers/resend";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { db, schema } from "@/db";
+import { getDb, schema } from "@/db";
 import { isAllowedEmail } from "@/lib/allowlist";
 
 /**
@@ -19,7 +19,8 @@ export const devLoginEnabled = process.env.AUTH_DEV_LOGIN === "true" && !process
 
 const providers: Provider[] = [];
 if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) providers.push(Google);
-if (process.env.AUTH_RESEND_KEY && process.env.AUTH_EMAIL_FROM) {
+const emailLinks = Boolean(process.env.AUTH_RESEND_KEY && process.env.AUTH_EMAIL_FROM);
+if (emailLinks) {
   providers.push(Resend({ from: process.env.AUTH_EMAIL_FROM }));
 }
 if (devLoginEnabled) {
@@ -39,12 +40,6 @@ if (devLoginEnabled) {
 export const providerIds = providers.map((p) => (typeof p === "function" ? p().id : p.id));
 
 const config: NextAuthConfig = {
-  adapter: DrizzleAdapter(db, {
-    usersTable: schema.users,
-    accountsTable: schema.accounts,
-    sessionsTable: schema.sessions,
-    verificationTokensTable: schema.verificationTokens,
-  }),
   session: { strategy: "jwt" },
   providers,
   pages: { signIn: "/login", verifyRequest: "/login?sent=1", error: "/login" },
@@ -60,7 +55,21 @@ const config: NextAuthConfig = {
   },
 };
 
-export const { handlers, auth, signIn, signOut } = NextAuth(config);
+// Only email links need the database (to store one-time tokens). Google sign-in uses
+// cookies only, so the app builds and runs auth without touching the database.
+export const { handlers, auth, signIn, signOut } = NextAuth(() =>
+  emailLinks
+    ? {
+        ...config,
+        adapter: DrizzleAdapter(getDb(), {
+          usersTable: schema.users,
+          accountsTable: schema.accounts,
+          sessionsTable: schema.sessions,
+          verificationTokensTable: schema.verificationTokens,
+        }),
+      }
+    : config,
+);
 
 /** For server actions and route handlers: returns the signed-in email or throws. */
 export async function requireUser(): Promise<string> {
