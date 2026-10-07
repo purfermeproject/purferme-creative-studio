@@ -7,6 +7,7 @@ const env = {
   DATABASE_URL: process.env.E2E_DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/studio_test",
   ANTHROPIC_MOCK: "true",
   AUTH_DEV_LOGIN: "true",
+  AUTH_DISABLED: "false",
   AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-0123456789",
   AUTH_TRUST_HOST: "true",
   ALLOWED_EMAILS: "e2e@example.com",

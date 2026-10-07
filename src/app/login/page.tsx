@@ -1,6 +1,6 @@
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
-import { auth, devLoginEnabled, providerIds, signIn } from "@/auth";
+import { auth, authDisabled, devLoginEnabled, providerIds, signIn } from "@/auth";
 
 const ERRORS: Record<string, string> = {
   AccessDenied: "That email isn't on the team list. Ask an admin to add it to ALLOWED_EMAILS, then try again.",
@@ -11,6 +11,7 @@ const ERRORS: Record<string, string> = {
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const params = await searchParams;
+  if (authDisabled) redirect("/create");
   const session = await auth();
   if (session?.user?.email) redirect(params.callbackUrl ?? "/create");
 

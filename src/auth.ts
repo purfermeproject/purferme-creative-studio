@@ -7,6 +7,13 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db, schema } from "@/db";
 import { isAllowedEmail } from "@/lib/allowlist";
 
+/**
+ * AUTH_DISABLED=true skips sign-in entirely for local use: everyone is treated
+ * as LOCAL_USER. Never honoured on Vercel, so a deployed app always needs login.
+ */
+export const authDisabled = process.env.AUTH_DISABLED === "true" && !process.env.VERCEL;
+export const LOCAL_USER = "local@studio";
+
 /** Dev sign-in is for local runs and tests only; it is never enabled on Vercel. */
 export const devLoginEnabled = process.env.AUTH_DEV_LOGIN === "true" && !process.env.VERCEL;
 
@@ -46,6 +53,7 @@ const config: NextAuthConfig = {
     signIn: ({ user, profile }) => isAllowedEmail(user?.email ?? profile?.email),
     authorized: ({ auth, request }) => {
       const { pathname } = request.nextUrl;
+      if (authDisabled) return true;
       if (pathname.startsWith("/login") || pathname.startsWith("/api/auth")) return true;
       return isAllowedEmail(auth?.user?.email);
     },
@@ -56,8 +64,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth(config);
 
 /** For server actions and route handlers: returns the signed-in email or throws. */
 export async function requireUser(): Promise<string> {
+  if (authDisabled) return LOCAL_USER;
   const session = await auth();
   const email = session?.user?.email;
   if (!email || !isAllowedEmail(email)) throw new Error("You need to sign in with a team email to do that.");
   return email.toLowerCase();
+}
+
+/** The signed-in email (or LOCAL_USER when sign-in is disabled), or null. */
+export async function currentUser(): Promise<string | null> {
+  if (authDisabled) return LOCAL_USER;
+  const email = (await auth())?.user?.email;
+  return email && isAllowedEmail(email) ? email.toLowerCase() : null;
 }

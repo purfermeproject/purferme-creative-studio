@@ -41,6 +41,7 @@ Copy `.env.example` to `.env.local` and fill it in. Never prefix secrets with `N
 | `ALLOWED_EMAILS` | yes | Comma-separated team emails. Anyone else is refused. |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | one sign-in method | Google OAuth client (see below). |
 | `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM` | one sign-in method | Email magic links via Resend; needs a verified sending domain. |
+| `AUTH_DISABLED` | no | `true` skips the login screen entirely on your own computer. Ignored on Vercel. |
 | `AUTH_DEV_LOGIN` | no | `true` shows a password-less "dev sign-in" for local runs/tests. Ignored on Vercel. |
 | `BLOB_READ_WRITE_TOKEN` | no | Enables pack-image upload in Admin. Without it, paste an image URL. |
 
@@ -51,7 +52,7 @@ Requires Node 20+ and a Postgres database (local, Docker, or a free Neon project
 ```bash
 npm install
 cp .env.example .env.local      # set DATABASE_URL, AUTH_SECRET, ALLOWED_EMAILS
-                                # set ANTHROPIC_MOCK=true and AUTH_DEV_LOGIN=true to try it with no keys
+                                # set ANTHROPIC_MOCK=true and AUTH_DISABLED=true to try it with no keys and no login
 npm run db:migrate              # create tables
 npm run db:seed                 # products, brand settings, platform rules, compliance terms
 npm run dev                     # http://localhost:3000
@@ -78,7 +79,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs all of the above on pushes to `
 1. **Import the repo** at vercel.com/new (framework: Next.js; defaults are fine).
 2. **Database:** in the project, *Storage → Marketplace → Neon* (free tier is enough to start). It sets `DATABASE_URL`.
 3. **Pack images (optional):** *Storage → Blob → Create*. It sets `BLOB_READ_WRITE_TOKEN`.
-4. **Environment variables** (*Settings → Environment Variables*): `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `AUTH_SECRET`, `ALLOWED_EMAILS`, and your sign-in method's variables. Do not set `AUTH_DEV_LOGIN` or `ANTHROPIC_MOCK` in production.
+4. **Environment variables** (*Settings → Environment Variables*): `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `AUTH_SECRET`, `ALLOWED_EMAILS`, and your sign-in method's variables. Do not set `AUTH_DISABLED`, `AUTH_DEV_LOGIN` or `ANTHROPIC_MOCK` in production (the first two are ignored on Vercel anyway).
 5. **Sign-in:**
    - *Google:* Google Cloud Console → APIs & Services → Credentials → OAuth client ID (Web). Authorised redirect URI: `https://<your-domain>/api/auth/callback/google`. Put the ID and secret in `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`.
    - *Email link:* create a Resend API key, verify your domain, set `AUTH_RESEND_KEY` and `AUTH_EMAIL_FROM` (e.g. `Studio <studio@yourdomain.com>`).

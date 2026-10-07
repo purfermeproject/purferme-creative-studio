@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Literata } from "next/font/google";
 import Link from "next/link";
-import { auth, signOut } from "@/auth";
+import { authDisabled, currentUser, signOut } from "@/auth";
 import { Nav } from "@/components/Nav";
 import { PlatformSwitch } from "@/components/PlatformSwitch";
 import { getPlatform } from "@/lib/platform";
@@ -16,8 +16,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const [platform, session] = await Promise.all([getPlatform(), auth()]);
-  const email = session?.user?.email;
+  const [platform, email] = await Promise.all([getPlatform(), currentUser()]);
 
   return (
     <html lang="en" data-platform={platform} className={`${bricolage.variable} ${literata.variable}`}>
@@ -38,20 +37,24 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               </div>
               <div className="flex items-center justify-between gap-3">
                 <Nav />
-                <form
-                  action={async () => {
-                    "use server";
-                    await signOut({ redirectTo: "/login" });
-                  }}
-                  className="flex shrink-0 items-center gap-2 text-sm text-ink-soft"
-                >
-                  <span className="hidden max-w-48 truncate md:inline" title={email}>
-                    {email}
-                  </span>
-                  <button type="submit" className="rounded-md px-2 py-1 font-semibold hover:bg-surface-2 hover:text-ink">
-                    Sign out
-                  </button>
-                </form>
+                {authDisabled ? (
+                  <span className="shrink-0 text-sm text-ink-soft">Sign-in off (local)</span>
+                ) : (
+                  <form
+                    action={async () => {
+                      "use server";
+                      await signOut({ redirectTo: "/login" });
+                    }}
+                    className="flex shrink-0 items-center gap-2 text-sm text-ink-soft"
+                  >
+                    <span className="hidden max-w-48 truncate md:inline" title={email}>
+                      {email}
+                    </span>
+                    <button type="submit" className="rounded-md px-2 py-1 font-semibold hover:bg-surface-2 hover:text-ink">
+                      Sign out
+                    </button>
+                  </form>
+                )}
               </div>
             </div>
           </header>
