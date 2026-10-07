@@ -75,6 +75,11 @@ export async function generateImage(opts: { prompt: string; size: ImageSize; ref
       if (e instanceof OpenAI.RateLimitError) throw new UserFacingError("OpenAI is rate-limiting or your credit has run out. Check your OpenAI billing, then try again.");
       if (e instanceof OpenAI.NotFoundError) throw new UserFacingError(`Image model "${IMAGE_MODEL}" isn't available on your OpenAI account. Set OPENAI_IMAGE_MODEL (e.g. gpt-image-1) in .env.local.`);
       if (e instanceof OpenAI.BadRequestError) throw new UserFacingError(`OpenAI refused this image: ${e.message}`);
+      if (e instanceof OpenAI.APIConnectionError) {
+        console.error("OpenAI image connection error:", e, (e as { cause?: unknown }).cause);
+        const cause = (e as { cause?: { code?: string; message?: string } }).cause;
+        throw new UserFacingError(`Couldn't reach OpenAI from this computer (${cause?.code ?? cause?.message ?? e.message}). Check your internet, VPN, proxy or antivirus, then try again.`);
+      }
       if (e instanceof OpenAI.APIError) throw new UserFacingError(`The image service had a problem (${e.status ?? "network"}). Try again in a moment.`);
       throw e;
     }

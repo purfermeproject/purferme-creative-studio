@@ -56,17 +56,37 @@ async function logUsage(meta: LogMeta, prompt: string, model: string, inputToken
   }
 }
 
+/** Digs the low-level reason (e.g. ENOTFOUND, ECONNRESET, certificate error) out of a connection error. */
+function connectionCause(e: unknown): string {
+  let cur: unknown = e;
+  let last = "";
+  for (let i = 0; i < 5 && cur; i++) {
+    const c = cur as { code?: string; message?: string; cause?: unknown };
+    last = [c.code, c.message].filter(Boolean).join(": ") || last;
+    cur = c.cause;
+  }
+  return last || "no details";
+}
+
 function friendlyApiError(e: unknown): Error {
   if (e instanceof UserFacingError) return e;
   if (e instanceof OpenAI.AuthenticationError) return new UserFacingError("OpenAI rejected the key. Check OPENAI_API_KEY in .env.local.");
   if (e instanceof OpenAI.RateLimitError) return new UserFacingError("OpenAI is rate-limiting or your credit has run out. Check your OpenAI billing, then try again.");
   if (e instanceof OpenAI.NotFoundError) return new UserFacingError(`OpenAI model "${OPENAI_TEXT_MODEL}" isn't available on your account. Set OPENAI_MODEL in .env.local (e.g. gpt-5.5 or gpt-4.1).`);
   if (e instanceof OpenAI.BadRequestError) return new UserFacingError(`OpenAI rejected the request: ${e.message}`);
+  if (e instanceof OpenAI.APIConnectionError) {
+    console.error("OpenAI connection error:", e, (e as { cause?: unknown }).cause);
+    return new UserFacingError(`Couldn't reach OpenAI from this computer (${connectionCause(e)}). Check your internet, VPN, proxy or antivirus, then try again.`);
+  }
   if (e instanceof OpenAI.APIError) return new UserFacingError(`OpenAI had a problem (${e.status ?? "network"}). Try again in a moment.`);
   if (e instanceof Anthropic.AuthenticationError) return new UserFacingError("The Anthropic API key was rejected. Ask an admin to check ANTHROPIC_API_KEY.");
   if (e instanceof Anthropic.RateLimitError) return new UserFacingError("The model is rate-limited right now. Wait a minute and try again.");
   if (e instanceof Anthropic.NotFoundError) return new UserFacingError(`Model "${MODEL}" wasn't found. Ask an admin to check ANTHROPIC_MODEL.`);
   if (e instanceof Anthropic.BadRequestError) return new UserFacingError(`The model rejected the request: ${e.message}`);
+  if (e instanceof Anthropic.APIConnectionError) {
+    console.error("Anthropic connection error:", e, (e as { cause?: unknown }).cause);
+    return new UserFacingError(`Couldn't reach Anthropic from this computer (${connectionCause(e)}). Check your internet, VPN, proxy or antivirus, then try again.`);
+  }
   if (e instanceof Anthropic.APIError) return new UserFacingError(`The model service had a problem (${e.status ?? "network"}). Try again in a moment.`);
   return e instanceof Error ? e : new Error(String(e));
 }
