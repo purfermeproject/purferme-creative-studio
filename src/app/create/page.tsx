@@ -44,7 +44,7 @@ export default async function CreatePage() {
       <CreateClient
         key={platform}
         platform={platform}
-        products={products.map((p) => ({ id: p.id, name: p.name, status: p.status, statusReason: p.statusReason, hasPackImage: Boolean(p.packImageUrl) }))}
+        products={products.map((p) => ({ id: p.id, name: p.name, priceText: p.priceText, status: p.status, statusReason: p.statusReason, hasPackImage: Boolean(p.packImageUrl) }))}
         creativeTypes={rule.creativeTypes}
         angles={brand.angles}
         personas={brand.personas}

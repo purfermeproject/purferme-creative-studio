@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { BrandKit } from "@/lib/brand-kit";
 import { defaultSpecFor, IMAGE_SPECS, MAX_SIDE, MIN_SIDE } from "@/lib/image-specs";
 import { OverlayEditor } from "./OverlayEditor";
+import { PlacementPreview } from "./PlacementPreview";
 import type { Concept } from "@/lib/schemas";
 import type { Platform } from "@/lib/types";
 
@@ -21,6 +22,8 @@ export function ImageMaker({
   images,
   onImages,
   kit,
+  productName = "",
+  priceText = "",
 }: {
   concept: Concept;
   platform: Platform;
@@ -31,7 +34,10 @@ export function ImageMaker({
   images: MadeImage[];
   onImages: (next: MadeImage[]) => void;
   kit: BrandKit;
+  productName?: string;
+  priceText?: string;
 }) {
+  const [previewing, setPreviewing] = useState<MadeImage | null>(null);
   const [textMode, setTextMode] = useState<"overlay" | "ai">("overlay");
   const [editing, setEditing] = useState<MadeImage | null>(null);
   const [frame, setFrame] = useState(0);
@@ -160,6 +166,9 @@ export function ImageMaker({
                 <button type="button" className="text-accent hover:underline" onClick={() => setEditing(img)}>
                   Add text &amp; logo
                 </button>
+                <button type="button" className="text-accent hover:underline" onClick={() => setPreviewing(img)}>
+                  Preview
+                </button>
                 <a href={`${img.url}?download`} className="text-accent hover:underline">
                   Download
                 </a>
@@ -167,6 +176,19 @@ export function ImageMaker({
             </li>
           ))}
         </ul>
+      ) : null}
+      {previewing ? (
+        <PlacementPreview
+          imageUrl={previewing.url}
+          allImages={images.map((i) => i.url)}
+          platform={platform}
+          brandName="Puŕ Fermé"
+          productName={productName || concept.title}
+          price={priceText}
+          caption={concept.copy.body || concept.hook}
+          cta={concept.copy.cta || "Shop now"}
+          onClose={() => setPreviewing(null)}
+        />
       ) : null}
       {editing ? (
         <OverlayEditor

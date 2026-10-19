@@ -94,13 +94,14 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
         </div>
       ) : (
         <ul className="space-y-3">
-          {rows.map(({ creative, productName }) => (
+          {rows.map(({ creative, productName, productPrice }) => (
             <li key={creative.id}>
               <LibraryItem
                 creative={creative}
                 productName={productName ?? "(product deleted)"}
                 defaultOpen={creative.id === highlight}
                 kit={brand.kit}
+                priceText={productPrice ?? ""}
                 images={creative.imageIds.map((id) => {
                   const i = infoById.get(id);
                   return { id, url: `/api/assets/${id}`, label: i?.label || undefined, frameIndex: i?.frameIndex ?? null };

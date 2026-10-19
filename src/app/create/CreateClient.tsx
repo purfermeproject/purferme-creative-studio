@@ -12,7 +12,7 @@ import type { BrandKit } from "@/lib/brand-kit";
 import { PLATFORM_LABELS, type Platform } from "@/lib/types";
 import { saveCreative } from "./actions";
 
-type ProductOption = { id: string; name: string; status: "ready" | "hold" | "blocked"; statusReason: string; hasPackImage: boolean };
+type ProductOption = { id: string; name: string; priceText: string; status: "ready" | "hold" | "blocked"; statusReason: string; hasPackImage: boolean };
 type Img = { mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif"; base64: string; name: string };
 type Item = { key: string; concept: ScoredConcept; badge?: string; saved?: string; busy?: string; error?: string; images?: MadeImage[] };
 type Progress = { chars: number; concepts: number; total: number; label: string } | null;
@@ -338,6 +338,8 @@ export function CreateClient({
                 images={it.images ?? []}
                 onImages={(images) => patch(it.key, { images })}
                 kit={kit}
+                productName={product?.name}
+                priceText={product?.priceText}
               />
             }
             actions={

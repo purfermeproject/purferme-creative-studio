@@ -220,3 +220,20 @@ test("Brand kit + Add text & logo saves a full-size image with crisp text", asyn
   await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(2);
   await expect(item.getByText("with text")).toBeVisible();
 });
+
+test("Preview shows the image in platform mock-ups with safe zones", async ({ page }) => {
+  await signIn(page);
+  await choosePlatform(page, "Meta");
+  await page.getByRole("button", { name: /Generate/ }).click();
+  const card = page.getByTestId("concept-0");
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await card.getByRole("button", { name: "Make image" }).click();
+  await card.getByRole("button", { name: "Preview" }).first().click();
+  const pv = page.getByTestId("placement-preview");
+  await expect(pv.getByText("Covered by UI · keep text out")).toBeVisible();
+  await pv.getByRole("button", { name: "Feed post" }).click();
+  await expect(pv.getByText("Sponsored")).toBeVisible();
+  await pv.getByLabel("Safe zones").uncheck();
+  await pv.getByRole("button", { name: "Close" }).click();
+  await expect(pv).toHaveCount(0);
+});

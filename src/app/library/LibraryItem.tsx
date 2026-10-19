@@ -44,12 +44,14 @@ export function LibraryItem({
   defaultOpen,
   kit,
   images: initialImages,
+  priceText,
 }: {
   creative: Creative;
   productName: string;
   defaultOpen: boolean;
   kit: BrandKit;
   images: MadeImage[];
+  priceText: string;
 }) {
   const [pending, start] = useTransition();
   const [qa, setQaOptimistic] = useOptimistic(c.qaChecked, (_cur: number[], next: number[]) => next);
@@ -115,7 +117,7 @@ export function LibraryItem({
           scan={c.scanResult}
           extra={
             c.productId ? (
-              <ImageMaker concept={toConcept(c)} platform={c.platform} creativeType={c.creativeType} productId={c.productId} creativeId={c.id} images={images} onImages={setImages} kit={kit} />
+              <ImageMaker concept={toConcept(c)} platform={c.platform} creativeType={c.creativeType} productId={c.productId} creativeId={c.id} images={images} onImages={setImages} kit={kit} productName={productName} priceText={priceText} />
             ) : null
           }
         />

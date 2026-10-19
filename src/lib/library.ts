@@ -37,7 +37,7 @@ export async function queryCreatives(f: LibraryFilters) {
     );
   }
   return db
-    .select({ creative: schema.creatives, productName: schema.products.name, productSlug: schema.products.slug })
+    .select({ creative: schema.creatives, productName: schema.products.name, productSlug: schema.products.slug, productPrice: schema.products.priceText })
     .from(schema.creatives)
     .leftJoin(schema.products, eq(schema.creatives.productId, schema.products.id))
     .where(where.length ? and(...where) : undefined)
