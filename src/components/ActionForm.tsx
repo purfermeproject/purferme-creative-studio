@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { startTransition, useActionState, useEffect, useRef, type ReactNode } from "react";
 import { initialActionState, type ActionState } from "@/lib/action-state";
 
 export function ActionForm({
@@ -21,13 +21,23 @@ export function ActionForm({
   testId?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, initialActionState);
+  const ref = useRef<HTMLFormElement>(null);
+  // Clear the form only after a successful save; failed saves keep what was typed.
+  useEffect(() => {
+    if (state.ok) ref.current?.reset();
+  }, [state]);
   return (
     <form
-      action={formAction}
+      ref={ref}
       className={className}
       data-testid={testId}
       onSubmit={(e) => {
-        if (confirm && !window.confirm(confirm)) e.preventDefault();
+        // Submit manually: a form `action` resets every field afterwards, which would wipe what
+        // someone typed whenever the save fails validation.
+        e.preventDefault();
+        if (confirm && !window.confirm(confirm)) return;
+        const fd = new FormData(e.currentTarget);
+        startTransition(() => formAction(fd));
       }}
     >
       {children}

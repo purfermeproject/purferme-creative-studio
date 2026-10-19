@@ -258,7 +258,7 @@ test("Library: search, CSV export and open in workspace", async ({ page }) => {
   await page.goto("/library?platform=all&q=Flip+the+pack");
   await expect(page.getByRole("heading", { name: "Creative library" })).toBeVisible();
   const item = page.locator("[data-testid^=creative-]").first();
-  await item.locator("summary").click();
+  await item.locator("summary").first().click();
   await item.getByRole("link", { name: "Open in workspace" }).click();
   await expect(page.getByTestId("creative-title")).toHaveText("Flip the pack");
 
