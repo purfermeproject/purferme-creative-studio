@@ -8,6 +8,7 @@ import { mockConcepts } from "@/lib/mocks";
 import { buildGenerationPrompt, buildVariationsPrompt } from "@/lib/prompts";
 import { ConceptSchema, GenerationResponseSchema } from "@/lib/schemas";
 import { PLATFORMS } from "@/lib/types";
+import { findPlacement } from "@/lib/placements";
 
 export const maxDuration = 300;
 
@@ -22,6 +23,7 @@ const Body = z.object({
   n: z.number().int().min(2).max(4).default(3),
   extra: z.string().max(1000).optional(),
   inspiration: z.string().max(3000).optional(),
+  placement: z.string().trim().max(100).optional(),
   image: z
     .object({ mediaType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]), base64: z.string().max(7_000_000) })
     .nullable()
@@ -71,10 +73,12 @@ export async function POST(req: Request) {
       image = { url: product.packImageUrl };
     }
   }
+  const known = findPlacement(input.platform, input.placement);
+  const placement = input.placement ? { label: known?.label ?? input.placement, guidance: known?.guidance ?? "" } : null;
   const n = input.mode === "regenerate" ? 1 : input.mode === "variations" ? 6 : input.n;
   let prompt: string;
   if (input.mode === "variations") {
-    prompt = buildVariationsPrompt(brand, product, rule, { platform: input.platform, creativeType: input.creativeType, concept: input.concept });
+    prompt = buildVariationsPrompt(brand, product, rule, { platform: input.platform, creativeType: input.creativeType, concept: input.concept, placement });
   } else {
     const avoid =
       input.mode === "regenerate"
@@ -89,6 +93,7 @@ export async function POST(req: Request) {
       language: input.language,
       extra: `${input.extra ?? ""}${avoid}`,
       inspiration: input.inspiration,
+      placement,
       hasPackImage: Boolean(image),
     });
   }
@@ -115,7 +120,7 @@ export async function POST(req: Request) {
             }
           },
           mock: () => {
-            const base = mockConcepts({ ...input, n: Math.min(n, 4) }, product.name, product.greenClaims);
+            const base = mockConcepts({ ...input, placement, n: Math.min(n, 4) }, product.name, product.greenClaims);
             if (input.mode === "variations") {
               return {
                 concepts: [

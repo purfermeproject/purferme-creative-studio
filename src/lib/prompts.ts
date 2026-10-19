@@ -35,6 +35,8 @@ export type GenerationInput = {
   extra?: string;
   inspiration?: string;
   hasPackImage?: boolean;
+  /** Where it runs, e.g. "Instagram Stories", plus how to design for it. */
+  placement?: { label: string; guidance: string } | null;
 };
 
 /** Hook mechanisms the model rotates through so ideas don't all open the same way. */
@@ -102,7 +104,9 @@ AMBER CLAIMS (only if flagged as amber, needs evidence): ${list(product.amberCla
 RED CLAIMS (never use): ${list(product.redClaims)}
 NOTES: ${notes || "(none)"}
 ${product.story?.trim() ? `PRODUCT STORY (real details: use them for specific, sensory, believable copy):\n${product.story.trim()}\n` : ""}
-PLATFORM: ${PLATFORM_LABELS[input.platform]}. CREATIVE TYPE: ${input.creativeType}.
+PLATFORM: ${PLATFORM_LABELS[input.platform]}. CREATIVE TYPE: ${input.creativeType}.${
+    input.placement ? `\nPLACEMENT: ${input.placement.label}. ${input.placement.guidance || "Design natively for this placement's format, length and safe areas."}` : ""
+  }
 ${rule.rules}
 
 DIRECTION: angle = ${angle}; persona = ${persona}; language = ${input.language}
@@ -117,7 +121,7 @@ ${quality}
 Return exactly ${input.n} concepts.`;
 }
 
-export type VariationInput = { platform: Platform; creativeType: string; concept: unknown };
+export type VariationInput = { platform: Platform; creativeType: string; concept: unknown; placement?: GenerationInput["placement"] };
 
 /** Structural variations of a winning concept (not small tweaks). */
 export function buildVariationsPrompt(brand: BrandLike, product: ProductLike, rule: RuleLike, input: VariationInput): string {
@@ -129,6 +133,7 @@ export function buildVariationsPrompt(brand: BrandLike, product: ProductLike, ru
     angle: "(same as the winner)",
     persona: "(vary as instructed)",
     language: "(vary as instructed)",
+    placement: input.placement,
   })}
 
 WINNING CONCEPT TO VARY:

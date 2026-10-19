@@ -13,7 +13,7 @@ export function mockConcepts(input: GenerationInput, productName: string, greenC
     title: `${angles[i]} · ${personas[i]}`,
     persona: personas[i],
     angle: angles[i],
-    format: input.creativeType,
+    format: input.placement ? `${input.creativeType} · ${input.placement.label}` : input.creativeType,
     language: i === 2 ? "Hinglish" : input.language,
     hook: i === 0 ? "3pm called. It wants chai." : `Concept ${i + 1}: the ${angles[i].toLowerCase()} moment`,
     frames: video

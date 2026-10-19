@@ -7,6 +7,7 @@ import { ChoiceOrCustom } from "@/components/ChoiceOrCustom";
 import { ImageMaker, type MadeImage } from "@/components/ImageMaker";
 import { conceptToText, type ScoredConcept } from "@/lib/concepts";
 import { AUTO } from "@/lib/prompts";
+import { PLACEMENTS } from "@/lib/placements";
 import type { Concept } from "@/lib/schemas";
 import type { BrandKit } from "@/lib/brand-kit";
 import { PLATFORM_LABELS, type Platform } from "@/lib/types";
@@ -72,6 +73,8 @@ export function CreateClient({
   const firstReady = products.find((p) => p.status === "ready");
   const [productId, setProductId] = useState(products.find((p) => p.name.startsWith("Chocolate") && p.status === "ready")?.id ?? firstReady?.id ?? "");
   const [creativeType, setCreativeType] = useState(creativeTypes[0] ?? "");
+  const placements = PLACEMENTS[platform];
+  const [placement, setPlacement] = useState(placements[0]?.label ?? "");
   const [angle, setAngle] = useState(AUTO);
   const [persona, setPersona] = useState(AUTO);
   const [language, setLanguage] = useState(languages[0] ?? "English");
@@ -93,6 +96,7 @@ export function CreateClient({
     platform,
     productId,
     creativeType: creativeType.trim(),
+    placement: placement.trim() || undefined,
     angle: angle.trim() || AUTO,
     persona: persona.trim() || AUTO,
     language: language.trim() || "English",
@@ -159,7 +163,7 @@ export function CreateClient({
 
   async function save(item: Item) {
     patch(item.key, { busy: "Saving…", error: undefined });
-    const res = await saveCreative({ concept: stripScored(item.concept), platform, productId, creativeType, imageIds: (item.images ?? []).map((i) => i.id) });
+    const res = await saveCreative({ concept: stripScored(item.concept), platform, productId, creativeType, imageIds: (item.images ?? []).map((i) => i.id), placement: item.concept.platform === platform ? placement.trim() : "" });
     if (res.ok) patch(item.key, { busy: undefined, saved: res.id });
     else patch(item.key, { busy: undefined, error: res.message });
   }
@@ -215,6 +219,16 @@ export function CreateClient({
           ) : null}
         </div>
         <ChoiceOrCustom id="ctype" label="Type of ad" value={creativeType} onChange={setCreativeType} options={plain(creativeTypes)} placeholder="e.g. 6s bumper video, WhatsApp status image" />
+        {placements.length ? (
+          <ChoiceOrCustom
+            id="placement"
+            label="Where it runs"
+            value={placement}
+            onChange={setPlacement}
+            options={plain(placements.map((p) => p.label))}
+            placeholder="e.g. Instagram Explore, WhatsApp Status"
+          />
+        ) : null}
 
         <button type="submit" className="btn-primary w-full py-3 text-lg" disabled={busy || !product || Boolean(blocked) || !creativeType.trim()}>
           {busy ? "Writing ideas…" : `Generate ${n} ad ideas`}
@@ -326,6 +340,7 @@ export function CreateClient({
             concept={it.concept}
             platform={it.concept.platform}
             scan={it.concept.scan}
+            placement={it.concept.platform === platform ? placement : ""}
             badge={it.badge ? <span className="chip border-jaggery/40 text-jaggery">{it.badge}</span> : null}
             extra={
               <ImageMaker
@@ -339,6 +354,7 @@ export function CreateClient({
                 onImages={(images) => patch(it.key, { images })}
                 kit={kit}
                 productName={product?.name}
+                placement={it.concept.platform === platform ? placement : ""}
                 priceText={product?.priceText}
               />
             }

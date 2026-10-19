@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { BrandKit } from "@/lib/brand-kit";
 import { defaultSpecFor, IMAGE_SPECS, MAX_SIDE, MIN_SIDE } from "@/lib/image-specs";
+import { findPlacement } from "@/lib/placements";
 import { OverlayEditor } from "./OverlayEditor";
 import { PlacementPreview } from "./PlacementPreview";
 import type { Concept } from "@/lib/schemas";
@@ -24,6 +25,7 @@ export function ImageMaker({
   kit,
   productName = "",
   priceText = "",
+  placement = "",
 }: {
   concept: Concept;
   platform: Platform;
@@ -36,7 +38,9 @@ export function ImageMaker({
   kit: BrandKit;
   productName?: string;
   priceText?: string;
+  placement?: string;
 }) {
+  const place = findPlacement(platform, placement);
   const [previewing, setPreviewing] = useState<MadeImage | null>(null);
   const [wordsFor, setWordsFor] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
@@ -47,7 +51,7 @@ export function ImageMaker({
   const [editing, setEditing] = useState<MadeImage | null>(null);
   const [frame, setFrame] = useState(0);
   const specs = IMAGE_SPECS[platform];
-  const [specId, setSpecId] = useState(() => defaultSpecFor(platform, creativeType).id);
+  const [specId, setSpecId] = useState(() => place?.specId ?? defaultSpecFor(platform, creativeType).id);
   const [cw, setCw] = useState("1080");
   const [ch, setCh] = useState("1080");
   const [dims, setDims] = useState<Record<string, string>>({});
@@ -349,6 +353,7 @@ export function ImageMaker({
           price={priceText}
           caption={concept.copy.body || concept.hook}
           cta={concept.copy.cta || "Shop now"}
+          initialMock={place?.preview}
           onClose={() => setPreviewing(null)}
         />
       ) : null}

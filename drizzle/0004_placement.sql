@@ -1,0 +1,1 @@
+ALTER TABLE "creatives" ADD COLUMN "placement" text DEFAULT '' NOT NULL;

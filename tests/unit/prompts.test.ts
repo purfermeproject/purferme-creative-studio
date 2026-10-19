@@ -136,3 +136,26 @@ describe("creative quality inputs", () => {
     expect(p).not.toContain("REFERENCE THE TEAM");
   });
 });
+
+describe("placement", () => {
+  it("adds placement-specific guidance for known placements", async () => {
+    const { findPlacement } = await import("@/lib/placements");
+    const stories = findPlacement("meta", "Instagram Stories")!;
+    expect(stories.specId).toBe("meta-916");
+    const p = buildGenerationPrompt(SEED_BRAND, choc, rule("meta"), {
+      n: 2, platform: "meta", creativeType: "Static image ad (4:5)", angle: "auto", persona: "auto", language: "English",
+      placement: { label: stories.label, guidance: stories.guidance },
+    });
+    expect(p).toContain("PLACEMENT: Instagram Stories.");
+    expect(p).toContain("1–3 cards of about 5 seconds each");
+    expect(findPlacement("meta", "ig-carousel")?.specId).toBe("meta-11");
+    expect(findPlacement("amazon", "Instagram Stories")).toBeNull();
+  });
+  it("handles a custom placement without guidance", () => {
+    const p = buildGenerationPrompt(SEED_BRAND, choc, rule("meta"), {
+      n: 2, platform: "meta", creativeType: "x", angle: "auto", persona: "auto", language: "English",
+      placement: { label: "WhatsApp Status", guidance: "" },
+    });
+    expect(p).toContain("PLACEMENT: WhatsApp Status. Design natively for this placement");
+  });
+});

@@ -12,6 +12,7 @@ export function ConceptCard({
   badge,
   testId,
   extra,
+  placement,
 }: {
   concept: Concept;
   platform: Platform;
@@ -20,6 +21,7 @@ export function ConceptCard({
   badge?: ReactNode;
   testId?: string;
   extra?: ReactNode;
+  placement?: string;
 }) {
   const hasAudio = c.frames.some((f) => f.audio);
   return (
@@ -27,7 +29,10 @@ export function ConceptCard({
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           {badge}
-          <span className="chip border-accent/30 bg-accent-soft text-accent">{PLATFORM_LABELS[platform]}</span>
+          <span className="chip border-accent/30 bg-accent-soft text-accent">
+            {PLATFORM_LABELS[platform]}
+            {placement ? ` · ${placement}` : ""}
+          </span>
           <span className="chip">{c.persona}</span>
           <span className="chip">{c.angle}</span>
           <span className="chip">{c.format}</span>

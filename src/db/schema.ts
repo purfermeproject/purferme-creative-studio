@@ -81,6 +81,8 @@ export const creatives = pgTable("creatives", {
   platform: text("platform").$type<Platform>().notNull(),
   productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
   creativeType: text("creative_type").notNull(),
+  /** e.g. Instagram Reels, Instagram Stories, Instagram Feed post (Meta). */
+  placement: text("placement").notNull().default(""),
   title: text("title").notNull(),
   persona: text("persona").notNull().default(""),
   angle: text("angle").notNull().default(""),

@@ -37,6 +37,7 @@ export function PlacementPreview({
   caption,
   cta,
   onClose,
+  initialMock,
 }: {
   imageUrl: string;
   allImages: string[];
@@ -47,8 +48,9 @@ export function PlacementPreview({
   caption: string;
   cta: string;
   onClose: () => void;
+  initialMock?: Mock;
 }) {
-  const [mock, setMock] = useState<Mock>(MOCKS[platform][0].id);
+  const [mock, setMock] = useState<Mock>(initialMock && MOCKS[platform].some((m) => m.id === initialMock) ? initialMock : MOCKS[platform][0].id);
   const [zones, setZones] = useState(true);
   const [ratio, setRatio] = useState(1);
 

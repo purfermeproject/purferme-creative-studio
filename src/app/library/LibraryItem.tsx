@@ -97,7 +97,8 @@ export function LibraryItem({
         <div className="min-w-0">
           <p className="truncate text-lg font-bold">{c.title}</p>
           <p className="hint truncate">
-            {PLATFORM_LABELS[c.platform]} · {productName} · {c.creativeType} · {c.language}
+            {PLATFORM_LABELS[c.platform]}
+            {c.placement ? ` · ${c.placement}` : ""} · {productName} · {c.creativeType} · {c.language}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -115,9 +116,10 @@ export function LibraryItem({
           concept={toConcept(c)}
           platform={c.platform}
           scan={c.scanResult}
+          placement={c.placement}
           extra={
             c.productId ? (
-              <ImageMaker concept={toConcept(c)} platform={c.platform} creativeType={c.creativeType} productId={c.productId} creativeId={c.id} images={images} onImages={setImages} kit={kit} productName={productName} priceText={priceText} />
+              <ImageMaker concept={toConcept(c)} platform={c.platform} creativeType={c.creativeType} productId={c.productId} creativeId={c.id} images={images} onImages={setImages} kit={kit} productName={productName} priceText={priceText} placement={c.placement} />
             ) : null
           }
         />

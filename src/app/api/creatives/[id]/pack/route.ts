@@ -70,7 +70,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 td{border:1px solid #ddd;vertical-align:top;padding:10px}td.n{width:70px;text-align:center;font-weight:700}td.img{width:220px}img{max-width:200px;max-height:300px;display:block}
 p{margin:2px 0 8px}.meta{color:#666}@media print{body{margin:12mm}tr{break-inside:avoid}}</style></head><body>
 <h1>${esc(c.title)}</h1>
-<p class="meta">${esc(PLATFORM_LABELS[c.platform])} · ${esc(row.productName ?? "")} · ${esc(c.creativeType)} · ${esc(c.language)} · status: ${esc(c.status)}</p>
+<p class="meta">${esc(PLATFORM_LABELS[c.platform])}${c.placement ? ` · ${esc(c.placement)}` : ""} · ${esc(row.productName ?? "")} · ${esc(c.creativeType)} · ${esc(c.language)} · status: ${esc(c.status)}</p>
 <p><b>Hook:</b> ${esc(c.hook)}</p>
 <table>${rows}</table>
 <h2>Copy</h2>
@@ -81,7 +81,7 @@ p{margin:2px 0 8px}.meta{color:#666}@media print{body{margin:12mm}tr{break-insid
   );
   root.file(
     "README.txt",
-    `${c.title}\n${PLATFORM_LABELS[c.platform]} · ${c.creativeType}\n\nscript.txt      full script, copy, claims and AI render prompt\nstoryboard.html scenes with images (print to PDF from a browser)\nimages/         every image, named by scene and pixel size ("-with-text" = brand text added)\n${pack ? "pack-photo.*    the product pack reference\n" : ""}\nStatus: ${c.status}. Only run ads marked Approved.\n`,
+    `${c.title}\n${PLATFORM_LABELS[c.platform]}${c.placement ? ` · ${c.placement}` : ""} · ${c.creativeType}\n\nscript.txt      full script, copy, claims and AI render prompt\nstoryboard.html scenes with images (print to PDF from a browser)\nimages/         every image, named by scene and pixel size ("-with-text" = brand text added)\n${pack ? "pack-photo.*    the product pack reference\n" : ""}\nStatus: ${c.status}. Only run ads marked Approved.\n`,
   );
 
   const buf = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });

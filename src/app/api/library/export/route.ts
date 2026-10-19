@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const filters = parseFilters(sp, await getPlatform());
   const rows = await queryCreatives(filters);
   const headers = [
-    "id", "platform", "product", "creative_type", "status", "title", "persona", "angle", "format", "language", "hook",
+    "id", "platform", "placement", "product", "creative_type", "status", "title", "persona", "angle", "format", "language", "hook",
     "headline", "primary_text", "variant", "cta", "frames", "claims", "red_flags", "amber_flags", "qa_done",
     "needs_real_person", "ai_label_needed", "why_it_fits", "ai_prompt", "created_by", "created_at",
   ];
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const ambers = c.scanResult.hits.filter((h) => h.severity === "amber");
     const required = requiredQaItems(c.platform);
     return [
-      c.id, c.platform, productName ?? "", c.creativeType, c.status, c.title, c.persona, c.angle, c.format, c.language, c.hook,
+      c.id, c.platform, c.placement, productName ?? "", c.creativeType, c.status, c.title, c.persona, c.angle, c.format, c.language, c.hook,
       c.copy.headline ?? "", c.copy.body ?? "", c.copy.body_alt ?? "", c.copy.cta ?? "",
       c.frames.map((f) => `[${f.slot}] ${f.visual} | ${f.onscreen}${f.audio ? ` | ${f.audio}` : ""}`).join("\n"),
       c.claims.map((cl) => `${cl.tier}: ${cl.text}`),

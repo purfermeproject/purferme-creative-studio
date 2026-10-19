@@ -14,7 +14,8 @@ const SaveInput = z.object({
   platform: z.enum(PLATFORMS),
   productId: z.string().uuid(),
   creativeType: z.string().min(1),
-  imageIds: z.array(z.string().uuid()).max(20).default([]),
+  imageIds: z.array(z.string().uuid()).max(40).default([]),
+  placement: z.string().trim().max(100).default(""),
 });
 
 export async function saveCreative(input: z.input<typeof SaveInput>): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
@@ -32,6 +33,7 @@ export async function saveCreative(input: z.input<typeof SaveInput>): Promise<{ 
         platform: scored.platform,
         productId: product.id,
         creativeType: scored.platform === v.platform ? v.creativeType : c.format,
+        placement: scored.platform === v.platform ? v.placement : "",
         title: c.title,
         persona: c.persona,
         angle: c.angle,

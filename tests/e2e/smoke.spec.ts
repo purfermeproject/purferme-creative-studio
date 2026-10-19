@@ -123,7 +123,7 @@ test("Library CSV export downloads a valid CSV", async ({ page }) => {
   expect(res.headers()["content-type"]).toContain("text/csv");
   const text = await res.text();
   const lines = text.trim().split("\r\n");
-  expect(lines[0].startsWith("id,platform,product,creative_type,status,title")).toBe(true);
+  expect(lines[0].startsWith("id,platform,placement,product,creative_type,status,title")).toBe(true);
   expect(lines.length).toBeGreaterThan(1);
 });
 
@@ -201,6 +201,7 @@ test("Brand kit + Add text & logo saves a full-size image with crisp text", asyn
   await page.goto("/create");
   await choosePlatform(page, "Meta");
   await page.getByLabel("Type of ad", { exact: true }).selectOption("Static image ad (4:5)");
+  await page.getByLabel("Where it runs", { exact: true }).selectOption("Instagram Feed post");
   await page.getByRole("button", { name: /Generate/ }).click();
   const card = page.getByTestId("concept-0");
   await expect(card).toBeVisible({ timeout: 60_000 });
@@ -282,6 +283,7 @@ test("Edit with words, All sizes and Compare", async ({ page }) => {
   await signIn(page);
   await choosePlatform(page, "Meta");
   await page.getByLabel("Type of ad", { exact: true }).selectOption("Static image ad (4:5)");
+  await page.getByLabel("Where it runs", { exact: true }).selectOption("Instagram Feed post");
   await page.getByRole("button", { name: /Generate/ }).click();
   const card = page.getByTestId("concept-0");
   await expect(card).toBeVisible({ timeout: 60_000 });
@@ -307,4 +309,30 @@ test("Edit with words, All sizes and Compare", async ({ page }) => {
   await card.getByRole("button", { name: "Compare 2 images side by side" }).click();
   await expect(page.getByTestId("compare").locator("img")).toHaveCount(2);
   await page.getByTestId("compare").getByRole("button", { name: "Close" }).click();
+});
+
+test("Where it runs: Instagram placement shapes ideas, image size and is saved", async ({ page }) => {
+  await signIn(page);
+  await choosePlatform(page, "Meta");
+  await expect(page.getByLabel("Where it runs", { exact: true })).toHaveValue("Instagram Reels");
+  await page.getByLabel("Where it runs", { exact: true }).selectOption("Instagram Carousel");
+  await page.getByLabel("Type of ad", { exact: true }).selectOption("Carousel (3–5 cards)");
+  await page.getByRole("button", { name: /Generate/ }).click();
+  const card = page.getByTestId("concept-0");
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await expect(card).toContainText("Meta · Instagram Carousel");
+  await card.getByRole("button", { name: "Make image" }).click();
+  await expect(card.getByTestId("image-dims").first()).toContainText("1080×1080");
+  await card.getByRole("button", { name: "Save", exact: true }).click();
+  await card.getByRole("link", { name: /Saved/ }).click();
+  await expect(page.locator("details[open][data-testid^=creative-]")).toContainText("Instagram Carousel");
+  const csv = await (await page.request.get("/api/library/export?platform=meta")).text();
+  expect(csv.split("\r\n")[0]).toContain("placement");
+  expect(csv).toContain("Instagram Carousel");
+
+  // Amazon has no placement choice.
+  await page.goto("/create");
+  await choosePlatform(page, "Amazon");
+  await expect(page.getByLabel("Where it runs", { exact: true })).toHaveCount(0);
+  await choosePlatform(page, "Meta");
 });

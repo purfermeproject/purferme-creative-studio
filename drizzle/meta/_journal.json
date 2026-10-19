@@ -29,6 +29,13 @@
       "when": 1792405992138,
       "tag": "0003_designer_tools",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792407701959,
+      "tag": "0004_placement",
+      "breakpoints": true
     }
   ]
 }
