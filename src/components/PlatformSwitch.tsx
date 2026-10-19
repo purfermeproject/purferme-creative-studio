@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useTransition, type KeyboardEvent } from "react";
-import { PLATFORMS, PLATFORM_LABELS, type Platform } from "@/lib/types";
+import { PLATFORMS, type Platform } from "@/lib/types";
 
+const TITLES: Record<Platform, string> = { meta: "Instagram", amazon: "Amazon", flipkart: "Flipkart" };
 const SUBTITLES: Record<Platform, string> = {
-  meta: "Discovery feed",
+  meta: "+ Facebook · Meta ads",
   amazon: "Search intent",
   flipkart: "Listing-led",
 };
@@ -64,7 +65,7 @@ export function PlatformSwitch({ value }: { value: Platform }) {
               selected ? "bg-accent text-accent-ink shadow-sm" : "text-ink-soft hover:bg-surface hover:text-ink"
             }`}
           >
-            <span className="text-lg leading-tight font-bold tracking-tight sm:text-xl">{PLATFORM_LABELS[p]}</span>
+            <span className="text-lg leading-tight font-bold tracking-tight sm:text-xl">{TITLES[p]}</span>
             <span className={`text-[11px] leading-tight sm:text-xs ${selected ? "opacity-90" : ""}`}>{SUBTITLES[p]}</span>
           </button>
         );

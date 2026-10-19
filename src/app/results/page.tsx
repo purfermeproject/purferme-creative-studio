@@ -2,7 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getBrand } from "@/lib/data";
 import { getPlatform } from "@/lib/platform";
-import { PLATFORM_LABELS } from "@/lib/types";
+import { PLATFORM_FULL_LABELS, PLATFORM_LABELS } from "@/lib/types";
 import { BriefPanel } from "./BriefPanel";
 import { ResultsClient } from "./ResultsClient";
 
@@ -34,7 +34,7 @@ export default async function ResultsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-extrabold tracking-tight">Results for {PLATFORM_LABELS[platform]}</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight">Results for {PLATFORM_FULL_LABELS[platform]}</h1>
         <p className="prose-serif mt-1 text-ink-soft">
           {platform === "meta"
             ? "Meta is judged on hook rate, link CTR, CPA against target and frequency."

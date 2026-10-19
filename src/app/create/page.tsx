@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getBrand, getPlatformRule, getProducts } from "@/lib/data";
 import { getPlatform } from "@/lib/platform";
-import { PLATFORM_LABELS } from "@/lib/types";
+import { PLATFORM_FULL_LABELS, PLATFORM_LABELS } from "@/lib/types";
 import { CreateClient } from "./CreateClient";
 
 export const metadata = { title: "Create ads · Puŕ Fermé Creative Studio" };
@@ -33,7 +33,7 @@ export default async function CreatePage() {
         ))}
       </ol>
       <div>
-        <h1 className="text-4xl font-extrabold tracking-tight">Create ads for {PLATFORM_LABELS[platform]}</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight">Create ads for {PLATFORM_FULL_LABELS[platform]}</h1>
         <p className="prose-serif mt-1 text-ink-soft">
           {INTRO[platform]}{" "}
           <Link href="/guide" className="font-sans text-sm font-semibold text-accent hover:underline">

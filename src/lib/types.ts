@@ -7,6 +7,13 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   flipkart: "Flipkart",
 };
 
+/** Longer names for headings and the platform switch (Meta runs ads on Instagram and Facebook). */
+export const PLATFORM_FULL_LABELS: Record<Platform, string> = {
+  meta: "Instagram & Facebook (Meta)",
+  amazon: "Amazon",
+  flipkart: "Flipkart",
+};
+
 export function isPlatform(value: unknown): value is Platform {
   return typeof value === "string" && (PLATFORMS as readonly string[]).includes(value);
 }
