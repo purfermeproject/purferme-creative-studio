@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useOptimistic, useState, useTransition } from "react";
 import { ConceptCard } from "@/components/ConceptCard";
 import { ImageMaker, type MadeImage } from "@/components/ImageMaker";
@@ -45,6 +46,8 @@ export function LibraryItem({
   kit,
   images: initialImages,
   priceText,
+  review,
+  otherBlocking,
 }: {
   creative: Creative;
   productName: string;
@@ -52,6 +55,8 @@ export function LibraryItem({
   kit: BrandKit;
   images: MadeImage[];
   priceText: string;
+  review: { needed: boolean; reviewedBy: string };
+  otherBlocking: string[];
 }) {
   const [pending, start] = useTransition();
   const [qa, setQaOptimistic] = useOptimistic(c.qaChecked, (_cur: number[], next: number[]) => next);
@@ -61,7 +66,7 @@ export function LibraryItem({
 
   const required = requiredQaItems(c.platform);
   const done = required.filter((i) => qa.includes(i.n)).length;
-  const gate = approvalGate({ platform: c.platform, scanResult: c.scanResult, qaChecked: qa });
+  const gate = approvalGate({ platform: c.platform, scanResult: c.scanResult, qaChecked: qa, review, otherBlocking });
   const redHits = c.scanResult.hits.filter((h) => h.severity === "red");
   const reds = redHits.length;
   const allTicked = done === required.length;
@@ -104,6 +109,8 @@ export function LibraryItem({
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {reds ? <span className="chip-red">{reds} to fix</span> : null}
           {ambers ? <span className="chip-amber">{ambers} to check</span> : null}
+          {c.generationMeta.mock ? <span className="chip-amber">Sample (mock)</span> : null}
+          {review.needed && !review.reviewedBy && !reds ? <span className="chip-amber">Claims to sign off</span> : null}
           {images.length ? <span className="chip">{images.length} {images.length === 1 ? "image" : "images"}</span> : null}
           <span className={STATUS_CHIP[c.status]} data-testid="status-chip">
             {c.status}
@@ -139,7 +146,7 @@ export function LibraryItem({
                         </li>
                       ))}
                     </ul>
-                    <p className="mt-1">Make a new version in Create ads (use Regenerate), then save that one instead.</p>
+                    <p className="mt-1">Open it in the workspace and edit the wording; the check updates as you type.</p>
                   </div>
                 ) : null}
                 <label className="flex items-start gap-2 text-sm">
@@ -152,7 +159,18 @@ export function LibraryItem({
                 <button className="btn-primary w-full" disabled={pending || !gate.ok} onClick={() => changeStatus("Approved")}>
                   Approve
                 </button>
-                {!gate.ok && !redHits.length ? <p className="hint">Tick the pre-launch box to approve.</p> : null}
+                {!gate.ok && !redHits.length ? (
+                  <ul className="hint list-disc pl-5">
+                    {gate.missing.map((m) => (
+                      <li key={m}>{m}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {review.needed && !review.reviewedBy ? (
+                  <Link href={`/create?creative=${c.id}`} className="text-sm font-semibold text-purple underline">
+                    Sign off claims in the workspace →
+                  </Link>
+                ) : null}
               </>
             ) : (
               <p className="font-bold">
@@ -203,6 +221,9 @@ export function LibraryItem({
           </details>
 
           <div className="flex flex-wrap gap-2">
+            <Link href={`/create?creative=${c.id}`} className="btn-primary px-3 py-1.5 text-sm">
+              Open in workspace
+            </Link>
             <button
               className="btn-secondary px-3 py-1.5 text-sm"
               onClick={async () => {
@@ -213,7 +234,7 @@ export function LibraryItem({
             >
               {copied ? "Copied" : "Copy as text"}
             </button>
-            <a href={`/api/creatives/${c.id}/pack`} className="btn-primary px-3 py-1.5 text-sm" download>
+            <a href={`/api/creatives/${c.id}/pack`} className="btn-secondary px-3 py-1.5 text-sm" download>
               Download handoff pack (.zip)
             </a>
             <button className="btn-secondary px-3 py-1.5 text-sm" disabled={pending} onClick={() => start(async () => void (await rescan(c.id)))}>
@@ -230,7 +251,7 @@ export function LibraryItem({
             </button>
           </div>
           <p className="hint text-xs">
-            Saved by {c.createdBy} on {new Date(c.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+            {c.approvedBy && c.status !== "Draft" ? `Approved by ${c.approvedBy}. ` : ""}Revision {c.revision}. Saved by {c.createdBy} on {new Date(c.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
           </p>
         </aside>
       </div>

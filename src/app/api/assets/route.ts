@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requireUser } from "@/auth";
+import { authErrorStatus, requireRole } from "@/auth";
 import { errorMessage } from "@/lib/ai";
 import { acceptedMime, storeAsset } from "@/lib/asset-store";
 
@@ -15,9 +15,9 @@ const Meta = z.object({
 export async function POST(req: Request) {
   let user: string;
   try {
-    user = await requireUser();
+    ({ user } = await requireRole("generate"));
   } catch (e) {
-    return Response.json({ error: errorMessage(e) }, { status: 401 });
+    return Response.json({ error: errorMessage(e) }, { status: authErrorStatus(e) });
   }
   const fd = await req.formData().catch(() => null);
   const file = fd?.get("file");

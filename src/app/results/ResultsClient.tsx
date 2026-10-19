@@ -143,7 +143,7 @@ export function ResultsClient({ platform, thresholds, creatives }: { platform: P
             if (manual) save([{ platform, creativeId: creativeId || null, periodStart, periodEnd, metrics: manual.input, notes }]);
           }}
         >
-          <h2 id="manual-h" className="text-2xl font-bold tracking-tight">
+          <h2 id="manual-h" className="display text-2xl">
             Enter numbers
           </h2>
           {isMeta ? (
@@ -215,7 +215,7 @@ export function ResultsClient({ platform, thresholds, creatives }: { platform: P
 
       <section aria-labelledby="csv-h" className="card space-y-4">
         <div>
-          <h2 id="csv-h" className="text-2xl font-bold tracking-tight">
+          <h2 id="csv-h" className="display text-2xl">
             Upload a report
           </h2>
           <p className="hint">

@@ -48,6 +48,7 @@ export const SEED_PRODUCTS: {
   redClaims: string[];
   notes: string;
   allergens: string;
+  messagingPriorities?: string[];
 }[] = [
   {
     slug: "choc",
@@ -64,6 +65,7 @@ export const SEED_PRODUCTS: {
     ),
     notes: "Amazon hero (4.6 stars, Amazon's Choice).",
     allergens: "Contains nuts and milk.",
+    messagingPriorities: ["Taste first: chocolatey crunch that pairs with chai or coffee", "No maida; sweetened with jaggery", "Foxtail millet and rolled oats", "Traceability QR on pack"],
   },
   {
     slug: "bfast",
@@ -78,6 +80,7 @@ export const SEED_PRODUCTS: {
     redClaims: split("Gluten free; Healthy/guilt-free; Dry fruits; Free from harmful additives; Packed with protein, fiber and nutrients"),
     notes: "Amazon rating 3.6.",
     allergens: "Contains nuts and milk.",
+    messagingPriorities: ["Your morning coffee's crunch-mate", "Foxtail millet (23.8%) and rolled oats (16.4%)", "Cardamom, cinnamon, almonds and cashews", "No maida; sweetened with jaggery"],
   },
   {
     slug: "bar",

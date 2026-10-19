@@ -34,7 +34,7 @@ export default async function ResultsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-extrabold tracking-tight">Results for {PLATFORM_FULL_LABELS[platform]}</h1>
+        <h1 className="display text-4xl">Results for {PLATFORM_FULL_LABELS[platform]}</h1>
         <p className="prose-serif mt-1 text-ink-soft">
           {platform === "meta"
             ? "Meta is judged on hook rate, link CTR, CPA against target and frequency."
@@ -46,7 +46,7 @@ export default async function ResultsPage() {
       <ResultsClient key={platform} platform={platform} thresholds={brand.verdictThresholds} creatives={creatives} />
 
       <section aria-labelledby="recent-h" className="space-y-3">
-        <h2 id="recent-h" className="text-2xl font-bold tracking-tight">
+        <h2 id="recent-h" className="display text-2xl">
           Recent results
         </h2>
         {recent.length === 0 ? (

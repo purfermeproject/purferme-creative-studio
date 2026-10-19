@@ -1,17 +1,20 @@
 import { assetInfo } from "@/lib/asset-store";
+import { validate, validationContext } from "@/lib/creative-store";
+import { snapshotOf } from "@/lib/versions";
 import { getBrand, getProducts } from "@/lib/data";
 import { parseFilters, queryCreatives } from "@/lib/library";
 import { getPlatform } from "@/lib/platform";
 import { CREATIVE_STATUSES, PLATFORMS, PLATFORM_LABELS } from "@/lib/types";
 import { LibraryItem } from "./LibraryItem";
 
-export const metadata = { title: "Saved ads · Puŕ Fermé Creative Studio" };
+export const metadata = { title: "Library · Puŕ Fermé Creative Studio" };
 
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   const platform = await getPlatform();
   const filters = parseFilters(sp, platform);
-  const [rows, products, brand] = await Promise.all([queryCreatives(filters), getProducts(), getBrand()]);
+  const [rows, products, brand, ctx] = await Promise.all([queryCreatives(filters), getProducts(), getBrand(), validationContext()]);
+  const productById = new Map(products.map((p) => [p.id, p]));
   const infos = await assetInfo(rows.flatMap((r) => r.creative.imageIds));
   const infoById = new Map(infos.map((i) => [i.id, i]));
   const highlight = typeof sp.highlight === "string" ? sp.highlight : "";
@@ -26,9 +29,9 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight">Saved ads</h1>
+          <h1 className="display text-4xl">Creative library</h1>
           <p className="hint mt-1">
-            Ideas you saved. Open one to approve it: it needs no banned words and a tick on the pre-launch list.
+            Every draft is saved here automatically. Open one in the workspace to edit, see its history and approve it.
           </p>
         </div>
         <a href={`/api/library/export?${exportQs}`} className="btn-secondary shrink-0" download>
@@ -90,13 +93,17 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
       {rows.length === 0 ? (
         <div className="card border-dashed text-center">
           <p className="text-lg font-bold">Nothing here yet</p>
-          <p className="hint mt-1">Save concepts from Create ads, or loosen the filters.</p>
+          <p className="hint mt-1">Develop a concept in Create and it appears here, or loosen the filters.</p>
         </div>
       ) : (
         <ul className="space-y-3">
-          {rows.map(({ creative, productName, productPrice }) => (
+          {rows.map(({ creative, productName, productPrice }) => {
+            const v = validate(snapshotOf(creative), creative.platform, creative.productId ? (productById.get(creative.productId) ?? null) : null, ctx);
+            return (
             <li key={creative.id}>
               <LibraryItem
+                review={{ needed: v.needsHumanReview, reviewedBy: creative.claimsReviewedBy }}
+                otherBlocking={v.issues.filter((i) => i.level === "block" && !i.id.startsWith("scan:")).map((i) => i.detail)}
                 creative={creative}
                 productName={productName ?? "(product deleted)"}
                 defaultOpen={creative.id === highlight}
@@ -108,7 +115,8 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
                 })}
               />
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>

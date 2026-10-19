@@ -10,7 +10,7 @@ export default async function CheckPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-extrabold tracking-tight">Claim checker</h1>
+        <h1 className="display text-4xl">Claim checker</h1>
         <p className="hint mt-1">
           Paste any copy. The instant scan uses the compliance terms for {PLATFORM_LABELS[platform]}; the deep check asks the model to review it against
           brand rules, product claims and Indian ad regulations.

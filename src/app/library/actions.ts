@@ -2,11 +2,12 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/auth";
+import { requireRole } from "@/auth";
 import { db, schema } from "@/db";
 import { conceptText, scan } from "@/lib/compliance";
 import { getTerms } from "@/lib/data";
-import { canMoveTo, QA_ITEMS, requiredQaItems } from "@/lib/qa";
+import { QA_ITEMS, requiredQaItems } from "@/lib/qa";
+import { changeStatus } from "@/lib/creative-store";
 import { CREATIVE_STATUSES, type CreativeStatus } from "@/lib/types";
 
 type Res = { ok: true } | { ok: false; message: string; missing?: string[] };
@@ -31,18 +32,11 @@ async function rescanRow(row: NonNullable<Awaited<ReturnType<typeof load>>>) {
 
 export async function setStatus(id: string, status: CreativeStatus): Promise<Res> {
   try {
-    await requireUser();
+    const { user } = await requireRole("approve");
     if (!CREATIVE_STATUSES.includes(status)) return { ok: false, message: "Unknown status." };
-    const row = await load(id);
-    if (!row) return { ok: false, message: "That creative no longer exists." };
-    const scanResult = await rescanRow(row);
-    const gate = canMoveTo(status, { platform: row.c.platform, scanResult, qaChecked: row.c.qaChecked });
-    if (!gate.ok) {
-      revalidatePath("/library");
-      return { ok: false, message: `Can't move to ${status} yet.`, missing: gate.missing };
-    }
-    await db.update(schema.creatives).set({ status, updatedAt: new Date() }).where(eq(schema.creatives.id, id));
+    const gate = await changeStatus(id, status, user);
     revalidatePath("/library");
+    if (!gate.ok) return { ok: false, message: `Can't move to ${status} yet.`, missing: gate.missing };
     return { ok: true };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Couldn't change the status." };
@@ -51,7 +45,7 @@ export async function setStatus(id: string, status: CreativeStatus): Promise<Res
 
 export async function setQa(id: string, item: number, checked: boolean): Promise<Res> {
   try {
-    await requireUser();
+    await requireRole("edit");
     if (!QA_ITEMS.some((i) => i.n === item)) return { ok: false, message: "Unknown QA item." };
     const row = await load(id);
     if (!row) return { ok: false, message: "That creative no longer exists." };
@@ -75,7 +69,7 @@ export async function setQa(id: string, item: number, checked: boolean): Promise
 /** Tick (or untick) every required checklist item in one go. */
 export async function setQaAll(id: string, checked: boolean): Promise<Res> {
   try {
-    await requireUser();
+    await requireRole("edit");
     const row = await load(id);
     if (!row) return { ok: false, message: "That ad no longer exists." };
     const qaChecked = checked ? requiredQaItems(row.c.platform).map((i) => i.n) : [];
@@ -93,7 +87,7 @@ export async function setQaAll(id: string, checked: boolean): Promise<Res> {
 
 export async function rescan(id: string): Promise<Res> {
   try {
-    await requireUser();
+    await requireRole("edit");
     const row = await load(id);
     if (!row) return { ok: false, message: "That creative no longer exists." };
     await rescanRow(row);
@@ -106,7 +100,7 @@ export async function rescan(id: string): Promise<Res> {
 
 export async function deleteCreative(id: string): Promise<Res> {
   try {
-    await requireUser();
+    await requireRole("delete");
     await db.delete(schema.creatives).where(eq(schema.creatives.id, id));
     revalidatePath("/library");
     return { ok: true };

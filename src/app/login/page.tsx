@@ -35,7 +35,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <div className="mx-auto max-w-md pt-10">
       <p className="text-sm font-semibold tracking-wide text-jaggery uppercase">Puŕ Fermé Project</p>
-      <h1 className="mt-1 text-4xl font-extrabold tracking-tight text-ragi">Creative Studio</h1>
+      <h1 className="mt-1 display text-4xl text-ragi">Creative Studio</h1>
       <p className="prose-serif mt-3 text-ink-soft">
         Ad concepts for Meta, Amazon and Flipkart, checked against the claims library before anything goes live. Team members only.
       </p>

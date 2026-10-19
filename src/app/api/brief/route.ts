@@ -1,5 +1,5 @@
 import { desc, eq, gte } from "drizzle-orm";
-import { requireUser } from "@/auth";
+import { authErrorStatus, requireRole } from "@/auth";
 import { db, schema } from "@/db";
 import { errorMessage, structuredCall } from "@/lib/ai";
 import { getBrand } from "@/lib/data";
@@ -12,9 +12,9 @@ export const maxDuration = 300;
 export async function POST() {
   let user: string;
   try {
-    user = await requireUser();
+    ({ user } = await requireRole("generate"));
   } catch (e) {
-    return Response.json({ error: errorMessage(e) }, { status: 401 });
+    return Response.json({ error: errorMessage(e) }, { status: authErrorStatus(e) });
   }
   try {
     const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);

@@ -23,6 +23,10 @@ export const ConceptSchema = z.object({
     body: z.string().optional(),
     body_alt: z.string().optional(),
     cta: z.string().optional(),
+    variants: z
+      .array(z.object({ headline: z.string(), body: z.string(), cta: z.string() }))
+      .optional()
+      .describe("Extra copy variants for testing; required for ad copy sets, otherwise omit"),
   }),
   ai_prompt: z.string().describe("Render prompt for AI-safe shots; the pack reference image is attached separately"),
   needs_real_person: z.boolean(),
@@ -34,6 +38,21 @@ export const ConceptSchema = z.object({
 export const GenerationResponseSchema = z.object({ concepts: z.array(ConceptSchema) });
 
 export type Concept = z.infer<typeof ConceptSchema>;
+
+/** A short direction to choose from before the full creative is written. */
+export const ProposalSchema = z.object({
+  title: z.string(),
+  angle: z.string(),
+  persona: z.string(),
+  big_idea: z.string().describe("The idea in 1–2 sentences: the moment, the twist and the proof point"),
+  hook: z.string().describe("The opening line or on-screen text for the first 2 seconds"),
+  format: z.string(),
+  hook_mechanism: z.string(),
+  claims: z.array(z.object({ text: z.string(), tier: z.enum(["green", "amber"]) })).describe("Claims the idea leans on"),
+  why: z.string().describe("Why it serves the objective on this platform, one sentence"),
+});
+export const ProposalsResponseSchema = z.object({ proposals: z.array(ProposalSchema) });
+export type Proposal = z.infer<typeof ProposalSchema>;
 export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
 
 export const DeepCheckSchema = z.object({

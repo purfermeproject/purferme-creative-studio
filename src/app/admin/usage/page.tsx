@@ -94,7 +94,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
               ← Settings
             </Link>
           </p>
-          <h1 className="text-4xl font-extrabold tracking-tight">Usage and cost</h1>
+          <h1 className="display text-4xl">Usage and cost</h1>
           <p className="hint mt-1">Claude costs are estimated at Anthropic list prices (USD). OpenAI calls (text and images) show as $0 here; check your OpenAI usage page for those.</p>
         </div>
         <nav aria-label="Period" className="flex gap-2">

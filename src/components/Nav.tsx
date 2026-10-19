@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const MAIN = [
-  { href: "/create", label: "Create ads" },
-  { href: "/library", label: "Saved ads" },
+  { href: "/create", label: "Create" },
+  { href: "/library", label: "Library" },
   { href: "/results", label: "Results" },
 ];
 

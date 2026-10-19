@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requireUser } from "@/auth";
+import { authErrorStatus, requireRole } from "@/auth";
 import { errorMessage } from "@/lib/ai";
 import { IMAGE_SPECS } from "@/lib/image-specs";
 import { resizeToAll } from "@/lib/images";
@@ -12,9 +12,9 @@ const Body = z.object({ assetId: z.string().uuid(), platform: z.enum(PLATFORMS),
 export async function POST(req: Request) {
   let user: string;
   try {
-    user = await requireUser();
+    ({ user } = await requireRole("generate"));
   } catch (e) {
-    return Response.json({ error: errorMessage(e) }, { status: 401 });
+    return Response.json({ error: errorMessage(e) }, { status: authErrorStatus(e) });
   }
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request. Refresh the page and try again." }, { status: 400 });

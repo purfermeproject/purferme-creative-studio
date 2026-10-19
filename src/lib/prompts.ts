@@ -1,5 +1,5 @@
-import type { Platform } from "./types";
-import { PLATFORM_LABELS } from "./types";
+import type { Deliverable, Objective, Platform } from "./types";
+import { OBJECTIVES, PLATFORM_LABELS } from "./types";
 
 type BrandLike = {
   brandContext: string;
@@ -20,6 +20,9 @@ type ProductLike = {
   notes: string;
   allergens?: string;
   story?: string;
+  ingredients?: string;
+  messagingPriorities?: string[];
+  claimEvidence?: { claim: string; evidence: string; source?: string }[];
 };
 type RuleLike = { rules: string };
 
@@ -37,6 +40,33 @@ export type GenerationInput = {
   hasPackImage?: boolean;
   /** Where it runs, e.g. "Instagram Stories", plus how to design for it. */
   placement?: { label: string; guidance: string } | null;
+  objective?: Objective | "";
+  deliverable?: Deliverable;
+  /** "proposals" = short directions to choose from; "concepts" = full creatives. */
+  output?: "concepts" | "proposals";
+};
+
+/** What success looks like for each campaign objective. */
+export const OBJECTIVE_GUIDANCE: Record<Objective, string> = {
+  awareness: "Optimise for thumb-stop and memorability: a distinctive moment and a clear brand cue in the first 2 seconds; no hard sell.",
+  consideration: "Give a reason to tap or save: curiosity, one specific proof point or a useful tip. CTA such as Learn more.",
+  conversion: "Make buying easy: product and offer clear, one sharp proof point, urgency only if it is real. CTA such as Shop now.",
+  retargeting: "Speak to people who already know us: answer one objection (taste, price, sugar, kids liking it) and remind them what they looked at. Social proof only if real.",
+  launch: "Introduce what is new and why it matters in one line; show the pack clearly and early.",
+  festive: "Tie to the occasion (gifting, sharing, the sale) without stretching any claim; show the pack as a gift. Mention offers only if given in the direction.",
+};
+
+/** How each deliverable is written into the concept fields. */
+export const DELIVERABLE_GUIDANCE: Record<Deliverable, (platform: Platform) => string> = {
+  concept: () => "",
+  ugc: () => `DELIVERABLE: UGC creator script, for a real creator filming on a phone.
+- frames = the shots in order (5–8), slot = timestamps totalling 15–45s; visual = what to film plus talent direction (framing, action, expression, props); onscreen = caption text; audio = the exact words the creator says, in a natural voice.
+- copy.body = the post caption; copy.body_alt = a short creator brief: who the creator should be, setting, wardrobe, and do's and don'ts (no health results, no claims beyond the list, show the real pack).
+- needs_real_person = true.`,
+  copy: (platform) => `DELIVERABLE: ad copy set for ${PLATFORM_LABELS[platform]}.
+- Put the strongest version in copy (headline, body, cta) and 4 more distinct versions in copy.variants, each opening with a different hook mechanism.
+- ${platform === "meta" ? "Primary text: the hook and the proof point must land in the first 125 characters. Headline 40 characters or fewer. CTA from Meta's buttons (Shop now, Learn more, Order now, Get offer)." : platform === "amazon" ? "Headline 50 characters or fewer; never mention Amazon; specific CTA." : "Headline 40 characters or fewer; short, listing-led lines."}
+- frames = exactly 1 frame describing the single image or video the copy runs with.`,
 };
 
 /** Hook mechanisms the model rotates through so ideas don't all open the same way. */
@@ -69,6 +99,16 @@ export const isVideoType = (creativeType: string) => /video/i.test(creativeType)
 export function buildGenerationPrompt(brand: BrandLike, product: ProductLike, rule: RuleLike, input: GenerationInput): string {
   const extra = input.extra?.trim() ? `Extra direction: ${input.extra.trim()}` : "";
   const notes = [product.notes, product.allergens].filter(Boolean).join(" ");
+  const proposals = input.output === "proposals";
+  const objective = input.objective ? OBJECTIVES.find((o) => o.id === input.objective) : null;
+  const evidence = (product.claimEvidence ?? []).filter((e) => e.claim.trim() && e.evidence.trim());
+  const knowledge = [
+    product.ingredients?.trim() ? `INGREDIENTS: ${product.ingredients.trim()}` : "",
+    product.messagingPriorities?.length ? `MESSAGING PRIORITIES (lead with these, in order): ${product.messagingPriorities.join("; ")}` : "",
+    evidence.length ? `EVIDENCE ON FILE FOR AMBER CLAIMS: ${evidence.map((e) => `${e.claim}: ${e.evidence}`).join("; ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   const autoAngle = input.angle === AUTO;
   const autoPersona = input.persona === AUTO;
   const angle = autoAngle ? `your choice: pick the strongest for this product and platform from ${list(brand.angles ?? [])}` : input.angle;
@@ -93,7 +133,17 @@ ${brand.exampleAds?.trim() ? `\nADS WE LIKE (match this voice, specificity and r
     ? "This is a video type: give 4–7 frames with timestamps (slot like \"0–2s\") totalling 15–30s, with visual, on-screen text and audio for every frame."
     : "This is an image/banner type: one frame per image (max 7) or per banner size; leave audio out.";
 
-  return `You are the creative strategist for an Indian D2C food brand. Write ${input.n} ad concepts.
+  const deliverable = input.deliverable ? DELIVERABLE_GUIDANCE[input.deliverable](input.platform) : "";
+  const outputRules = proposals
+    ? `For each proposal give: title, angle, persona, big_idea (the moment, the twist, the proof point), hook (the first 2 seconds), format, hook_mechanism, the claims it leans on with tiers, and why (one sentence on how it serves the objective on ${PLATFORM_LABELS[input.platform]}).
+Make the ${input.n} proposals genuinely different directions (different moment, hook mechanism and persona or angle), so the team has a real choice. Never lean on a red claim.`
+    : `Video: 4–7 frames with timestamps totalling 15–30s. Image sets: one frame per image (max 7) or per banner size.
+List every claim used with its tier. Never include a red claim. Product details must match exactly.
+${shape}
+${input.hasPackImage ? "A photo of the real pack is attached: describe it accurately in ai_prompt and visuals (colours, layout, text on pack). Do not invent pack details.\n" : ""}Set needs_real_person true when any shot needs a real human (always for Amazon people, testimonials and founder/farm footage). Set ai_label_needed true when a synthetic person or realistic synthetic scene appears.
+In why_it_fits, explain in one or two sentences why the concept suits ${PLATFORM_LABELS[input.platform]} specifically.${deliverable ? `\n${deliverable}` : ""}`;
+
+  return `You are the creative strategist for an Indian D2C food brand. ${proposals ? `Propose ${input.n} distinct creative directions (short proposals, not finished ads).` : `Write ${input.n} ad concepts.`}
 
 ${brand.brandContext}
 ${brand.hardRules}
@@ -103,22 +153,38 @@ GREEN CLAIMS (allowed): ${list(product.greenClaims)}
 AMBER CLAIMS (only if flagged as amber, needs evidence): ${list(product.amberClaims)}
 RED CLAIMS (never use): ${list(product.redClaims)}
 NOTES: ${notes || "(none)"}
-${product.story?.trim() ? `PRODUCT STORY (real details: use them for specific, sensory, believable copy):\n${product.story.trim()}\n` : ""}
+${knowledge ? `${knowledge}\n` : ""}${product.story?.trim() ? `PRODUCT STORY (real details: use them for specific, sensory, believable copy):\n${product.story.trim()}\n` : ""}
 PLATFORM: ${PLATFORM_LABELS[input.platform]}. CREATIVE TYPE: ${input.creativeType}.${
     input.placement ? `\nPLACEMENT: ${input.placement.label}. ${input.placement.guidance || "Design natively for this placement's format, length and safe areas."}` : ""
-  }
+  }${objective ? `\nCAMPAIGN OBJECTIVE: ${objective.label}. ${OBJECTIVE_GUIDANCE[objective.id]}` : ""}
 ${rule.rules}
 
 DIRECTION: angle = ${angle}; persona = ${persona}; language = ${input.language}
 (write on-screen text and audio in this language; Hinglish = Hindi in Latin script mixed with English). ${extra}
 ${firstLine}
-Video: 4–7 frames with timestamps totalling 15–30s. Image sets: one frame per image (max 7) or per banner size.
-List every claim used with its tier. Never include a red claim. Product details must match exactly.
-${shape}
-${input.hasPackImage ? "A photo of the real pack is attached: describe it accurately in ai_prompt and visuals (colours, layout, text on pack). Do not invent pack details.\n" : ""}Set needs_real_person true when any shot needs a real human (always for Amazon people, testimonials and founder/farm footage). Set ai_label_needed true when a synthetic person or realistic synthetic scene appears.
-In why_it_fits, explain in one or two sentences why the concept suits ${PLATFORM_LABELS[input.platform]} specifically.
+${outputRules}
 ${quality}
-Return exactly ${input.n} concepts.`;
+Return exactly ${input.n} ${proposals ? "proposals" : "concepts"}.`;
+}
+
+/** Expands one chosen proposal into the full creative, in the chosen deliverable. */
+export function buildDevelopPrompt(
+  brand: BrandLike,
+  product: ProductLike,
+  rule: RuleLike,
+  input: Omit<GenerationInput, "n" | "output" | "angle" | "persona"> & {
+    proposal: { title: string; angle: string; persona: string; big_idea: string; hook: string; format: string; hook_mechanism?: string };
+  },
+): string {
+  const p = input.proposal;
+  return buildGenerationPrompt(brand, product, rule, {
+    ...input,
+    n: 1,
+    output: "concepts",
+    angle: p.angle,
+    persona: p.persona,
+    extra: `${input.extra?.trim() ? `${input.extra.trim()} ` : ""}Develop this chosen direction into the finished creative, keeping its idea and hook (sharpen the wording if it helps): ${JSON.stringify(p)}`,
+  });
 }
 
 export type VariationInput = { platform: Platform; creativeType: string; concept: unknown; placement?: GenerationInput["placement"] };

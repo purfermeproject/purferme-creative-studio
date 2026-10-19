@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -10,11 +11,14 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
-import type { CreativeStatus, Platform, ProductStatus, Severity } from "@/lib/types";
+import type { CreativeStatus, Platform, ProductStatus, Role, Severity } from "@/lib/types";
 import type { ScanResult } from "@/lib/compliance";
 import type { VerdictThresholds } from "@/lib/verdicts";
 import { DEFAULT_AVOID_PHRASES, DEFAULT_EXAMPLE_ADS } from "@/lib/creative-defaults";
 import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brand-kit";
+
+export type ClaimEvidence = { claim: string; evidence: string; source?: string };
+export type ProductUrl = { label: string; url: string };
 
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -31,6 +35,11 @@ export const products = pgTable("products", {
   // Taste, texture, pack look, real eating moments, real review lines: the specifics that make ads non-generic.
   story: text("story").notNull().default(""),
   packImageUrl: text("pack_image_url"),
+  /** Structured product knowledge used by generation and validation. */
+  ingredients: text("ingredients").notNull().default(""),
+  messagingPriorities: text("messaging_priorities").array().notNull().default([]),
+  claimEvidence: jsonb("claim_evidence").$type<ClaimEvidence[]>().notNull().default([]),
+  productUrls: jsonb("product_urls").$type<ProductUrl[]>().notNull().default([]),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -73,7 +82,19 @@ export const complianceTerms = pgTable("compliance_terms", {
 });
 
 export type Frame = { slot: string; visual: string; onscreen: string; audio?: string };
-export type CopyBlock = { headline?: string; body?: string; body_alt?: string; cta?: string };
+export type CopyVariant = { headline: string; body: string; cta: string };
+export type CopyBlock = { headline?: string; body?: string; body_alt?: string; cta?: string; variants?: CopyVariant[] };
+/** How a creative was made: kept for audit and for learning from results later. */
+export type GenerationMeta = {
+  provider?: string;
+  model?: string;
+  mock?: boolean;
+  promptHash?: string;
+  prompt?: string;
+  sourceAssetIds?: string[];
+  proposal?: { title: string; big_idea: string };
+  generatedAt?: string;
+};
 export type ClaimUsed = { text: string; tier: "green" | "amber" };
 
 export const creatives = pgTable("creatives", {
@@ -100,8 +121,58 @@ export const creatives = pgTable("creatives", {
   status: text("status").$type<CreativeStatus>().notNull().default("Draft"),
   qaChecked: integer("qa_checked").array().notNull().default([]),
   imageIds: uuid("image_ids").array().notNull().default([]),
+  /** awareness | consideration | conversion | retargeting | launch | festive */
+  objective: text("objective").notNull().default(""),
+  /** concept | ugc | copy */
+  deliverable: text("deliverable").notNull().default("concept"),
+  generationMeta: jsonb("generation_meta").$type<GenerationMeta>().notNull().default({}),
+  /** Bumped on every content change; used to detect edits made elsewhere. */
+  revision: integer("revision").notNull().default(1),
+  claimsReviewedBy: text("claims_reviewed_by").notNull().default(""),
+  claimsReviewedAt: timestamp("claims_reviewed_at", { withTimezone: true }),
+  approvedBy: text("approved_by").notNull().default(""),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
   createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Editable content of a creative at a point in time (see src/lib/versions.ts). */
+export type CreativeSnapshot = {
+  title: string;
+  hook: string;
+  persona: string;
+  angle: string;
+  format: string;
+  language: string;
+  frames: Frame[];
+  copy: CopyBlock;
+  aiPrompt: string;
+  needsRealPerson: boolean;
+  aiLabelNeeded: boolean;
+  claims: ClaimUsed[];
+  whyItFits: string;
+};
+
+export const creativeVersions = pgTable("creative_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  creativeId: uuid("creative_id")
+    .notNull()
+    .references(() => creatives.id, { onDelete: "cascade" }),
+  revision: integer("revision").notNull(),
+  snapshot: jsonb("snapshot").$type<CreativeSnapshot>().notNull(),
+  /** generated | autosave | manual | restore | regenerated */
+  source: text("source").notNull().default("autosave"),
+  note: text("note").notNull().default(""),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("creative_versions_creative_idx").on(t.creativeId, t.revision)]);
+
+/** Team roles. While this table is empty everyone is an admin (see src/lib/roles.ts). */
+export const userRoles = pgTable("user_roles", {
+  email: text("email").primaryKey(),
+  role: text("role").$type<Role>().notNull(),
+  updatedBy: text("updated_by").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -144,6 +215,8 @@ export const assets = pgTable("assets", {
   height: integer("height"),
   /** Which scene of the concept this image shows (storyboards). */
   frameIndex: integer("frame_index"),
+  /** Assets this one was made from (e.g. the locked pack photo composited into a scene). */
+  sourceAssetIds: uuid("source_asset_ids").array().notNull().default([]),
   createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -202,3 +275,4 @@ export type PlatformRule = typeof platformRules.$inferSelect;
 export type ComplianceTerm = typeof complianceTerms.$inferSelect;
 export type Creative = typeof creatives.$inferSelect;
 export type Result = typeof results.$inferSelect;
+export type CreativeVersion = typeof creativeVersions.$inferSelect;

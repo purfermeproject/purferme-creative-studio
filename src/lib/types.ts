@@ -33,3 +33,24 @@ export const CREATIVE_STATUSES = [
   "Killed",
 ] as const;
 export type CreativeStatus = (typeof CREATIVE_STATUSES)[number];
+
+/** Lowest to highest. Each role can do everything the roles before it can. */
+export const ROLES = ["viewer", "creator", "approver", "admin"] as const;
+export type Role = (typeof ROLES)[number];
+
+export const OBJECTIVES = [
+  { id: "awareness", label: "Awareness", hint: "Reach new people; make the brand memorable" },
+  { id: "consideration", label: "Consideration", hint: "Clicks, saves and profile visits" },
+  { id: "conversion", label: "Conversion", hint: "Purchases at a good cost" },
+  { id: "retargeting", label: "Retargeting", hint: "Win back visitors and cart abandoners" },
+  { id: "launch", label: "Launch", hint: "Introduce a new product or flavour" },
+  { id: "festive", label: "Festive / sale", hint: "Diwali, gifting, sale events" },
+] as const;
+export type Objective = (typeof OBJECTIVES)[number]["id"];
+
+export const DELIVERABLES = [
+  { id: "concept", label: "Ad concept", hint: "Scenes, on-screen text, copy and visual direction" },
+  { id: "ugc", label: "UGC script", hint: "Creator brief with spoken lines and shot list" },
+  { id: "copy", label: "Ad copy set", hint: "Primary text, headlines and CTA variants" },
+] as const;
+export type Deliverable = (typeof DELIVERABLES)[number]["id"];

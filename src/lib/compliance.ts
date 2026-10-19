@@ -125,13 +125,14 @@ export function conceptText(c: {
   title?: string;
   hook?: string;
   frames?: { slot?: string; visual?: string; onscreen?: string; audio?: string }[];
-  copy?: { headline?: string; body?: string; body_alt?: string; cta?: string };
+  copy?: { headline?: string; body?: string; body_alt?: string; cta?: string; variants?: { headline?: string; body?: string; cta?: string }[] };
   claims?: { text: string }[];
   ai_prompt?: string;
 }): string {
   const parts: (string | undefined)[] = [c.title, c.hook];
   for (const f of c.frames ?? []) parts.push(f.visual, f.onscreen, f.audio);
   if (c.copy) parts.push(c.copy.headline, c.copy.body, c.copy.body_alt, c.copy.cta);
+  for (const v of c.copy?.variants ?? []) parts.push(v.headline, v.body, v.cta);
   for (const cl of c.claims ?? []) parts.push(cl.text);
   parts.push(c.ai_prompt);
   return parts.filter(Boolean).join("\n");

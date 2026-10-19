@@ -4,13 +4,16 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { put } from "@vercel/blob";
-import { requireUser } from "@/auth";
+import { requireRole } from "@/auth";
 import { db, schema } from "@/db";
 import { lines, type ActionState } from "@/lib/action-state";
 import { regexError } from "@/lib/compliance";
 import { PLATFORMS, PRODUCT_STATUSES, SEVERITIES, isPlatform } from "@/lib/types";
 import { DEFAULT_THRESHOLDS, type VerdictThresholds } from "@/lib/verdicts";
 import { isHexColor, withKitDefaults, type BrandKit } from "@/lib/brand-kit";
+import { parseEvidence, parseUrls } from "@/lib/product-knowledge";
+import { isRole } from "@/lib/roles";
+import { count } from "drizzle-orm";
 
 const ok = (message: string): ActionState => ({ ok: true, message });
 const fail = (message: string): ActionState => ({ ok: false, message });
@@ -21,7 +24,7 @@ function refresh() {
 
 async function guard<T>(fn: () => Promise<T>): Promise<T | ActionState> {
   try {
-    await requireUser();
+    await requireRole("settings");
     return await fn();
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Something went wrong. Try again.");
@@ -36,6 +39,7 @@ const productSchema = z.object({
   notes: z.string().trim(),
   allergens: z.string().trim(),
   story: z.string().trim().max(5000),
+  ingredients: z.string().trim().max(3000).default(""),
   packImageUrl: z.string().trim(),
 });
 
@@ -48,6 +52,8 @@ export async function saveProduct(_: ActionState, fd: FormData): Promise<ActionS
     if (v.status !== "ready" && !v.statusReason) {
       return fail(`Add a reason when a product is on ${v.status}, so the team knows why it can't be generated.`);
     }
+    const links = parseUrls(String(fd.get("productUrls") ?? ""));
+    if (links.invalid.length) return fail(`These product links aren't valid web addresses: ${links.invalid.join(", ")}`);
     await db
       .update(schema.products)
       .set({
@@ -56,6 +62,9 @@ export async function saveProduct(_: ActionState, fd: FormData): Promise<ActionS
         greenClaims: lines(fd.get("greenClaims")),
         amberClaims: lines(fd.get("amberClaims")),
         redClaims: lines(fd.get("redClaims")),
+        messagingPriorities: lines(fd.get("messagingPriorities")).slice(0, 10),
+        claimEvidence: parseEvidence(String(fd.get("claimEvidence") ?? "")),
+        productUrls: links.urls,
         updatedAt: new Date(),
       })
       .where(eq(schema.products.id, id));
@@ -101,7 +110,7 @@ export async function uploadPackImage(_: ActionState, fd: FormData): Promise<Act
       // No cloud storage configured (e.g. running locally): keep it in the database.
       const [asset] = await db
         .insert(schema.assets)
-        .values({ mime: file.type, dataBase64: Buffer.from(await file.arrayBuffer()).toString("base64"), prompt: "pack photo" })
+        .values({ mime: file.type, dataBase64: Buffer.from(await file.arrayBuffer()).toString("base64"), prompt: "pack photo", kind: "pack", label: "Original pack (locked)" })
         .returning({ id: schema.assets.id });
       url = `/api/assets/${asset.id}`;
     }
@@ -250,4 +259,43 @@ export async function saveBrandKit(kit: BrandKit): Promise<ActionState> {
     refresh();
     return ok("Brand kit saved.");
   }) as Promise<ActionState>;
+}
+
+// ---- Team roles ----
+
+export async function setUserRole(_: ActionState, fd: FormData): Promise<ActionState> {
+  try {
+    const { user } = await requireRole("roles");
+    const email = String(fd.get("email") ?? "").trim().toLowerCase();
+    const role = String(fd.get("role") ?? "");
+    if (!/^[^\s@]+@[^\s@]+$/.test(email)) return fail("Enter an email (team-password users are name@team.studio).");
+    if (!isRole(role)) return fail("Pick a role.");
+    if (email === user && role !== "admin") return fail("You can't lower your own role. Ask another admin.");
+    const [{ n }] = await db.select({ n: count() }).from(schema.userRoles);
+    // The first entry switches roles on; make sure whoever does it stays an admin.
+    if (Number(n) === 0 && email !== user) {
+      await db.insert(schema.userRoles).values({ email: user, role: "admin", updatedBy: user }).onConflictDoNothing();
+    }
+    await db
+      .insert(schema.userRoles)
+      .values({ email, role, updatedBy: user })
+      .onConflictDoUpdate({ target: schema.userRoles.email, set: { role, updatedBy: user, updatedAt: new Date() } });
+    refresh();
+    return ok(`${email} is now ${role}.`);
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Couldn't save the role.");
+  }
+}
+
+export async function removeUserRole(_: ActionState, fd: FormData): Promise<ActionState> {
+  try {
+    const { user } = await requireRole("roles");
+    const email = String(fd.get("email") ?? "").trim().toLowerCase();
+    if (email === user) return fail("You can't remove yourself. Ask another admin.");
+    await db.delete(schema.userRoles).where(eq(schema.userRoles.email, email));
+    refresh();
+    return ok("Removed.");
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Couldn't remove the role.");
+  }
 }

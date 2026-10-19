@@ -28,6 +28,7 @@ export async function storeAsset(opts: {
   creativeId?: string | null;
   /** Known size (e.g. SVG placeholders, which can't be measured). */
   size?: { w: number; h: number };
+  sourceAssetIds?: string[];
 }): Promise<StoredAsset> {
   let w: number | null = opts.size?.w ?? null;
   let h: number | null = opts.size?.h ?? null;
@@ -52,6 +53,7 @@ export async function storeAsset(opts: {
       frameIndex: opts.frameIndex ?? null,
       prompt: opts.prompt ?? "",
       model: opts.model ?? "",
+      sourceAssetIds: opts.sourceAssetIds ?? [],
       createdBy: opts.user,
     })
     .returning({ id: schema.assets.id });

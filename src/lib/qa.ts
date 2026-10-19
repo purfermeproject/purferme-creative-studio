@@ -26,12 +26,24 @@ export const GATED_STATUSES: CreativeStatus[] = ["Approved", "In production", "L
 
 export type GateResult = { ok: boolean; missing: string[] };
 
-export function approvalGate(c: { platform: Platform; scanResult: ScanResult; qaChecked: number[] }): GateResult {
+export type GateInput = {
+  platform: Platform;
+  scanResult: ScanResult;
+  qaChecked: number[];
+  /** From validateCreative: restricted claims found beyond the term scan. */
+  otherBlocking?: string[];
+  /** Uncertain claims (amber, or not in the library) need a named person to sign off. */
+  review?: { needed: boolean; reviewedBy: string };
+};
+
+export function approvalGate(c: GateInput): GateResult {
   const missing: string[] = [];
   const reds = c.scanResult.hits.filter((h) => h.severity === "red");
   if (reds.length) {
     missing.push(`Fix ${reds.length} red ${reds.length === 1 ? "flag" : "flags"}: ${reds.map((h) => `${h.label} (“${h.matches.join("”, “")}”)`).join("; ")}.`);
   }
+  for (const b of c.otherBlocking ?? []) missing.push(`Fix: ${b}`);
+  if (c.review?.needed && !c.review.reviewedBy) missing.push("An approver must confirm the uncertain claims (amber or not in the library).");
   const unchecked = requiredQaItems(c.platform).filter((i) => !c.qaChecked.includes(i.n));
   if (unchecked.length) missing.push(`Tick QA ${unchecked.length === 1 ? "item" : "items"} ${unchecked.map((i) => i.n).join(", ")}.`);
   return { ok: missing.length === 0, missing };

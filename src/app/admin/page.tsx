@@ -2,12 +2,19 @@ import Link from "next/link";
 import { ActionForm } from "@/components/ActionForm";
 import { BrandKitEditor } from "./BrandKitEditor";
 import { getAllPlatformRules, getBrand, getProducts, getTerms } from "@/lib/data";
-import { PLATFORMS, PLATFORM_LABELS, PRODUCT_STATUSES } from "@/lib/types";
+import { PLATFORMS, PLATFORM_LABELS, PRODUCT_STATUSES, ROLES } from "@/lib/types";
+import { asc } from "drizzle-orm";
+import { currentUser, roleOf } from "@/auth";
+import { db, schema } from "@/db";
+import { formatEvidence, formatUrls } from "@/lib/product-knowledge";
+import { can, ROLE_HINTS, ROLE_LABELS } from "@/lib/roles";
 import {
   createProduct,
   createTerm,
   deleteProduct,
   deleteTerm,
+  removeUserRole,
+  setUserRole,
   saveBrand,
   savePlatformRule,
   saveProduct,
@@ -38,7 +45,7 @@ function Section({ id, title, children, intro }: { id: string; title: string; in
   return (
     <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-6 space-y-4">
       <div>
-        <h2 id={`${id}-h`} className="text-2xl font-bold tracking-tight">
+        <h2 id={`${id}-h`} className="display text-2xl">
           {title}
         </h2>
         {intro ? <p className="hint mt-1">{intro}</p> : null}
@@ -59,7 +66,16 @@ function Field({ label, children, hint }: { label: string; children: React.React
 }
 
 export default async function AdminPage() {
-  const [products, brand, rules, terms] = await Promise.all([getProducts(), getBrand(), getAllPlatformRules(), getTerms()]);
+  const [products, brand, rules, terms, user, roleRows] = await Promise.all([
+    getProducts(),
+    getBrand(),
+    getAllPlatformRules(),
+    getTerms(),
+    currentUser(),
+    db.select().from(schema.userRoles).orderBy(asc(schema.userRoles.email)),
+  ]);
+  const myRole = user ? await roleOf(user) : "viewer";
+  const isAdmin = can(myRole, "settings");
   const blocked = products.filter((p) => p.status === "blocked");
   const ruleBy = Object.fromEntries(rules.map((r) => [r.platform, r]));
 
@@ -67,7 +83,7 @@ export default async function AdminPage() {
     <div className="space-y-12">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight">Settings</h1>
+          <h1 className="display text-4xl">Settings</h1>
           <p className="hint mt-1">Claims, rules and settings that drive generation and checks. Changes apply immediately.</p>
         </div>
         <nav aria-label="Admin sections" className="flex flex-wrap gap-2 text-sm">
@@ -78,6 +94,7 @@ export default async function AdminPage() {
             ["#platforms", "Platforms"],
             ["#terms", "Compliance terms"],
             ["#thresholds", "Verdict thresholds"],
+            ["#roles", "Team roles"],
           ].map(([href, label]) => (
             <a key={href} href={href} className="chip hover:text-ink">
               {label}
@@ -88,6 +105,12 @@ export default async function AdminPage() {
           </Link>
         </nav>
       </div>
+
+      {!isAdmin ? (
+        <p role="status" className="rounded-2xl border border-line bg-surface-2 p-4 text-sm">
+          You can view settings, but only admins can change them. Your role: <strong>{ROLE_LABELS[myRole]}</strong>.
+        </p>
+      ) : null}
 
       {blocked.length > 0 ? (
         <div role="alert" className="rounded-2xl border border-red/30 bg-red-bg p-4 text-red">
@@ -159,6 +182,28 @@ export default async function AdminPage() {
                     />
                   </Field>
                 </div>
+                <Field label="Ingredients" hint="As on the pack, with percentages where known.">
+                  <textarea name="ingredients" defaultValue={p.ingredients} rows={4} className="input" />
+                </Field>
+                <Field label="Messaging priorities" hint="What to lead with, one per line, most important first.">
+                  <textarea name="messagingPriorities" defaultValue={p.messagingPriorities.join("\n")} rows={4} className="input" placeholder={"Taste first: deep cocoa, real crunch\nNo maida, sweetened with jaggery\nIngredient % on the website"} />
+                </Field>
+                <div className="md:col-span-2">
+                  <Field label="Evidence for amber claims" hint="One per line: claim | evidence | source. Shown to approvers when an ad uses the claim.">
+                    <textarea
+                      name="claimEvidence"
+                      defaultValue={formatEvidence(p.claimEvidence)}
+                      rows={3}
+                      className="input font-mono text-xs"
+                      placeholder="Fibre content (grams per serving only) | 4.2 g fibre per 30 g serving | Lab report NABL-2025-114"
+                    />
+                  </Field>
+                </div>
+                <div className="md:col-span-2">
+                  <Field label="Product links" hint="One per line: label | https://… (website, Amazon, Flipkart).">
+                    <textarea name="productUrls" defaultValue={formatUrls(p.productUrls)} rows={2} className="input font-mono text-xs" placeholder="Website | https://purferme.com/products/chocolate-cookies" />
+                  </Field>
+                </div>
                 <Field label="Red claims (never use)">
                   <textarea name="redClaims" defaultValue={p.redClaims.join("\n")} rows={4} className="input" />
                 </Field>
@@ -182,7 +227,7 @@ export default async function AdminPage() {
                 <ActionForm action={uploadPackImage} submitLabel="Upload pack photo" submitClassName="btn-secondary">
                   <input type="hidden" name="id" value={p.id} />
                   <label className="label" htmlFor={`file-${p.id}`}>
-                    Upload a pack photo (used to make images match the real pack)
+                    Original pack photo (placed into images unchanged; a transparent PNG cut-out works best)
                   </label>
                   <input id={`file-${p.id}`} name="file" type="file" accept="image/*" className="text-sm" />
                 </ActionForm>
@@ -399,6 +444,53 @@ export default async function AdminPage() {
             ))}
           </ActionForm>
         </div>
+      </Section>
+      <Section
+        id="roles"
+        title="Team roles"
+        intro="Viewer: look and check copy. Creator: make and edit ads. Approver: sign off claims and approve. Admin: settings and roles."
+      >
+        {roleRows.length === 0 ? (
+          <p className="rounded-xl border border-amber/30 bg-amber-bg p-3 text-sm text-amber" data-testid="roles-off">
+            Roles are off: everyone who can sign in is an admin. Adding the first person turns roles on (you&apos;re added as an admin automatically). Anyone not listed then gets the {ROLE_LABELS[(process.env.DEFAULT_ROLE as keyof typeof ROLE_LABELS) in ROLE_LABELS ? (process.env.DEFAULT_ROLE as keyof typeof ROLE_LABELS) : "creator"]} role.
+          </p>
+        ) : null}
+        <p className="hint">
+          With the shared team password, people are identified by the name they type (e.g. “Priya” becomes priya@team.studio), so anyone who knows the password can type an approver&apos;s name. For roles you can rely on, use Google sign-in or email links.
+        </p>
+        {roleRows.length ? (
+          <ul className="divide-y divide-line rounded-2xl border border-line bg-surface" data-testid="roles-list">
+            {roleRows.map((r) => (
+              <li key={r.email} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2">
+                <span className="text-sm">
+                  <strong>{r.email}</strong> <span className="chip ml-2">{ROLE_LABELS[r.role]}</span>
+                </span>
+                {isAdmin && r.email !== user ? (
+                  <ActionForm action={removeUserRole} submitLabel="Remove" submitClassName="btn-secondary px-2 py-1 text-xs">
+                    <input type="hidden" name="email" value={r.email} />
+                  </ActionForm>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {isAdmin ? (
+          <ActionForm action={setUserRole} submitLabel="Save role" className="card grid gap-3 sm:grid-cols-[1fr_12rem]" testId="role-form">
+            <Field label="Email">
+              <input name="email" type="text" className="input" placeholder="priya@purferme.com or priya@team.studio" required />
+            </Field>
+            <Field label="Role">
+              <select name="role" className="input" defaultValue="creator">
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <p className="hint sm:col-span-2">{ROLES.map((r) => `${ROLE_LABELS[r]}: ${ROLE_HINTS[r]}`).join(" ")}</p>
+          </ActionForm>
+        ) : null}
       </Section>
     </div>
   );

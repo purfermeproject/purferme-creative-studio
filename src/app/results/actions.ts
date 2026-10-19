@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireUser } from "@/auth";
+import { requireRole } from "@/auth";
 import { db, schema } from "@/db";
 import { getBrand } from "@/lib/data";
 import { verdictFor } from "@/lib/result-verdict";
@@ -41,7 +41,7 @@ export type ResultInputT = z.input<typeof ResultInput>;
 
 export async function saveResults(inputs: ResultInputT[]): Promise<{ ok: true; count: number } | { ok: false; message: string }> {
   try {
-    await requireUser();
+    await requireRole("edit");
     if (inputs.length === 0) return { ok: false, message: "Nothing to save." };
     if (inputs.length > 1000) return { ok: false, message: "That's more than 1,000 rows. Split the file and upload it in parts." };
     const parsed = z.array(ResultInput).safeParse(inputs);

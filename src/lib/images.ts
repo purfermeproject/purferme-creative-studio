@@ -7,6 +7,7 @@ import { UserFacingError, isMock } from "./ai";
 import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
+import { compositePack, type PackPosition, type PackScale } from "./pack-composite";
 
 export const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-flare";
 
@@ -53,6 +54,8 @@ export async function generateImage(opts: {
   user: string;
   label: string;
   frameIndex?: number | null;
+  /** Composite this original pack photo into the scene (the model never draws the pack). */
+  lockedPack?: { data: Buffer; position: PackPosition; scale: PackScale; assetId?: string | null } | null;
 }) {
   const size = generationSizeFor(opts.target.w, opts.target.h);
   let mime: string;
@@ -66,10 +69,17 @@ export async function generateImage(opts: {
     mime = "image/svg+xml";
     data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label)).toString("base64");
     model = "mock";
+    if (opts.lockedPack) {
+      // Placeholder scene, but the real pack is composited exactly as it would be for a real image.
+      const scene = await sharp(Buffer.from(data, "base64")).resize(opts.target.w, opts.target.h).png().toBuffer();
+      mime = "image/jpeg";
+      data = (await compositePack(scene, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale })).data.toString("base64");
+    }
   } else {
     const openai = getClient();
     try {
-      const ref = opts.reference;
+      // A locked pack is composited afterwards, so the model gets no pack photo to redraw.
+      const ref = opts.lockedPack ? null : opts.reference;
       const edit = async (withFidelity: boolean) =>
         openai.images.edit({
           model: IMAGE_MODEL,
@@ -94,7 +104,12 @@ export async function generateImage(opts: {
       const b64 = res.data?.[0]?.b64_json;
       if (!b64) throw new UserFacingError("The image service returned no image. Try again.");
       mime = "image/jpeg";
-      data = (await fitToSize(Buffer.from(b64, "base64"), opts.target.w, opts.target.h)).toString("base64");
+      const fitted = await fitToSize(Buffer.from(b64, "base64"), opts.target.w, opts.target.h);
+      data = (
+        opts.lockedPack
+          ? (await compositePack(fitted, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale })).data
+          : fitted
+      ).toString("base64");
       inputTokens = res.usage?.input_tokens ?? 0;
       outputTokens = res.usage?.output_tokens ?? 0;
     } catch (e) {
@@ -126,6 +141,7 @@ export async function generateImage(opts: {
     prompt: opts.prompt,
     model,
     size: opts.target,
+    sourceAssetIds: opts.lockedPack?.assetId ? [opts.lockedPack.assetId] : [],
   });
   await db.insert(schema.generationLogs).values({
     user: opts.user,
@@ -145,12 +161,16 @@ export async function loadAsset(id: string) {
 }
 
 /** Changes an existing image from a plain-language instruction, keeping its exact size. */
-export async function editImage(opts: { assetId: string; instruction: string; user: string; creativeId?: string | null }) {
+export async function editImage(opts: { assetId: string; instruction: string; user: string; creativeId?: string | null; allowPackRedraw?: boolean }) {
   const a = await loadAsset(opts.assetId);
   if (!a || !a.mime.startsWith("image/")) throw new UserFacingError("That image no longer exists.");
+  const lockedPack = a.sourceAssetIds.length > 0 || a.label.includes("original pack");
+  if (lockedPack && !opts.allowPackRedraw) {
+    throw new UserFacingError("This image has the original pack placed unchanged. An AI edit would redraw the pack, so make a new image instead (or allow it for a draft).");
+  }
   const w = a.width ?? 1080;
   const h = a.height ?? 1080;
-  const label = `${a.label ? `${a.label} · ` : ""}edited`;
+  const label = `${(a.label ? `${a.label} · ` : "").replace(" · original pack", "")}edited${lockedPack ? " · pack redrawn by AI, not for launch" : ""}`;
   const prompt = `Edit this advertising image: ${opts.instruction.trim()}
 Keep everything else the same: the product pack exactly as it is (shape, colours, logo, printed text), the composition and the style. Do not add new words, prices, badges or health claims.`;
 

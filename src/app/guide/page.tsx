@@ -16,7 +16,7 @@ export default async function GuidePage() {
   return (
     <div className="space-y-10">
       <div>
-        <h1 className="text-4xl font-extrabold tracking-tight">Platform guide</h1>
+        <h1 className="display text-4xl">Platform guide</h1>
         <p className="prose-serif mt-1 text-ink-soft">The three platforms work differently. Switch platforms at the top to change the highlighted column and the guide below.</p>
       </div>
 

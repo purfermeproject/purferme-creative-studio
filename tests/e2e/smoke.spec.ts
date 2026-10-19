@@ -1,15 +1,55 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function signIn(page: Page) {
+async function signIn(page: Page, email = "e2e@example.com") {
   await page.goto("/login");
-  await page.getByLabel("Dev sign-in (local only)").fill("e2e@example.com");
+  await page.getByLabel("Dev sign-in (local only)").fill(email);
   await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
   await page.waitForURL("**/create");
 }
 
-async function choosePlatform(page: Page, name: "Meta" | "Amazon" | "Flipkart") {
-  await page.getByRole("radio", { name: new RegExp(name) }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toContainText(name);
+type BriefOpts = {
+  product?: string;
+  platform?: "Instagram & Facebook" | "Amazon" | "Flipkart";
+  type?: string;
+  placement?: string;
+  deliverable?: "Ad concept" | "UGC script" | "Ad copy set";
+  objective?: string;
+  extra?: string;
+};
+
+async function fillBrief(page: Page, o: BriefOpts) {
+  // Wait until the brief has restored this browser's last choices, so they can't overwrite ours.
+  await page.locator("form[aria-label=Brief][data-ready]").waitFor();
+  if (o.product) await page.getByRole("radiogroup", { name: "Product" }).getByText(o.product, { exact: true }).click();
+  if (o.objective) await page.getByRole("radiogroup", { name: "Campaign objective" }).getByText(o.objective, { exact: true }).click();
+  if (o.platform) await page.getByRole("radiogroup", { name: "Platform" }).getByText(o.platform, { exact: true }).click();
+  if (o.type) await page.getByLabel("Type of ad", { exact: true }).selectOption(o.type);
+  if (o.placement) await page.getByLabel("Where it runs", { exact: true }).selectOption(o.placement);
+  if (o.deliverable) await page.getByRole("radiogroup", { name: "What to make" }).getByText(o.deliverable, { exact: true }).click();
+  if (o.extra) {
+    await page.getByText("More direction").click();
+    await page.getByLabel(/Anything else/).fill(o.extra);
+  }
+}
+
+/** Brief → 3 proposals → develop the first. Returns the workspace creative. */
+async function develop(page: Page, o: BriefOpts = {}) {
+  await page.goto("/create");
+  await fillBrief(page, o);
+  await page.getByRole("button", { name: "Propose 3 concepts" }).click();
+  await expect(page.getByTestId("proposal-2")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("proposal-3")).toHaveCount(0);
+  await page.getByTestId("proposal-0").getByRole("button", { name: /^Develop as/ }).click();
+  const ws = page.getByTestId("workspace-creative");
+  await expect(ws).toBeVisible({ timeout: 60_000 });
+  await expect(page).toHaveURL(/\/create\?creative=/);
+  return ws;
+}
+
+const inspector = (page: Page) => page.getByRole("complementary", { name: "Check and edit" });
+
+async function waitSaved(page: Page) {
+  await expect(page.getByTestId("save-state")).toHaveAttribute("data-state", "saved", { timeout: 15_000 });
 }
 
 test.describe.configure({ mode: "serial" });
@@ -22,87 +62,159 @@ test("unauthenticated visitors are sent to login, and unknown emails are refused
   await expect(page.getByText("isn't on the team list")).toBeVisible();
 });
 
-test("Meta: generate 3 UGC concepts with streamed progress and save one", async ({ page }) => {
+test("workflow: brief → 3 proposals → develop → saved draft with version 1, clearly marked as mock", async ({ page }) => {
   await signIn(page);
-  await choosePlatform(page, "Meta");
-  await page.getByLabel("Product", { exact: true }).selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
-  await page.getByLabel("Type of ad", { exact: true }).selectOption("9:16 UGC-style video (15–30s)");
-  await page.getByRole("button", { name: "Generate 3 ad ideas" }).click();
+  await expect(page.getByTestId("empty-state")).toBeVisible();
+  await page.goto("/create");
+  await fillBrief(page, { objective: "Awareness", type: "9:16 UGC-style video (15–30s)" });
+  await page.getByRole("button", { name: "Propose 3 concepts" }).click();
   await expect(page.getByTestId("progress")).toBeVisible();
-  await expect(page.getByTestId("concept-2")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId("concept-3")).toHaveCount(0);
-  const first = page.getByTestId("concept-0");
-  await expect(first.getByText("Why it fits Meta")).toBeVisible();
-  await first.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(first.getByRole("link", { name: /Saved/ })).toBeVisible();
+  await expect(page.getByTestId("proposal-2")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("proposal-0").getByTestId("mock-badge")).toBeVisible();
+  await page.getByTestId("proposal-1").getByRole("button", { name: "Develop as ad concept" }).click();
+  const ws = page.getByTestId("workspace-creative");
+  await expect(ws).toBeVisible({ timeout: 60_000 });
+  await expect(ws.getByTestId("creative-title")).toHaveText("Flip the pack");
+  await expect(ws).toContainText("Awareness");
+  await expect(ws.getByTestId("mock-badge")).toBeVisible();
+  await expect(ws.getByTestId("scene-list").locator("li")).toHaveCount(4);
+  await expect(ws.getByTestId("creative-preview")).toBeVisible();
+  await expect(inspector(page).getByTestId("checks-clear")).toBeVisible();
+
+  // It's already saved: reload keeps it, and it's in the library and history.
+  await page.reload();
+  await expect(page.getByTestId("creative-title")).toHaveText("Flip the pack");
+  await inspector(page).getByRole("tab", { name: "History" }).click();
+  await expect(inspector(page).getByTestId("version-row")).toHaveCount(1);
+  await expect(inspector(page).getByTestId("version-row").first()).toContainText("Generated");
+  await page.goto("/library?platform=all");
+  await expect(page.getByText("Flip the pack").first()).toBeVisible();
+  await expect(page.getByText("Sample (mock)").first()).toBeVisible();
 });
 
-test("Amazon: creative types change and video scripts have on-screen text in every frame", async ({ page }) => {
+test("autosave: edits save as you type, survive reload, and can be restored from history", async ({ page }) => {
   await signIn(page);
-  await choosePlatform(page, "Amazon");
+  await develop(page);
+  const insp = inspector(page);
+  await insp.getByRole("tab", { name: "Edit" }).click();
+  await insp.getByLabel("Hook (first 2 seconds)").fill("4:30pm. Laptop on mute. Cookie on duty.");
+  await waitSaved(page);
+  await expect(page.getByTestId("workspace-creative")).toContainText("4:30pm. Laptop on mute. Cookie on duty.");
+  await page.reload();
+  await inspector(page).getByRole("tab", { name: "Edit" }).click();
+  await expect(inspector(page).getByLabel("Hook (first 2 seconds)")).toHaveValue("4:30pm. Laptop on mute. Cookie on duty.");
+
+  await inspector(page).getByRole("tab", { name: "History" }).click();
+  const rows = inspector(page).getByTestId("version-row");
+  await expect(rows).toHaveCount(2);
+  await rows.nth(1).getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByTestId("workspace-creative")).toContainText("3pm called. It wants chai.");
+  await expect(inspector(page).getByTestId("version-row")).toHaveCount(3);
+  await expect(inspector(page).getByTestId("version-row").first()).toContainText("Restored");
+});
+
+test("conflict: an edit from a stale tab is refused instead of overwriting", async ({ browser }) => {
+  const ctx = await browser.newContext();
+  const a = await ctx.newPage();
+  await signIn(a);
+  await develop(a);
+  const url = a.url();
+  const b = await ctx.newPage();
+  await b.goto(url);
+  await inspector(a).getByRole("tab", { name: "Edit" }).click();
+  await inspector(a).getByLabel("Title (internal)").fill("Edited in tab A");
+  await waitSaved(a);
+  await inspector(b).getByRole("tab", { name: "Edit" }).click();
+  await inspector(b).getByLabel("Title (internal)").fill("Edited in tab B");
+  await expect(inspector(b).getByTestId("conflict")).toBeVisible({ timeout: 15_000 });
+  await inspector(b).getByRole("button", { name: "Load the latest version" }).click();
+  await expect(b.getByTestId("creative-title")).toHaveText("Edited in tab A");
+  await ctx.close();
+});
+
+test("a red claim blocks approval in the workspace and on the server", async ({ page }) => {
+  await signIn(page);
+  await develop(page, { extra: "Gluten free cookies for your chai" });
+  const insp = inspector(page);
+  await expect(insp.getByTestId("issues-block")).toContainText("gluten free");
+  await insp.getByLabel(/pre-launch list/).check();
+  await expect(insp.getByRole("button", { name: "Approve" })).toBeDisabled();
+  // The server enforces it too, if someone forces the status.
+  await insp.getByLabel("Change status").selectOption("Approved");
+  await expect(insp.getByRole("alert")).toContainText("Can't move to Approved yet");
+  await expect(insp.getByRole("alert")).toContainText("Gluten free");
+  // Fix the wording: the check clears as you type and approval opens up.
+  await insp.getByRole("button", { name: "Edit the wording" }).click();
+  await insp.getByLabel("Second version or creator brief").fill("Cookies for your chai.");
+  await waitSaved(page);
+  await insp.getByRole("tab", { name: "Check" }).click();
+  await expect(insp.getByTestId("checks-clear")).toBeVisible();
+  await insp.getByRole("button", { name: "Approve" }).click();
+  await expect(insp.getByTestId("status-chip")).toHaveText("Approved");
+});
+
+test("uncertain claims need an approver's sign-off; editing an approved ad sends it back to Draft", async ({ page }) => {
+  await signIn(page);
+  await develop(page);
+  const insp = inspector(page);
+  await insp.getByRole("tab", { name: "Edit" }).click();
+  await insp.getByLabel("Claim 1", { exact: true }).fill("Kids love it");
+  await waitSaved(page);
+  await insp.getByRole("tab", { name: "Check" }).click();
+  await expect(insp.getByTestId("issues-review")).toContainText("Kids love it");
+  await expect(insp.getByTestId("claims-list")).toContainText("Not in library");
+  await insp.getByLabel(/pre-launch list/).check();
+  await expect(insp.getByRole("button", { name: "Approve" })).toBeDisabled();
+  await expect(insp.getByTestId("gate-missing")).toContainText("approver must confirm");
+  await insp.getByRole("button", { name: /checked these claims/ }).click();
+  await expect(insp.getByTestId("claims-reviewed")).toContainText("e2e@example.com");
+  await insp.getByRole("button", { name: "Approve" }).click();
+  await expect(insp.getByTestId("status-chip")).toHaveText("Approved");
+
+  await insp.getByRole("tab", { name: "Edit" }).click();
+  await insp.getByLabel("Headline").fill("Read the back first");
+  await waitSaved(page);
+  await expect(insp.getByTestId("notice")).toContainText("back to Draft");
+  await insp.getByRole("tab", { name: "Check" }).click();
+  await expect(insp.getByTestId("status-chip")).toHaveText("Draft");
+  await expect(insp.getByTestId("claims-reviewed")).toHaveCount(0);
+});
+
+test("deliverables: UGC script needs a real person; ad copy set has variants", async ({ page }) => {
+  await signIn(page);
+  let ws = await develop(page, { deliverable: "UGC script" });
+  await expect(ws).toContainText("UGC script");
+  await expect(inspector(page).getByTestId("issues-info")).toContainText("Needs a real person");
+  ws = await develop(page, { deliverable: "Ad copy set", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  await expect(ws.getByTestId("copy-variants").locator("li")).toHaveCount(4);
+});
+
+test("Amazon: creative types change, no placement choice, and the ad is saved for Amazon", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/create");
+  await fillBrief(page, { platform: "Amazon" });
   const types = await page.getByLabel("Type of ad", { exact: true }).locator("option").allTextContents();
   expect(types).toContain("Sponsored Brands video (16:9, muted)");
   expect(types).not.toContain("9:16 UGC-style video (15–30s)");
-  await page.getByLabel("Type of ad", { exact: true }).selectOption("Sponsored Brands video (16:9, muted)");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card).toBeVisible({ timeout: 60_000 });
-  await expect(card.getByText("Why it fits Amazon")).toBeVisible();
-  const onscreen = await card.locator("tbody tr td:nth-child(3)").allTextContents();
-  expect(onscreen.length).toBeGreaterThanOrEqual(4);
-  for (const t of onscreen) expect(t.trim()).not.toBe("");
-  await choosePlatform(page, "Meta");
+  await expect(page.getByLabel("Where it runs", { exact: true })).toHaveCount(0);
+  const ws = await develop(page, { platform: "Amazon", type: "Sponsored Brands video (16:9, muted)" });
+  await expect(ws).toContainText("Amazon");
+  const onscreen = ws.getByTestId("scene-list").locator("li p.font-semibold");
+  expect(await onscreen.count()).toBeGreaterThanOrEqual(4);
+  await fillBrief(page, { platform: "Instagram & Facebook" });
 });
 
 test("Sunrise Bowl cannot be generated and shows why", async ({ page }) => {
   await signIn(page);
-  await page.getByLabel("Product", { exact: true }).selectOption({ label: "Sunrise Bowl porridge mixes (blocked)" });
+  await fillBrief(page, { product: "Sunrise Bowl porridge mixes" });
   await expect(page.getByTestId("product-blocked")).toContainText("IMS Act");
-  await expect(page.getByRole("button", { name: /Generate/ })).toBeDisabled();
-});
-
-test("a concept with 'gluten free' is flagged red and cannot be approved", async ({ page }) => {
-  await signIn(page);
-  await choosePlatform(page, "Meta");
-  await page.getByText("More options").click();
-  await page.getByLabel(/Anything else/).fill("Gluten free cookies for your chai");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card.getByTestId("scan-hits")).toContainText("Gluten free", { timeout: 60_000 });
-  await card.getByRole("button", { name: "Save", exact: true }).click();
-  await card.getByRole("link", { name: /Saved/ }).click();
-  const item = page.locator("details[open][data-testid^=creative-]");
-  // Simple path: the banned words are listed and Approve stays disabled even after ticking the list.
-  await expect(item.getByTestId("gate-missing")).toContainText("gluten free");
-  await item.getByLabel(/pre-launch list/).check();
-  await expect(item.getByRole("button", { name: "Approve" })).toBeDisabled();
-  // The server enforces it too, if someone forces the status.
-  await item.getByLabel("Change status").selectOption("Approved");
-  await expect(item.getByRole("alert")).toContainText("Can't move to Approved yet");
-  await expect(item.getByRole("alert")).toContainText("Gluten free");
-  await page.reload();
-  await expect(page.locator("details[open][data-testid^=creative-]").getByTestId("status-chip")).toHaveText("Draft");
-});
-
-test("a clean idea can be approved with one tick and one click", async ({ page }) => {
-  await signIn(page);
-  await choosePlatform(page, "Meta");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card.getByTestId("scan-clean")).toBeVisible({ timeout: 60_000 });
-  await card.getByRole("button", { name: "Save", exact: true }).click();
-  await card.getByRole("link", { name: /Saved/ }).click();
-  const item = page.locator("details[open][data-testid^=creative-]");
-  await expect(item.getByRole("button", { name: "Approve" })).toBeDisabled();
-  await item.getByLabel(/pre-launch list/).check();
-  await item.getByRole("button", { name: "Approve" }).click();
-  await expect(item.getByTestId("status-chip")).toHaveText("Approved");
+  await expect(page.getByRole("button", { name: "Propose 3 concepts" })).toBeDisabled();
 });
 
 test("Admin: moving a product from hold to ready makes it generatable immediately", async ({ page }) => {
   await signIn(page);
-  await page.getByLabel("Product", { exact: true }).selectOption({ label: "Pur'GreenX, adults, mixed berries (hold)" });
-  await expect(page.getByRole("button", { name: /Generate/ })).toBeDisabled();
+  await fillBrief(page, { product: "Pur'GreenX, adults, mixed berries" });
+  await expect(page.getByRole("button", { name: "Propose 3 concepts" })).toBeDisabled();
 
   await page.goto("/admin");
   const card = page.getByTestId("product-greenx");
@@ -112,17 +224,48 @@ test("Admin: moving a product from hold to ready makes it generatable immediatel
   await expect(card.getByText("Saved.")).toBeVisible();
 
   await page.goto("/create");
-  await page.getByLabel("Product", { exact: true }).selectOption({ label: "Pur'GreenX, adults, mixed berries" });
-  await expect(page.getByRole("button", { name: /Generate/ })).toBeEnabled();
+  await fillBrief(page, { product: "Pur'GreenX, adults, mixed berries" });
+  await expect(page.getByRole("button", { name: "Propose 3 concepts" })).toBeEnabled();
 });
 
-test("Library CSV export downloads a valid CSV", async ({ page }) => {
+test("Admin: product knowledge (priorities, evidence) shows in the brief and the check", async ({ page }) => {
   await signIn(page);
+  await page.goto("/admin");
+  const card = page.getByTestId("product-choc");
+  await card.locator("summary").click();
+  await card.getByLabel("Evidence for amber claims").fill("Fibre/protein content (grams per serving only) | 4 g fibre per 30 g serving | Lab report 114");
+  await card.getByLabel("Product links").fill("not a link");
+  await card.getByRole("button", { name: "Save" }).first().click();
+  await expect(card.getByText("aren't valid web addresses")).toBeVisible();
+  await card.getByLabel("Product links").fill("Website | https://purferme.example/choc");
+  await card.getByRole("button", { name: "Save" }).first().click();
+  await expect(card.getByText("Saved.")).toBeVisible();
+
+  await page.goto("/create");
+  await expect(page.getByTestId("product-knowledge")).toContainText("1 on file");
+  await expect(page.getByTestId("product-knowledge")).toContainText("Leads with: Taste first");
+  await develop(page);
+  const insp = inspector(page);
+  await insp.getByRole("tab", { name: "Edit" }).click();
+  await insp.getByLabel("Claim 1", { exact: true }).fill("Fibre content (grams per serving only)");
+  await waitSaved(page);
+  await insp.getByRole("tab", { name: "Check" }).click();
+  await expect(insp.getByTestId("issues-review")).toContainText("4 g fibre per 30 g serving");
+});
+
+test("Library: search, CSV export and open in workspace", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/library?platform=all&q=Flip+the+pack");
+  await expect(page.getByRole("heading", { name: "Creative library" })).toBeVisible();
+  const item = page.locator("[data-testid^=creative-]").first();
+  await item.locator("summary").click();
+  await item.getByRole("link", { name: "Open in workspace" }).click();
+  await expect(page.getByTestId("creative-title")).toHaveText("Flip the pack");
+
   const res = await page.request.get("/api/library/export?platform=all");
   expect(res.status()).toBe(200);
   expect(res.headers()["content-type"]).toContain("text/csv");
-  const text = await res.text();
-  const lines = text.trim().split("\r\n");
+  const lines = (await res.text()).trim().split("\r\n");
   expect(lines[0].startsWith("id,platform,placement,product,creative_type,status,title")).toBe(true);
   expect(lines.length).toBeGreaterThan(1);
 });
@@ -136,28 +279,21 @@ test("Claim checker highlights terms instantly and runs a deep check", async ({ 
   await expect(page.getByTestId("deep-result")).toContainText("Suggested rewrite");
 });
 
-test("Make image creates a picture that stays with the saved ad", async ({ page }) => {
+test("Make image: images attach to the draft at the exact platform size", async ({ page }) => {
   await signIn(page);
-  await choosePlatform(page, "Meta");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card).toBeVisible({ timeout: 60_000 });
-  await card.getByRole("button", { name: "Make image" }).click();
-  const img = card.getByTestId("image-gallery").locator("img");
+  const ws = await develop(page, { type: "9:16 UGC-style video (15–30s)" });
+  await ws.getByRole("button", { name: "Make image" }).click();
+  const img = ws.getByTestId("image-gallery").locator("img");
   await expect(img).toHaveCount(1);
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
-  // Meta video ideas default to the exact Reels size.
-  await expect(card.getByTestId("image-dims").first()).toContainText("1080×1920");
-  await card.getByRole("button", { name: "Save", exact: true }).click();
-  await card.getByRole("link", { name: /Saved/ }).click();
-  const item = page.locator("details[open][data-testid^=creative-]");
-  await expect(item.getByTestId("image-gallery").locator("img")).toHaveCount(1);
-  await item.getByLabel("Image size").selectOption({ label: "Feed 4:5 · 1080×1350" });
-  await item.getByRole("button", { name: "Make another image" }).click();
-  await expect(item.getByTestId("image-gallery").locator("img")).toHaveCount(2);
-  await expect(item.getByTestId("image-dims").nth(1)).toContainText("1080×1350");
+  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1920");
+  await ws.getByLabel("Image size").selectOption({ label: "Feed 4:5 · 1080×1350" });
+  await ws.getByRole("button", { name: "Make another image" }).click();
+  await expect(img).toHaveCount(2);
+  await expect(ws.getByTestId("image-dims").nth(1)).toContainText("1080×1350");
   await page.reload();
-  await expect(page.locator("details[open][data-testid^=creative-]").getByTestId("image-gallery").locator("img")).toHaveCount(2);
+  await expect(page.getByTestId("workspace-creative").getByTestId("image-gallery").locator("img")).toHaveCount(2);
+  await expect(page.getByTestId("creative-preview").locator("img")).toHaveCount(1);
 });
 
 test("team password: wrong password is refused, right one signs in with your name", async ({ page }) => {
@@ -176,18 +312,15 @@ test("team password: wrong password is refused, right one signs in with your nam
 
 test("Write your own: custom ad type, angle and language are accepted", async ({ page }) => {
   await signIn(page);
-  await choosePlatform(page, "Meta");
+  await page.goto("/create");
   await page.getByLabel("Type of ad", { exact: true }).selectOption({ label: "✏️ Write your own…" });
   await page.getByLabel("Type of ad: write your own").fill("6s bumper video for Reels");
-  await page.getByText("More options").click();
   await page.getByLabel("Angle (what the ad is about)", { exact: true }).selectOption({ label: "✏️ Write your own…" });
   await page.getByLabel(/Angle .*write your own/).fill("Monsoon chai-time snack");
   await page.getByLabel("Language", { exact: true }).selectOption({ label: "✏️ Write your own…" });
   await page.getByLabel("Language: write your own").fill("Punjabi");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card).toBeVisible({ timeout: 60_000 });
-  await expect(card).toContainText("Monsoon chai-time snack");
+  await page.getByRole("button", { name: "Propose 3 concepts" }).click();
+  await expect(page.getByTestId("proposal-0")).toContainText("Monsoon chai-time snack", { timeout: 60_000 });
 });
 
 test("Brand kit + Add text & logo saves a full-size image with crisp text", async ({ page }) => {
@@ -198,38 +331,27 @@ test("Brand kit + Add text & logo saves a full-size image with crisp text", asyn
   await kit.getByRole("button", { name: "Save brand kit" }).click();
   await expect(kit.getByText("Brand kit saved.")).toBeVisible();
 
-  await page.goto("/create");
-  await choosePlatform(page, "Meta");
-  await page.getByLabel("Type of ad", { exact: true }).selectOption("Static image ad (4:5)");
-  await page.getByLabel("Where it runs", { exact: true }).selectOption("Instagram Feed post");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card).toBeVisible({ timeout: 60_000 });
-  await card.getByRole("button", { name: "Make image" }).click();
-  await expect(card.getByTestId("image-dims").first()).toContainText("1080×1350");
-  await card.getByRole("button", { name: "Add text & logo" }).first().click();
+  const ws = await develop(page, { type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  await ws.getByRole("button", { name: "Make image" }).click();
+  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350");
+  await ws.getByRole("button", { name: "Add text & logo" }).first().click();
   const editor = page.getByTestId("overlay-editor");
   await expect(editor.getByTestId("overlay-canvas")).toBeVisible();
   await editor.getByLabel("Headline").fill("3pm called. It wants chai.");
   await editor.getByRole("button", { name: "Save as new image" }).click();
   await expect(editor).toHaveCount(0);
-  await expect(card.getByTestId("image-gallery").locator("img")).toHaveCount(2);
-  await expect(card.getByTestId("image-dims").nth(1)).toContainText("1080×1350");
-  await card.getByRole("button", { name: "Save", exact: true }).click();
-  await card.getByRole("link", { name: /Saved/ }).click();
-  const item = page.locator("details[open][data-testid^=creative-]");
-  await expect(item.getByTestId("image-gallery").locator("img")).toHaveCount(2);
-  await expect(item.getByText("with text")).toBeVisible();
+  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(2);
+  await expect(ws.getByTestId("image-dims").nth(1)).toContainText("1080×1350");
+  await page.reload();
+  await expect(page.getByTestId("workspace-creative").getByTestId("image-gallery").locator("img")).toHaveCount(2);
+  await expect(page.getByTestId("workspace-creative").getByText("with text")).toBeVisible();
 });
 
 test("Preview shows the image in platform mock-ups with safe zones", async ({ page }) => {
   await signIn(page);
-  await choosePlatform(page, "Meta");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card).toBeVisible({ timeout: 60_000 });
-  await card.getByRole("button", { name: "Make image" }).click();
-  await card.getByRole("button", { name: "Preview" }).first().click();
+  const ws = await develop(page);
+  await ws.getByRole("button", { name: "Make image" }).click();
+  await ws.getByRole("button", { name: "Preview" }).first().click();
   const pv = page.getByTestId("placement-preview");
   await expect(pv.getByText("Covered by UI · keep text out")).toBeVisible();
   await pv.getByRole("button", { name: "Feed post" }).click();
@@ -243,7 +365,6 @@ test("Check a finished design: reads the text, flags claims and size", async ({ 
   const sharp = (await import("sharp")).default;
   const png = await sharp({ create: { width: 720, height: 1280, channels: 3, background: "#c8862a" } }).png().toBuffer();
   await signIn(page);
-  await choosePlatform(page, "Meta");
   await page.goto("/check");
   await page.getByLabel("Upload a design").setInputFiles({ name: "design.png", mimeType: "image/png", buffer: png });
   const result = page.getByTestId("design-result");
@@ -257,17 +378,11 @@ test("Check a finished design: reads the text, flags claims and size", async ({ 
 
 test("Make all scenes builds a storyboard and the handoff pack ZIP has everything", async ({ page }) => {
   await signIn(page);
-  await choosePlatform(page, "Meta");
-  await page.getByLabel("Type of ad", { exact: true }).selectOption("9:16 UGC-style video (15–30s)");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card).toBeVisible({ timeout: 60_000 });
-  await card.getByRole("button", { name: /Make all \d+ scenes/ }).click();
-  const board = card.getByTestId("storyboard");
+  const ws = await develop(page, { type: "9:16 UGC-style video (15–30s)" });
+  await ws.getByRole("button", { name: /Make all \d+ scenes/ }).click();
+  const board = ws.getByTestId("storyboard");
   await expect(board.locator("img")).toHaveCount(4, { timeout: 60_000 });
-  await card.getByRole("button", { name: "Save", exact: true }).click();
-  const zipLink = card.getByRole("link", { name: "Handoff pack (.zip)" });
-  await expect(zipLink).toBeVisible();
+  const zipLink = ws.getByRole("link", { name: "Handoff pack (.zip)" });
   const res = await page.request.get((await zipLink.getAttribute("href"))!);
   expect(res.status()).toBe(200);
   expect(res.headers()["content-type"]).toBe("application/zip");
@@ -281,58 +396,99 @@ test("Make all scenes builds a storyboard and the handoff pack ZIP has everythin
 
 test("Edit with words, All sizes and Compare", async ({ page }) => {
   await signIn(page);
-  await choosePlatform(page, "Meta");
-  await page.getByLabel("Type of ad", { exact: true }).selectOption("Static image ad (4:5)");
-  await page.getByLabel("Where it runs", { exact: true }).selectOption("Instagram Feed post");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card).toBeVisible({ timeout: 60_000 });
-  await card.getByRole("button", { name: "Make image" }).click();
-  const gallery = card.getByTestId("image-gallery");
+  const ws = await develop(page, { type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  await ws.getByRole("button", { name: "Make image" }).click();
+  const gallery = ws.getByTestId("image-gallery");
   await expect(gallery.locator("img")).toHaveCount(1);
 
-  await card.getByRole("button", { name: "All sizes" }).first().click();
+  await ws.getByRole("button", { name: "All sizes" }).first().click();
   await expect(gallery.locator("img")).toHaveCount(4, { timeout: 30_000 });
-  const dims = card.getByTestId("image-dims");
+  const dims = ws.getByTestId("image-dims");
   await expect(dims.nth(1)).toContainText("1080×1920");
   await expect(dims.nth(2)).toContainText("1080×1080");
   await expect(dims.nth(3)).toContainText("1200×628");
 
-  await card.getByRole("button", { name: "Edit with words" }).first().click();
-  await card.getByLabel("Describe the change").fill("make the background lighter");
-  await card.getByRole("button", { name: "Apply change" }).click();
+  await ws.getByRole("button", { name: "Edit with words" }).first().click();
+  await ws.getByLabel("Describe the change").fill("make the background lighter");
+  await ws.getByRole("button", { name: "Apply change" }).click();
   await expect(gallery.locator("img")).toHaveCount(5, { timeout: 30_000 });
   await expect(dims.nth(4)).toContainText("1080×1350");
 
   await gallery.getByLabel("Compare").nth(0).check();
   await gallery.getByLabel("Compare").nth(4).check();
-  await card.getByRole("button", { name: "Compare 2 images side by side" }).click();
+  await ws.getByRole("button", { name: "Compare 2 images side by side" }).click();
   await expect(page.getByTestId("compare").locator("img")).toHaveCount(2);
   await page.getByTestId("compare").getByRole("button", { name: "Close" }).click();
 });
 
-test("Where it runs: Instagram placement shapes ideas, image size and is saved", async ({ page }) => {
+test("Where it runs: Instagram placement shapes the ad, image size and is saved", async ({ page }) => {
   await signIn(page);
-  await choosePlatform(page, "Meta");
+  await page.goto("/create");
   await expect(page.getByLabel("Where it runs", { exact: true })).toHaveValue("Instagram Reels");
-  await page.getByLabel("Where it runs", { exact: true }).selectOption("Instagram Carousel");
-  await page.getByLabel("Type of ad", { exact: true }).selectOption("Carousel (3–5 cards)");
-  await page.getByRole("button", { name: /Generate/ }).click();
-  const card = page.getByTestId("concept-0");
-  await expect(card).toBeVisible({ timeout: 60_000 });
-  await expect(card).toContainText("Meta · Instagram Carousel");
-  await card.getByRole("button", { name: "Make image" }).click();
-  await expect(card.getByTestId("image-dims").first()).toContainText("1080×1080");
-  await card.getByRole("button", { name: "Save", exact: true }).click();
-  await card.getByRole("link", { name: /Saved/ }).click();
-  await expect(page.locator("details[open][data-testid^=creative-]")).toContainText("Instagram Carousel");
+  const ws = await develop(page, { type: "Carousel (3–5 cards)", placement: "Instagram Carousel" });
+  await expect(ws).toContainText("Instagram Carousel");
+  await ws.getByRole("button", { name: "Make image" }).click();
+  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1080");
   const csv = await (await page.request.get("/api/library/export?platform=meta")).text();
   expect(csv.split("\r\n")[0]).toContain("placement");
   expect(csv).toContain("Instagram Carousel");
+});
 
-  // Amazon has no placement choice.
-  await page.goto("/create");
-  await choosePlatform(page, "Amazon");
-  await expect(page.getByLabel("Where it runs", { exact: true })).toHaveCount(0);
-  await choosePlatform(page, "Meta");
+test("Original pack is placed unchanged, and AI edits of it need explicit consent", async ({ page }) => {
+  const sharp = (await import("sharp")).default;
+  // A cut-out pack: transparent margin around a solid block.
+  const pack = await sharp({ create: { width: 300, height: 420, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: await sharp({ create: { width: 240, height: 360, channels: 4, background: { r: 107, g: 63, b: 42, alpha: 1 } } }).png().toBuffer(), left: 30, top: 30 }])
+    .png()
+    .toBuffer();
+  await signIn(page);
+  await page.goto("/admin");
+  const card = page.getByTestId("product-bfast");
+  await card.locator("summary").click();
+  await card.getByLabel(/Original pack photo/).setInputFiles({ name: "pack.png", mimeType: "image/png", buffer: pack });
+  await card.getByRole("button", { name: "Upload pack photo" }).click();
+  await expect(card.getByText("Pack image uploaded.")).toBeVisible();
+
+  const ws = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  await expect(ws.getByLabel("Pack in the image")).toHaveValue("locked");
+  await ws.getByRole("button", { name: "Make image" }).click();
+  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack");
+  await ws.getByRole("button", { name: "Edit with words" }).first().click();
+  await ws.getByLabel("Describe the change").fill("make it warmer");
+  await expect(ws.getByRole("button", { name: "Apply change" })).toBeDisabled();
+  // The server refuses too.
+  const assetUrl = await ws.getByTestId("image-gallery").locator("img").first().getAttribute("src");
+  const res = await page.request.post("/api/image/edit", { data: { assetId: assetUrl!.split("/").pop(), instruction: "make it warmer" } });
+  expect(res.status()).toBe(400);
+  expect((await res.json()).error).toContain("original pack");
+});
+
+test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {
+  await signIn(page);
+  await page.goto("/admin#roles");
+  await expect(page.getByTestId("roles-off")).toBeVisible();
+  const form = page.getByTestId("role-form");
+  await form.getByLabel("Email").fill("viewer-v@team.studio");
+  await form.getByLabel("Role").selectOption("viewer");
+  await form.getByRole("button", { name: "Save role" }).click();
+  await expect(form.getByText("is now viewer")).toBeVisible();
+  await page.reload();
+  // Whoever turns roles on stays an admin.
+  await expect(page.getByTestId("roles-list")).toContainText("e2e@example.com");
+  await expect(page.getByTestId("role-chip")).toHaveText("Admin");
+
+  const ctx = await browser.newContext();
+  const v = await ctx.newPage();
+  await v.goto("/login");
+  await v.getByLabel(/Your name/).fill("Viewer V");
+  await v.getByLabel("Team password").fill("e2e-team-password");
+  await v.getByRole("button", { name: "Sign in", exact: true }).first().click();
+  await v.waitForURL("**/create");
+  await expect(v.getByTestId("role-chip")).toHaveText("Viewer");
+  await expect(v.getByRole("button", { name: "Propose 3 concepts" })).toBeDisabled();
+  const res = await v.request.post("/api/generate", { data: { mode: "proposals", platform: "meta", productId: "00000000-0000-0000-0000-000000000000", creativeType: "x", angle: "auto", persona: "auto", language: "English" } });
+  expect(res.status()).toBe(403);
+  await v.goto("/admin");
+  await expect(v.getByText("only admins can change them")).toBeVisible();
+  await ctx.close();
 });

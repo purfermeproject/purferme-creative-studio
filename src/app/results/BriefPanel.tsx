@@ -29,7 +29,7 @@ export function BriefPanel() {
     <section aria-labelledby="brief-h" className="card space-y-4" aria-live="polite" aria-busy={loading}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 id="brief-h" className="text-2xl font-bold tracking-tight">
+          <h2 id="brief-h" className="display text-2xl">
             Weekly brief
           </h2>
           <p className="hint">Reads the last 7 days of results on all platforms, plus the linked creatives&apos; attributes.</p>

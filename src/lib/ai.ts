@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import type { z } from "zod";
 import { db, schema } from "@/db";
 import type { Platform } from "./types";
+import { ForbiddenError } from "./roles";
 
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 export const OPENAI_TEXT_MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
@@ -70,6 +71,7 @@ function connectionCause(e: unknown): string {
 
 function friendlyApiError(e: unknown): Error {
   if (e instanceof UserFacingError) return e;
+  if (e instanceof ForbiddenError) return new UserFacingError(e.message);
   if (e instanceof OpenAI.AuthenticationError) return new UserFacingError("OpenAI rejected the key. Check OPENAI_API_KEY in .env.local.");
   if (e instanceof OpenAI.RateLimitError) return new UserFacingError("OpenAI is rate-limiting or your credit has run out. Check your OpenAI billing, then try again.");
   if (e instanceof OpenAI.NotFoundError) return new UserFacingError(`OpenAI model "${OPENAI_TEXT_MODEL}" isn't available on your account. Set OPENAI_MODEL in .env.local (e.g. gpt-5.5 or gpt-4.1).`);

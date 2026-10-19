@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SEED_BRAND, SEED_PLATFORM_RULES, SEED_PRODUCTS } from "@/db/seed-data";
-import { buildCheckPrompt, buildGenerationPrompt, buildVariationsPrompt, buildWeeklyBriefPrompt, isVideoType } from "@/lib/prompts";
+import { buildCheckPrompt, buildDevelopPrompt, buildGenerationPrompt, buildVariationsPrompt, buildWeeklyBriefPrompt, isVideoType } from "@/lib/prompts";
 
 const choc = SEED_PRODUCTS.find((p) => p.slug === "choc")!;
 const rule = (p: "meta" | "amazon" | "flipkart") => SEED_PLATFORM_RULES.find((r) => r.platform === p)!;
@@ -157,5 +157,31 @@ describe("placement", () => {
       placement: { label: "WhatsApp Status", guidance: "" },
     });
     expect(p).toContain("PLACEMENT: WhatsApp Status. Design natively for this placement");
+  });
+});
+
+describe("workspace prompts", () => {
+  const p0 = { n: 3, platform: "meta" as const, creativeType: "Static image ad (4:5)", angle: "auto", persona: "auto", language: "English" };
+  const product = { ...choc, ingredients: "Foxtail millet, oats, jaggery", messagingPriorities: ["Taste first"], claimEvidence: [{ claim: "Fibre", evidence: "4 g" }] };
+  it("proposals ask for short directions, not full ads, and include the objective and product knowledge", () => {
+    const p = buildGenerationPrompt(SEED_BRAND, product, rule("meta"), { ...p0, output: "proposals", objective: "conversion" });
+    expect(p).toContain("Propose 3 distinct creative directions");
+    expect(p).toContain("CAMPAIGN OBJECTIVE: Conversion.");
+    expect(p).toContain("INGREDIENTS: Foxtail millet, oats, jaggery");
+    expect(p).toContain("MESSAGING PRIORITIES (lead with these, in order): Taste first");
+    expect(p).toContain("EVIDENCE ON FILE FOR AMBER CLAIMS: Fibre: 4 g");
+    expect(p).toContain("Return exactly 3 proposals.");
+    expect(p).not.toContain("List every claim used with its tier.");
+  });
+  it("develop keeps the chosen direction and adds deliverable rules", () => {
+    const proposal = { title: "Flip the pack", angle: "Ingredient %", persona: "Parent", big_idea: "Read the back", hook: "I read the back first.", format: "Reel" };
+    const ugc = buildDevelopPrompt(SEED_BRAND, product, rule("meta"), { ...p0, deliverable: "ugc", proposal });
+    expect(ugc).toContain("Write 1 ad concepts.");
+    expect(ugc).toContain("angle = Ingredient %; persona = Parent");
+    expect(ugc).toContain("DELIVERABLE: UGC creator script");
+    expect(ugc).toContain('"hook":"I read the back first."');
+    const copy = buildDevelopPrompt(SEED_BRAND, product, rule("meta"), { ...p0, deliverable: "copy", proposal });
+    expect(copy).toContain("copy.variants");
+    expect(copy).toContain("first 125 characters");
   });
 });

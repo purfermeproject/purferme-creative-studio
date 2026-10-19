@@ -4,7 +4,11 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import Resend from "next-auth/providers/resend";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { count, eq } from "drizzle-orm";
+import { cache } from "react";
 import { getDb, schema } from "@/db";
+import { adminEmailsFromEnv, can, ForbiddenError, forbiddenMessage, isRole, resolveRole, type Action } from "@/lib/roles";
+import type { Role } from "@/lib/types";
 import { checkTeamPassword, isAllowedEmail, teamIdentity, teamPasswordEnabled } from "@/lib/allowlist";
 
 /**
@@ -109,3 +113,31 @@ export async function currentUser(): Promise<string | null> {
   const email = (await auth())?.user?.email;
   return email && isAllowedEmail(email) ? email.toLowerCase() : null;
 }
+
+/** Role for an email (see resolveRole for the rules). Cached for the length of one request. */
+export const roleOf = cache(async (email: string): Promise<Role> => {
+  const db = getDb();
+  const e = email.toLowerCase();
+  const [[listed], [{ n }]] = await Promise.all([
+    db.select({ role: schema.userRoles.role }).from(schema.userRoles).where(eq(schema.userRoles.email, e)),
+    db.select({ n: count() }).from(schema.userRoles),
+  ]);
+  return resolveRole({
+    email: e,
+    listed: listed && isRole(listed.role) ? listed.role : null,
+    totalListed: Number(n),
+    adminEmails: adminEmailsFromEnv(),
+    defaultRole: process.env.DEFAULT_ROLE,
+  });
+});
+
+/** For server actions and route handlers: the signed-in user, if their role allows the action. */
+export async function requireRole(action: Action): Promise<{ user: string; role: Role }> {
+  const user = await requireUser();
+  const role = await roleOf(user);
+  if (!can(role, action)) throw new ForbiddenError(forbiddenMessage(role, action));
+  return { user, role };
+}
+
+/** HTTP status for a failed requireUser/requireRole. */
+export const authErrorStatus = (e: unknown) => (e instanceof ForbiddenError ? 403 : 401);

@@ -1,54 +1,63 @@
 @import "tailwindcss";
 
-/* Brand: ragi brown, jaggery amber, leaf green on a clean light background.
-   The selected platform tints --accent (Meta indigo, Amazon amber-orange, Flipkart blue). */
+/* Puŕ Fermé brand: Cream #F7F3EC, Purple #2D1B54, Caramel #C17D3C, Gold #E8C876, Soft Pink #F2C4CE.
+   Caramel and gold are for accents and fills; text uses the darker caramel-ink so it stays readable (WCAG AA). */
 :root {
-  --bg: #fbf8f3;
-  --surface: #ffffff;
-  --surface-2: #f3ede4;
-  --ink: #2b1d14;
-  --ink-soft: #5e4c3f;
-  --line: #e4d9cb;
-  --ragi: #6b3f2a;
-  --jaggery: #9a6316;
-  --leaf: #356b31;
-  --red: #b42318;
-  --red-bg: #fde8e6;
-  --amber: #9a5b00;
-  --amber-bg: #fdf0d5;
-  --green-bg: #e5f2e0;
-  --accent: #4f46e5;
-  --accent-ink: #ffffff;
-  --accent-soft: #eceafd;
+  --bg: #f7f3ec;
+  --surface: #fffdf9;
+  --surface-2: #f0e9dd;
+  --ink: #24183f;
+  --ink-soft: #5c5170;
+  --line: #e3d9ca;
+  --purple: #2d1b54;
+  --caramel: #c17d3c;
+  --caramel-ink: #8a531f;
+  --gold: #e8c876;
+  --gold-soft: #f8edcc;
+  --pink: #f2c4ce;
+  --pink-soft: #fbeaee;
+  --ragi: #2d1b54;
+  --jaggery: #8a531f;
+  --leaf: #2f6b3a;
+  --red: #a8261b;
+  --red-bg: #fbe6e3;
+  --amber: #8a5300;
+  --amber-bg: #fbf0d6;
+  --green-bg: #e3f0e1;
+  --accent: #2d1b54;
+  --accent-ink: #f7f3ec;
+  --accent-soft: #ebe5f4;
   color-scheme: light;
 }
 
-:root[data-platform="meta"] { --accent: #4f46e5; --accent-soft: #eceafd; }
-:root[data-platform="amazon"] { --accent: #a54f00; --accent-soft: #fdebd8; }
-:root[data-platform="flipkart"] { --accent: #2160d8; --accent-soft: #e3ecfc; }
-
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17110d;
-    --surface: #211912;
-    --surface-2: #2b2119;
-    --ink: #f3ebe2;
-    --ink-soft: #c4b4a5;
-    --line: #3d3027;
-    --ragi: #d9a27f;
-    --jaggery: #e3a54b;
-    --leaf: #8cc47f;
+    --bg: #15101f;
+    --surface: #1d1630;
+    --surface-2: #281f3e;
+    --ink: #f7f3ec;
+    --ink-soft: #c8bfd6;
+    --line: #3a2f52;
+    --purple: #d9cbf5;
+    --caramel: #d99a5b;
+    --caramel-ink: #e6ad72;
+    --gold: #e8c876;
+    --gold-soft: #3a3120;
+    --pink: #f2c4ce;
+    --pink-soft: #3a2531;
+    --ragi: #d9cbf5;
+    --jaggery: #e6ad72;
+    --leaf: #8cc98f;
     --red: #ff8a80;
     --red-bg: #3d1a17;
     --amber: #f2c069;
     --amber-bg: #3a2a10;
     --green-bg: #1d2e1a;
-    --accent-ink: #0d0a08;
+    --accent: #e8c876;
+    --accent-ink: #2d1b54;
+    --accent-soft: #2e2547;
     color-scheme: dark;
   }
-  :root[data-platform="meta"] { --accent: #a5a1ff; --accent-soft: #26244a; }
-  :root[data-platform="amazon"] { --accent: #ffad5c; --accent-soft: #3d2610; }
-  :root[data-platform="flipkart"] { --accent: #7eaaff; --accent-soft: #172745; }
 }
 
 @theme inline {
@@ -69,14 +78,22 @@
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
-  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-literata), ui-serif, Georgia, serif;
+  --color-purple: var(--purple);
+  --color-caramel: var(--caramel);
+  --color-caramel-ink: var(--caramel-ink);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-pink: var(--pink);
+  --color-pink-soft: var(--pink-soft);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
 }
 
 body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
 }
 
 :focus-visible {
@@ -97,8 +114,18 @@ body {
 }
 
 /* Shared form + card primitives */
+@utility display {
+  @apply font-serif font-semibold tracking-tight text-purple;
+  font-variation-settings: "SOFT" 50, "WONK" 0;
+}
+@utility eyebrow {
+  @apply text-xs font-semibold tracking-[0.14em] text-caramel-ink uppercase;
+}
 @utility card {
-  @apply rounded-2xl border border-line bg-surface p-5;
+  @apply rounded-2xl border border-line bg-surface p-5 shadow-[0_1px_2px_rgba(45,27,84,0.05)];
+}
+@utility skeleton {
+  @apply animate-pulse rounded-md bg-surface-2;
 }
 @utility label {
   @apply mb-1 block text-sm font-semibold text-ink;
@@ -107,7 +134,7 @@ body {
   @apply text-sm text-ink-soft;
 }
 @utility input {
-  @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink placeholder:text-ink-soft/70;
+  @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink placeholder:text-ink-soft/70 focus:border-purple/50;
 }
 @utility btn {
   @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
@@ -143,7 +170,8 @@ body {
   line-height: 1.7;
 }
 .guide-md h2 {
-  font-family: var(--font-sans);
+  font-family: var(--font-serif);
+  color: var(--purple);
   font-size: 1.5rem;
   font-weight: 700;
   margin: 1.75rem 0 0.5rem;

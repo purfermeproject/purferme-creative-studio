@@ -8,15 +8,29 @@ Internal tool for the Puŕ Fermé Project team. It generates ad creatives for **
 
 | Page | What it does |
 |---|---|
-| **Create ads** (`/create`) | Pick product, creative type (depends on platform), angle, persona, language and 2–4 concepts. Streams generation, validates the JSON, scans every concept against the compliance terms. Save, copy, regenerate one, or make structural variations (including the same angle adapted for the other two platforms). Products on hold or blocked can't be generated. |
+| **Create** (`/create`) | A three-column workspace (a guided 3-step flow on mobile). **Brief** (product → objective → audience → platform and format → angle) → **3 proposals** → **develop** one as an ad concept, a UGC creator script or an ad copy set. The draft saves immediately and autosaves while you edit. The right-hand panel has **Check** (claims and brand validation, sign-off, approval), **Edit** (every line) and **History** (restore any version). Images, variations and the handoff ZIP all work from the open ad. Products on hold or blocked can't be generated. |
 | **Platform guide** (`/guide`) | Comparison table of the three platforms (selected one highlighted) and the selected platform's guide. |
 | **Claim checker** (`/check`) | Instant inline highlighting of red/amber terms, plus a model "deep check" (FSSAI Advertising & Claims Regulations 2018, ASCI incl. AI-content labelling, IMS Act) returning a verdict, issues and a rewrite. |
-| **Library** (`/library`) | Saved creatives with filters, search, status, persisted QA checklist and CSV export. A creative can only move to Approved (or later stages) with **zero red flags** (re-scanned with current terms) **and every QA item ticked**. |
+| **Library** (`/library`) | Every draft, with filters, search, status, CSV export and **Open in workspace**. An ad can only move to Approved (or later) when it has **no red flags or restricted claims**, its **uncertain claims are signed off by an approver**, and **every QA item is ticked**. |
 | **Results** (`/results`) | Manual inputs with live verdicts (Meta: hook rate, CTR, CPA, frequency; Amazon/Flipkart: ACoS, CTR, conversion, clicks), CSV upload with column mapping, saved results, and a weekly brief from the last 7 days. |
-| **Admin** (`/admin`) | Edit products (status, claims, pack image), brand settings, angles/personas/languages, platform rules and guides, compliance terms, verdict thresholds. |
+| **Admin** (`/admin`) | Products (status, claims, **ingredients, messaging priorities, evidence for amber claims, product links**, original pack photo), brand settings, angles, personas and languages, platform rules and guides, compliance terms, verdict thresholds, and **team roles**. |
 | **Usage** (`/admin/usage`) | Tokens and estimated cost per day, user and call type. |
 
 The **platform switch** at the top of every page changes creative types, the rules sent to the model, the guide, the compliance terms and how results are judged.
+
+See [docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md) for the audit, the phased plan and what is implemented now versus later.
+
+## Roles
+
+Viewer (look, check copy) → Creator (make and edit ads) → Approver (sign off uncertain claims, approve, change status, delete) → Admin (settings, roles). Every server action and API route enforces them.
+
+- While **Settings → Team roles** is empty, everyone is an admin (the original behaviour). The person who adds the first entry is kept as an admin.
+- `ADMIN_EMAILS` (comma-separated) are always admins, as a recovery path. `DEFAULT_ROLE` sets the role for unlisted people once roles are on (default: creator).
+- With the shared team password, people are identified by the name they type, so roles are only as strong as that. Use Google sign-in or email links when roles must be relied on.
+
+## Packaging stays original
+
+By default, images are made in two steps. The AI paints the scene with an empty spot, then the original pack photo from Settings is composited in with sharp, scaled but never redrawn. A transparent PNG cut-out looks best. "AI redraws it" is available for mood boards and is labelled as unsafe for launch. AI edits of an image containing the original pack are refused unless you explicitly allow it for a draft.
 
 ## Designer tools
 
@@ -57,7 +71,9 @@ Copy `.env.example` to `.env.local` and fill it in. Never prefix secrets with `N
 | `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM` | one sign-in method | Email magic links via Resend; needs a verified sending domain. |
 | `AUTH_DISABLED` | no | `true` skips the login screen entirely on your own computer. Ignored on Vercel. |
 | `AUTH_DEV_LOGIN` | no | `true` shows a password-less "dev sign-in" for local runs/tests. Ignored on Vercel. |
-| `BLOB_READ_WRITE_TOKEN` | no | Enables pack-image upload in Admin. Without it, paste an image URL. |
+| `BLOB_READ_WRITE_TOKEN` | no | Stores pack photos in Vercel Blob. Without it they're stored in the database. |
+| `ADMIN_EMAILS` | no | Comma-separated emails that are always admins (role recovery). |
+| `DEFAULT_ROLE` | no | Role for people not listed in Team roles once roles are on: `viewer`, `creator` (default), `approver` or `admin`. |
 
 ## Run locally
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useRef, useTransition, type KeyboardEvent } from "react";
 import { PLATFORMS, type Platform } from "@/lib/types";
 
@@ -12,13 +12,17 @@ const SUBTITLES: Record<Platform, string> = {
 };
 
 /** Persist the choice and retint immediately, before the server re-render lands. */
-function applyPlatform(p: Platform) {
+export function applyPlatform(p: Platform) {
   document.cookie = `platform=${p}; path=/; max-age=31536000; samesite=lax`;
   document.documentElement.setAttribute("data-platform", p);
 }
 
+export const PLATFORM_TITLES = TITLES;
+export const PLATFORM_SUBTITLES = SUBTITLES;
+
 export function PlatformSwitch({ value }: { value: Platform }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -39,12 +43,15 @@ export function PlatformSwitch({ value }: { value: Platform }) {
     }
   }
 
+  // The Create workspace has its own platform step in the brief.
+  if (pathname === "/create") return null;
+
   return (
     <div
       role="radiogroup"
       aria-label="Platform"
       onKeyDown={onKeyDown}
-      className="grid w-full grid-cols-3 gap-1 rounded-2xl border border-line bg-surface-2 p-1.5 sm:w-auto"
+      className="grid grid-cols-3 gap-0.5 rounded-xl border border-line bg-surface-2 p-1"
       aria-busy={pending}
       data-testid="platform-switch"
     >
@@ -61,12 +68,12 @@ export function PlatformSwitch({ value }: { value: Platform }) {
             aria-checked={selected}
             tabIndex={selected ? 0 : -1}
             onClick={() => choose(p)}
-            className={`flex min-w-0 flex-col items-center rounded-xl px-3 py-2 transition-colors sm:min-w-32 sm:px-5 ${
+            className={`flex min-w-0 flex-col items-center rounded-lg px-2.5 py-1 transition-colors sm:min-w-24 ${
               selected ? "bg-accent text-accent-ink shadow-sm" : "text-ink-soft hover:bg-surface hover:text-ink"
             }`}
           >
-            <span className="text-lg leading-tight font-bold tracking-tight sm:text-xl">{TITLES[p]}</span>
-            <span className={`text-[11px] leading-tight sm:text-xs ${selected ? "opacity-90" : ""}`}>{SUBTITLES[p]}</span>
+            <span className="text-sm leading-tight font-semibold">{TITLES[p]}</span>
+            <span className={`hidden text-[10px] leading-tight sm:block ${selected ? "opacity-90" : ""}`}>{SUBTITLES[p]}</span>
           </button>
         );
       })}
