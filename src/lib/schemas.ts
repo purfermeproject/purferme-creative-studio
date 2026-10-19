@@ -61,3 +61,15 @@ export const WeeklyBriefSchema = z.object({
   summary: z.string(),
 });
 export type WeeklyBrief = z.infer<typeof WeeklyBriefSchema>;
+
+export const DesignReadSchema = z.object({
+  text: z.string().describe("Every visible word in reading order, exactly as written (keep spelling mistakes), one block per line"),
+  people_visible: z.boolean(),
+  people_note: z.string().describe("Who appears (e.g. adult, child, apparent expert/doctor) or empty"),
+  logo_visible: z.boolean(),
+  pack_visible: z.boolean(),
+  looks_ai_generated: z.boolean().describe("True if parts look synthetic (warped hands, garbled text, odd faces)"),
+  ai_label_visible: z.boolean().describe("True if an 'AI-generated' style label is shown"),
+  notes: z.array(z.string()).describe("Short design observations: legibility, clutter, text over busy areas, before/after framing, etc."),
+});
+export type DesignRead = z.infer<typeof DesignReadSchema>;

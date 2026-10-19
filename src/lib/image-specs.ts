@@ -68,3 +68,29 @@ export const ratioLabel = (w: number, h: number) => {
 
 export const MAX_SIDE = 4096;
 export const MIN_SIDE = 200;
+
+export type SizeCheck = { ok: boolean; match: ImageSpec | null; ratio: string; issues: string[]; closest: ImageSpec };
+
+/** How well an uploaded design's pixel size fits a platform. */
+export function checkSize(platform: Platform, w: number, h: number): SizeCheck {
+  const specs = IMAGE_SPECS[platform];
+  const r = w / h;
+  const match = specs.find((s) => s.w === w && s.h === h) ?? null;
+  const closest = [...specs].sort((a, b) => Math.abs(a.w / a.h - r) - Math.abs(b.w / b.h - r))[0];
+  const issues: string[] = [];
+  if (!match) {
+    const sameShape = Math.abs(closest.w / closest.h - r) < 0.02;
+    issues.push(
+      sameShape
+        ? `Right shape (${ratioLabel(w, h)}) but not the standard size. ${closest.label} is ${closest.w}×${closest.h}.`
+        : `Not a standard ${platform === "meta" ? "Meta" : platform === "amazon" ? "Amazon" : "Flipkart"} shape. Closest is ${closest.label} (${closest.w}×${closest.h}).`,
+    );
+  }
+  if (platform === "meta") {
+    // Meta recommends at least 1080 px on the short side.
+    if (Math.min(w, h) < 1080) issues.push(`Too small: the short side is ${Math.min(w, h)} px; Meta recommends at least 1080 px.`);
+  } else if (Math.max(w, h) < 1000) {
+    issues.push(`Too small: the long side is ${Math.max(w, h)} px; use at least 1000 px so it stays sharp${platform === "amazon" ? " and zoom works" : ""}.`);
+  }
+  return { ok: issues.length === 0, match, ratio: ratioLabel(w, h), issues, closest };
+}

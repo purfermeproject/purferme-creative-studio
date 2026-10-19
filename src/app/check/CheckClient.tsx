@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { Highlighted, ScanSummary } from "@/components/Scan";
 import { highlight, scan, type Term } from "@/lib/compliance";
-import type { DeepCheck } from "@/lib/schemas";
+import type { DeepCheck, DesignRead } from "@/lib/schemas";
+import type { ScanResult } from "@/lib/compliance";
 import { PLATFORM_LABELS, type Platform } from "@/lib/types";
 
 type ProductOption = { id: string; slug: string; name: string; status: string };
@@ -21,6 +22,40 @@ export function CheckClient({ platform, products, terms }: { platform: Platform;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  type DesignResult = {
+    read: DesignRead;
+    scan: ScanResult;
+    size: { w: number; h: number; ok: boolean; ratio: string; issues: string[]; match: { label: string } | null };
+    flags: string[];
+  };
+  const [design, setDesign] = useState<DesignResult | null>(null);
+  const [designPreview, setDesignPreview] = useState<string | null>(null);
+  const [designBusy, setDesignBusy] = useState(false);
+  const [designError, setDesignError] = useState("");
+
+  async function checkDesign(file: File | undefined) {
+    if (!file) return;
+    setDesignError("");
+    setDesign(null);
+    setDesignPreview(URL.createObjectURL(file));
+    setDesignBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("platform", platform);
+      if (productId) fd.append("productId", productId);
+      const res = await fetch("/api/check-design", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't check the design. Try again.");
+      setDesign(data);
+      setText(data.read.text);
+      setDeep(null);
+    } catch (e) {
+      setDesignError(e instanceof Error ? e.message : "Couldn't check the design. Try again.");
+    } finally {
+      setDesignBusy(false);
+    }
+  }
 
   const slug = products.find((p) => p.id === productId)?.slug ?? null;
   const segments = useMemo(() => highlight(text, platform, terms, slug), [text, platform, terms, slug]);
@@ -83,6 +118,60 @@ export function CheckClient({ platform, products, terms }: { platform: Platform;
             <span className="hint">Checking for {PLATFORM_LABELS[platform]}</span>
           </div>
         </div>
+
+        <section aria-labelledby="design-h" className="card space-y-3" data-testid="design-check" aria-busy={designBusy}>
+          <div>
+            <h2 id="design-h" className="text-lg font-bold">
+              Check a finished design
+            </h2>
+            <p className="hint">Upload artwork from Canva, Photoshop or Figma. The app reads every word in it, checks the claims and the size for {PLATFORM_LABELS[platform]}.</p>
+          </div>
+          <input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload a design" onChange={(e) => checkDesign(e.target.files?.[0])} />
+          {designBusy ? <p className="hint animate-pulse">Reading the design…</p> : null}
+          {designError ? (
+            <p role="alert" className="text-sm text-red">
+              {designError}
+            </p>
+          ) : null}
+          {design ? (
+            <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
+              {designPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={designPreview} alt="Your design" className="w-full rounded-lg border border-line" />
+              ) : (
+                <span />
+              )}
+              <div className="space-y-2 text-sm" data-testid="design-result">
+                <p>
+                  <strong>
+                    {design.size.w}×{design.size.h}
+                  </strong>{" "}
+                  ({design.size.ratio}){" "}
+                  {design.size.ok ? <span className="chip-green">Size OK{design.size.match ? `: ${design.size.match.label}` : ""}</span> : <span className="chip-amber">Check size</span>}
+                </p>
+                {design.size.issues.map((i) => (
+                  <p key={i} className="text-amber">
+                    {i}
+                  </p>
+                ))}
+                <ScanSummary result={design.scan} compact />
+                {design.flags.map((f) => (
+                  <p key={f} className="text-red">
+                    ⚠ {f}
+                  </p>
+                ))}
+                {design.read.notes.length ? (
+                  <ul className="list-disc pl-5 text-ink-soft">
+                    {design.read.notes.map((n) => (
+                      <li key={n}>{n}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                <p className="hint">The words found are now in the box above, highlighted below. Edit them or run a deep check.</p>
+              </div>
+            </div>
+          ) : null}
+        </section>
 
         <section aria-labelledby="instant-h" className="card space-y-3" aria-live="polite">
           <h2 id="instant-h" className="text-lg font-bold">

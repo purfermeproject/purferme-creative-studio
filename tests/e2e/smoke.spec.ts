@@ -237,3 +237,19 @@ test("Preview shows the image in platform mock-ups with safe zones", async ({ pa
   await pv.getByRole("button", { name: "Close" }).click();
   await expect(pv).toHaveCount(0);
 });
+
+test("Check a finished design: reads the text, flags claims and size", async ({ page }) => {
+  const sharp = (await import("sharp")).default;
+  const png = await sharp({ create: { width: 720, height: 1280, channels: 3, background: "#c8862a" } }).png().toBuffer();
+  await signIn(page);
+  await choosePlatform(page, "Meta");
+  await page.goto("/check");
+  await page.getByLabel("Upload a design").setInputFiles({ name: "design.png", mimeType: "image/png", buffer: png });
+  const result = page.getByTestId("design-result");
+  await expect(result).toContainText("720×1280", { timeout: 30_000 });
+  await expect(result).toContainText("Right shape (9:16)");
+  await expect(result).toContainText("Too small");
+  await expect(result).toContainText("red flag");
+  await expect(page.getByLabel("Copy to check")).toHaveValue(/Gluten free crunch/);
+  await expect(page.getByTestId("highlighted").locator("mark").first()).toBeVisible();
+});

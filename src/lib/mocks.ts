@@ -1,4 +1,4 @@
-import type { Concept, DeepCheck, WeeklyBrief } from "./schemas";
+import type { Concept, DeepCheck, DesignRead, WeeklyBrief } from "./schemas";
 import { isVideoType, type GenerationInput } from "./prompts";
 import type { ScanResult } from "./compliance";
 
@@ -77,5 +77,18 @@ export function mockWeeklyBrief(): WeeklyBrief {
       hook: "3pm called. It wants chai.",
     })),
     summary: "Mock mode is on (ANTHROPIC_MOCK=true), so this brief is placeholder text.",
+  };
+}
+
+export function mockDesignRead(): DesignRead {
+  return {
+    text: "Millet cookies\nGluten free crunch\nNo maida. Sweetened with jaggery.\nShop now",
+    people_visible: false,
+    people_note: "",
+    logo_visible: true,
+    pack_visible: true,
+    looks_ai_generated: false,
+    ai_label_visible: false,
+    notes: ["Mock mode: sample reading, not your real image."],
   };
 }

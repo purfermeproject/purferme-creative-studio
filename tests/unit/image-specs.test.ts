@@ -58,3 +58,22 @@ describe("fitToSize", () => {
     }
   });
 });
+
+import { checkSize } from "@/lib/image-specs";
+
+describe("checkSize", () => {
+  it("accepts exact platform sizes", () => {
+    expect(checkSize("meta", 1080, 1920).ok).toBe(true);
+    expect(checkSize("amazon", 2000, 2000).match?.id).toBe("amz-listing");
+  });
+  it("flags the right shape at the wrong size", () => {
+    const c = checkSize("meta", 720, 1280);
+    expect(c.ok).toBe(false);
+    expect(c.issues.join(" ")).toMatch(/Right shape \(9:16\)/);
+    expect(c.issues.join(" ")).toMatch(/Too small/);
+  });
+  it("flags odd shapes and names the closest", () => {
+    const c = checkSize("amazon", 1500, 900);
+    expect(c.issues[0]).toMatch(/Not a standard Amazon shape/);
+  });
+});
