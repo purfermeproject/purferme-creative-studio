@@ -44,3 +44,16 @@ export function conceptToText(c: Concept & { platform?: Platform; scan?: ScanRes
   out.push("", "AI RENDER PROMPT:", c.ai_prompt);
   return out.join("\n");
 }
+
+/** Turns a saved creative row back into the concept shape. */
+export function creativeToConcept(c: {
+  title: string; persona: string; angle: string; format: string; language: string; hook: string;
+  frames: Concept["frames"]; copy: Concept["copy"]; aiPrompt: string; needsRealPerson: boolean; aiLabelNeeded: boolean;
+  claims: Concept["claims"]; whyItFits: string;
+}): Concept {
+  return {
+    title: c.title, persona: c.persona, angle: c.angle, format: c.format, language: c.language, hook: c.hook,
+    frames: c.frames, copy: c.copy, ai_prompt: c.aiPrompt, needs_real_person: c.needsRealPerson,
+    ai_label_needed: c.aiLabelNeeded, claims: c.claims, why_it_fits: c.whyItFits,
+  };
+}

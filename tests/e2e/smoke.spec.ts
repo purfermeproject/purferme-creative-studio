@@ -143,7 +143,7 @@ test("Make image creates a picture that stays with the saved ad", async ({ page 
   const card = page.getByTestId("concept-0");
   await expect(card).toBeVisible({ timeout: 60_000 });
   await card.getByRole("button", { name: "Make image" }).click();
-  const img = card.getByTestId("image-maker").locator("img");
+  const img = card.getByTestId("image-gallery").locator("img");
   await expect(img).toHaveCount(1);
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
   // Meta video ideas default to the exact Reels size.
@@ -151,13 +151,13 @@ test("Make image creates a picture that stays with the saved ad", async ({ page 
   await card.getByRole("button", { name: "Save", exact: true }).click();
   await card.getByRole("link", { name: /Saved/ }).click();
   const item = page.locator("details[open][data-testid^=creative-]");
-  await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(1);
+  await expect(item.getByTestId("image-gallery").locator("img")).toHaveCount(1);
   await item.getByLabel("Image size").selectOption({ label: "Feed 4:5 · 1080×1350" });
   await item.getByRole("button", { name: "Make another image" }).click();
-  await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(2);
+  await expect(item.getByTestId("image-gallery").locator("img")).toHaveCount(2);
   await expect(item.getByTestId("image-dims").nth(1)).toContainText("1080×1350");
   await page.reload();
-  await expect(page.locator("details[open][data-testid^=creative-]").getByTestId("image-maker").locator("img")).toHaveCount(2);
+  await expect(page.locator("details[open][data-testid^=creative-]").getByTestId("image-gallery").locator("img")).toHaveCount(2);
 });
 
 test("team password: wrong password is refused, right one signs in with your name", async ({ page }) => {
@@ -212,12 +212,12 @@ test("Brand kit + Add text & logo saves a full-size image with crisp text", asyn
   await editor.getByLabel("Headline").fill("3pm called. It wants chai.");
   await editor.getByRole("button", { name: "Save as new image" }).click();
   await expect(editor).toHaveCount(0);
-  await expect(card.getByTestId("image-maker").locator("img")).toHaveCount(2);
+  await expect(card.getByTestId("image-gallery").locator("img")).toHaveCount(2);
   await expect(card.getByTestId("image-dims").nth(1)).toContainText("1080×1350");
   await card.getByRole("button", { name: "Save", exact: true }).click();
   await card.getByRole("link", { name: /Saved/ }).click();
   const item = page.locator("details[open][data-testid^=creative-]");
-  await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(2);
+  await expect(item.getByTestId("image-gallery").locator("img")).toHaveCount(2);
   await expect(item.getByText("with text")).toBeVisible();
 });
 
@@ -252,4 +252,28 @@ test("Check a finished design: reads the text, flags claims and size", async ({ 
   await expect(result).toContainText("red flag");
   await expect(page.getByLabel("Copy to check")).toHaveValue(/Gluten free crunch/);
   await expect(page.getByTestId("highlighted").locator("mark").first()).toBeVisible();
+});
+
+test("Make all scenes builds a storyboard and the handoff pack ZIP has everything", async ({ page }) => {
+  await signIn(page);
+  await choosePlatform(page, "Meta");
+  await page.getByLabel("Type of ad", { exact: true }).selectOption("9:16 UGC-style video (15–30s)");
+  await page.getByRole("button", { name: /Generate/ }).click();
+  const card = page.getByTestId("concept-0");
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await card.getByRole("button", { name: /Make all \d+ scenes/ }).click();
+  const board = card.getByTestId("storyboard");
+  await expect(board.locator("img")).toHaveCount(4, { timeout: 60_000 });
+  await card.getByRole("button", { name: "Save", exact: true }).click();
+  const zipLink = card.getByRole("link", { name: "Handoff pack (.zip)" });
+  await expect(zipLink).toBeVisible();
+  const res = await page.request.get((await zipLink.getAttribute("href"))!);
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toBe("application/zip");
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(await res.body());
+  const names = Object.keys(zip.files);
+  expect(names.some((n) => n.endsWith("/script.txt"))).toBe(true);
+  expect(names.some((n) => n.endsWith("/storyboard.html"))).toBe(true);
+  expect(names.filter((n) => /\/images\/scene-0\d-1080x1920-/.test(n)).length).toBe(4);
 });

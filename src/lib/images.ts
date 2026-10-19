@@ -125,6 +125,7 @@ export async function generateImage(opts: {
     frameIndex: opts.frameIndex ?? null,
     prompt: opts.prompt,
     model,
+    size: opts.target,
   });
   await db.insert(schema.generationLogs).values({
     user: opts.user,

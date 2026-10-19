@@ -54,37 +54,60 @@ export function ImageMaker({
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
 
-  async function make() {
+  const [progress, setProgress] = useState("");
+
+  async function requestImage(frameIndex: number): Promise<MadeImage & { usedPackPhoto: boolean }> {
+    const res = await fetch("/api/image", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        platform,
+        productId,
+        creativeType,
+        concept,
+        frameIndex,
+        creativeId: creativeId ?? null,
+        packImage: packImage ?? null,
+        specId: specId === CUSTOM ? null : specId,
+        textMode,
+        custom: specId === CUSTOM ? { w: customW, h: customH } : null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Couldn't make the image. Try again.");
+    return { id: data.id, url: data.url, label: data.label, frameIndex, usedPackPhoto: data.usedPackPhoto };
+  }
+
+  async function make(frames: number[]) {
     setBusy(true);
     setError("");
     setNote("");
+    let acc = [...images];
+    let usedPack = true;
     try {
-      const res = await fetch("/api/image", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          platform,
-          productId,
-          creativeType,
-          concept,
-          frameIndex: frame,
-          creativeId: creativeId ?? null,
-          packImage: packImage ?? null,
-          specId: specId === CUSTOM ? null : specId,
-          textMode,
-          custom: specId === CUSTOM ? { w: customW, h: customH } : null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Couldn't make the image. Try again.");
-      onImages([...images, { id: data.id, url: data.url, label: data.label, frameIndex: frame }]);
-      if (!data.usedPackPhoto) setNote("Tip: add a pack photo (Tools → Settings → Products) so the pack in the image matches your real one.");
+      for (let i = 0; i < frames.length; i++) {
+        if (frames.length > 1) setProgress(`Scene ${i + 1} of ${frames.length}…`);
+        const img = await requestImage(frames[i]);
+        usedPack &&= img.usedPackPhoto;
+        acc = [...acc, { id: img.id, url: img.url, label: img.label, frameIndex: img.frameIndex }];
+        onImages(acc);
+      }
+      if (!usedPack) setNote("Tip: add a pack photo (Tools → Settings → Products) so the pack in the image matches your real one.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't make the image. Try again.");
     } finally {
       setBusy(false);
+      setProgress("");
     }
   }
+
+  // Latest image for each scene, preferring versions with brand text added.
+  const storyboard = concept.frames.map((f, i) => {
+    const forScene = images.filter((im) => (im.frameIndex ?? 0) === i);
+    const withText = forScene.filter((im) => im.label?.includes("with text"));
+    return { frame: f, image: (withText.length ? withText : forScene).at(-1) ?? null };
+  });
+  const showStoryboard = concept.frames.length > 1 && storyboard.some((s) => s.image);
 
   return (
     <div className="space-y-3 rounded-xl border border-dashed border-line p-3" data-testid="image-maker">
@@ -129,9 +152,20 @@ export function ImageMaker({
           <option value="overlay">Text: add crisp brand text after</option>
           <option value="ai">Text: AI draws it in the image</option>
         </select>
-        <button type="button" className="btn-secondary" onClick={make} disabled={busy || (specId === CUSTOM && !customValid)}>
-          {busy ? "Making image… (up to a minute)" : images.length ? "Make another image" : "Make image"}
+        <button type="button" className="btn-secondary" onClick={() => make([frame])} disabled={busy || (specId === CUSTOM && !customValid)}>
+          {busy ? progress || "Making image… (up to a minute)" : images.length ? "Make another image" : "Make image"}
         </button>
+        {concept.frames.length > 1 ? (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => make(concept.frames.map((_, i) => i))}
+            disabled={busy || (specId === CUSTOM && !customValid)}
+            title="One image per scene, for a storyboard"
+          >
+            Make all {concept.frames.length} scenes
+          </button>
+        ) : null}
       </div>
       {specId === CUSTOM && !customValid ? (
         <p className="hint">Width and height must be whole numbers between {MIN_SIDE} and {MAX_SIDE} px.</p>
@@ -144,8 +178,32 @@ export function ImageMaker({
         </p>
       ) : null}
       {note ? <p className="hint">{note}</p> : null}
+      {showStoryboard ? (
+        <div data-testid="storyboard">
+          <p className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">Storyboard</p>
+          <ol className="flex gap-3 overflow-x-auto pb-2">
+            {storyboard.map(({ frame: f, image }, i) => (
+              <li key={i} className="w-36 shrink-0 space-y-1 text-xs">
+                <div className="flex aspect-[9/16] items-center justify-center overflow-hidden rounded-lg border border-line bg-surface-2">
+                  {image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={image.url} alt={`Scene ${i + 1}`} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="hint p-2 text-center">No image yet</span>
+                  )}
+                </div>
+                <p className="font-bold">
+                  {i + 1}. {f.slot}
+                </p>
+                <p className="line-clamp-2 font-semibold">{f.onscreen}</p>
+                {f.audio ? <p className="line-clamp-2 text-ink-soft">🔊 {f.audio}</p> : null}
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
       {images.length ? (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-testid="image-gallery">
           {images.map((img) => (
             <li key={img.id} className="space-y-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}

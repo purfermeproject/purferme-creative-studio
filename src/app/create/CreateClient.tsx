@@ -345,9 +345,14 @@ export function CreateClient({
             actions={
               <>
                 {it.saved ? (
-                  <Link href={`/library?highlight=${it.saved}`} className="btn-secondary">
-                    Saved · view in Saved ads
-                  </Link>
+                  <>
+                    <Link href={`/library?highlight=${it.saved}`} className="btn-secondary">
+                      Saved · view in Saved ads
+                    </Link>
+                    <a href={`/api/creatives/${it.saved}/pack`} className="btn-secondary" download>
+                      Handoff pack (.zip)
+                    </a>
+                  </>
                 ) : (
                   <button className="btn-primary" onClick={() => save(it)} disabled={Boolean(it.busy)}>
                     Save

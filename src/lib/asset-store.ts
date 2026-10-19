@@ -26,10 +26,12 @@ export async function storeAsset(opts: {
   prompt?: string;
   model?: string;
   creativeId?: string | null;
+  /** Known size (e.g. SVG placeholders, which can't be measured). */
+  size?: { w: number; h: number };
 }): Promise<StoredAsset> {
-  let w: number | null = null;
-  let h: number | null = null;
-  if (opts.mime.startsWith("image/") && opts.mime !== "image/svg+xml") {
+  let w: number | null = opts.size?.w ?? null;
+  let h: number | null = opts.size?.h ?? null;
+  if (w === null && opts.mime.startsWith("image/") && opts.mime !== "image/svg+xml") {
     try {
       const m = await sharp(opts.data).metadata();
       w = m.width ?? null;

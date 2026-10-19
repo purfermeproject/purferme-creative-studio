@@ -211,6 +211,9 @@ export function LibraryItem({
             >
               {copied ? "Copied" : "Copy as text"}
             </button>
+            <a href={`/api/creatives/${c.id}/pack`} className="btn-primary px-3 py-1.5 text-sm" download>
+              Download handoff pack (.zip)
+            </a>
             <button className="btn-secondary px-3 py-1.5 text-sm" disabled={pending} onClick={() => start(async () => void (await rescan(c.id)))}>
               Re-check words
             </button>
