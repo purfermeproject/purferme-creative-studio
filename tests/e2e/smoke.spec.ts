@@ -277,3 +277,34 @@ test("Make all scenes builds a storyboard and the handoff pack ZIP has everythin
   expect(names.some((n) => n.endsWith("/storyboard.html"))).toBe(true);
   expect(names.filter((n) => /\/images\/scene-0\d-1080x1920-/.test(n)).length).toBe(4);
 });
+
+test("Edit with words, All sizes and Compare", async ({ page }) => {
+  await signIn(page);
+  await choosePlatform(page, "Meta");
+  await page.getByLabel("Type of ad", { exact: true }).selectOption("Static image ad (4:5)");
+  await page.getByRole("button", { name: /Generate/ }).click();
+  const card = page.getByTestId("concept-0");
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await card.getByRole("button", { name: "Make image" }).click();
+  const gallery = card.getByTestId("image-gallery");
+  await expect(gallery.locator("img")).toHaveCount(1);
+
+  await card.getByRole("button", { name: "All sizes" }).first().click();
+  await expect(gallery.locator("img")).toHaveCount(4, { timeout: 30_000 });
+  const dims = card.getByTestId("image-dims");
+  await expect(dims.nth(1)).toContainText("1080×1920");
+  await expect(dims.nth(2)).toContainText("1080×1080");
+  await expect(dims.nth(3)).toContainText("1200×628");
+
+  await card.getByRole("button", { name: "Edit with words" }).first().click();
+  await card.getByLabel("Describe the change").fill("make the background lighter");
+  await card.getByRole("button", { name: "Apply change" }).click();
+  await expect(gallery.locator("img")).toHaveCount(5, { timeout: 30_000 });
+  await expect(dims.nth(4)).toContainText("1080×1350");
+
+  await gallery.getByLabel("Compare").nth(0).check();
+  await gallery.getByLabel("Compare").nth(4).check();
+  await card.getByRole("button", { name: "Compare 2 images side by side" }).click();
+  await expect(page.getByTestId("compare").locator("img")).toHaveCount(2);
+  await page.getByTestId("compare").getByRole("button", { name: "Close" }).click();
+});

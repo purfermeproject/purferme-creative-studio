@@ -38,6 +38,11 @@ export function ImageMaker({
   priceText?: string;
 }) {
   const [previewing, setPreviewing] = useState<MadeImage | null>(null);
+  const [wordsFor, setWordsFor] = useState<string | null>(null);
+  const [instruction, setInstruction] = useState("");
+  const [working, setWorking] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [comparing, setComparing] = useState(false);
   const [textMode, setTextMode] = useState<"overlay" | "ai">("overlay");
   const [editing, setEditing] = useState<MadeImage | null>(null);
   const [frame, setFrame] = useState(0);
@@ -98,6 +103,41 @@ export function ImageMaker({
     } finally {
       setBusy(false);
       setProgress("");
+    }
+  }
+
+  async function post(url: string, body: unknown) {
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "That didn't work. Try again.");
+    return data;
+  }
+
+  async function editWithWords(img: MadeImage) {
+    setWorking(img.id);
+    setError("");
+    try {
+      const a = await post("/api/image/edit", { assetId: img.id, instruction, creativeId: creativeId ?? null });
+      onImages([...images, { id: a.id, url: a.url, label: a.label, frameIndex: img.frameIndex ?? null }]);
+      setWordsFor(null);
+      setInstruction("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't edit the image.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function allSizes(img: MadeImage) {
+    setWorking(img.id);
+    setError("");
+    try {
+      const data = await post("/api/image/resize", { assetId: img.id, platform, creativeId: creativeId ?? null });
+      onImages([...images, ...data.images.map((a: MadeImage) => ({ id: a.id, url: a.url, label: a.label, frameIndex: img.frameIndex ?? null }))]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't make the other sizes.");
+    } finally {
+      setWorking(null);
     }
   }
 
@@ -178,6 +218,35 @@ export function ImageMaker({
         </p>
       ) : null}
       {note ? <p className="hint">{note}</p> : null}
+      {picked.length >= 2 ? (
+        <button type="button" className="btn-secondary px-3 py-1.5 text-sm" onClick={() => setComparing(true)}>
+          Compare {picked.length} images side by side
+        </button>
+      ) : null}
+      {comparing ? (
+        <div role="dialog" aria-modal="true" aria-label="Compare images" className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4" data-testid="compare" onKeyDown={(e) => e.key === "Escape" && setComparing(false)}>
+          <div className="mx-auto max-w-7xl space-y-4">
+            <div className="flex justify-end">
+              <button type="button" className="btn-secondary" onClick={() => setComparing(false)} autoFocus>
+                Close
+              </button>
+            </div>
+            <div className={`grid gap-4 ${picked.length > 2 ? "md:grid-cols-4" : "md:grid-cols-2"}`}>
+              {picked.map((id) => {
+                const im = images.find((x) => x.id === id);
+                if (!im) return null;
+                return (
+                  <figure key={id} className="space-y-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={im.url} alt={im.label ?? "Image"} className="max-h-[80vh] w-full rounded-lg bg-white object-contain" />
+                    <figcaption className="text-center text-sm text-white">{im.label}</figcaption>
+                  </figure>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
       {showStoryboard ? (
         <div data-testid="storyboard">
           <p className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">Storyboard</p>
@@ -227,10 +296,45 @@ export function ImageMaker({
                 <button type="button" className="text-accent hover:underline" onClick={() => setPreviewing(img)}>
                   Preview
                 </button>
+                <button type="button" className="text-accent hover:underline" onClick={() => setWordsFor(wordsFor === img.id ? null : img.id)}>
+                  Edit with words
+                </button>
+                <button type="button" className="text-accent hover:underline disabled:opacity-50" disabled={working === img.id} onClick={() => allSizes(img)}>
+                  {working === img.id && wordsFor !== img.id ? "Resizing…" : "All sizes"}
+                </button>
                 <a href={`${img.url}?download`} className="text-accent hover:underline">
                   Download
                 </a>
               </div>
+              <label className="flex items-center gap-1.5 text-xs text-ink-soft">
+                <input
+                  type="checkbox"
+                  checked={picked.includes(img.id)}
+                  onChange={(e) => setPicked((p) => (e.target.checked ? [...p, img.id].slice(-4) : p.filter((x) => x !== img.id)))}
+                />
+                Compare
+              </label>
+              {wordsFor === img.id ? (
+                <form
+                  className="space-y-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    editWithWords(img);
+                  }}
+                >
+                  <input
+                    className="input py-1.5 text-sm"
+                    aria-label="Describe the change"
+                    autoFocus
+                    value={instruction}
+                    onChange={(e) => setInstruction(e.target.value)}
+                    placeholder="e.g. make the background lighter, add steam to the chai"
+                  />
+                  <button type="submit" className="btn-secondary px-3 py-1 text-sm" disabled={working === img.id || instruction.trim().length < 3}>
+                    {working === img.id ? "Editing… (up to a minute)" : "Apply change"}
+                  </button>
+                </form>
+              ) : null}
             </li>
           ))}
         </ul>

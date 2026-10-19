@@ -18,6 +18,15 @@ Internal tool for the Puŕ Fermé Project team. It generates ad creatives for **
 
 The **platform switch** at the top of every page changes creative types, the rules sent to the model, the guide, the compliance terms and how results are judged.
 
+## Designer tools
+
+- **Brand kit** (Tools → Settings → Brand kit): logo, colours, headline/body fonts (Google Fonts name or uploaded font file).
+- **Make image** at exact platform sizes (or a custom size). "Text: add crisp brand text after" makes a text-free picture; **Add text & logo** then places headline, sub-line, button and logo in your fonts and colours, inside platform safe zones.
+- **Preview** shows an image in Reels/Stories, feed, Amazon search/listing and Flipkart card mock-ups with safe-zone overlays.
+- **Edit with words** (AI edit at the same size), **All sizes** (free smart-crop to every size for the platform), **Compare** (2–4 side by side).
+- **Make all scenes** builds a storyboard for video ideas; **Handoff pack (.zip)** bundles images (named by scene and size), script, printable storyboard and the pack photo.
+- **Check a finished design** (Claim checker): upload artwork; the app reads all text in it, runs the claims scan and checks the pixel size for the platform.
+
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS 4

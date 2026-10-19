@@ -137,3 +137,90 @@ export async function generateImage(opts: {
   });
   return { id: stored.id, url: stored.url, w: opts.target.w, h: opts.target.h };
 }
+
+/** Loads a stored image asset. */
+export async function loadAsset(id: string) {
+  const [a] = await db.select().from(schema.assets).where(eq(schema.assets.id, id));
+  return a ?? null;
+}
+
+/** Changes an existing image from a plain-language instruction, keeping its exact size. */
+export async function editImage(opts: { assetId: string; instruction: string; user: string; creativeId?: string | null }) {
+  const a = await loadAsset(opts.assetId);
+  if (!a || !a.mime.startsWith("image/")) throw new UserFacingError("That image no longer exists.");
+  const w = a.width ?? 1080;
+  const h = a.height ?? 1080;
+  const label = `${a.label ? `${a.label} · ` : ""}edited`;
+  const prompt = `Edit this advertising image: ${opts.instruction.trim()}
+Keep everything else the same: the product pack exactly as it is (shape, colours, logo, printed text), the composition and the style. Do not add new words, prices, badges or health claims.`;
+
+  if (isMock() && !process.env.OPENAI_API_KEY) {
+    return storeAsset({
+      data: Buffer.from(mockImageSvg(`${w}x${h}`, `Edited: ${opts.instruction}`)),
+      mime: "image/svg+xml",
+      kind: "edit",
+      label,
+      user: opts.user,
+      frameIndex: a.frameIndex,
+      prompt,
+      model: "mock",
+      creativeId: opts.creativeId,
+      size: { w, h },
+    });
+  }
+  const openai = getClient();
+  // Send a PNG of the current image at the closest generation size.
+  const src = await sharp(Buffer.from(a.dataBase64, "base64")).png().toBuffer();
+  let res;
+  try {
+    res = await openai.images.edit({
+      model: IMAGE_MODEL,
+      prompt,
+      image: [await toFile(src, "current.png", { type: "image/png" })],
+      size: generationSizeFor(w, h),
+      n: 1,
+    });
+  } catch (e) {
+    if (e instanceof OpenAI.APIError) throw new UserFacingError(`OpenAI returned an error${e.status ? ` (${e.status})` : ""}: ${e.message}`);
+    throw e;
+  }
+  const b64 = res.data?.[0]?.b64_json;
+  if (!b64) throw new UserFacingError("The image service returned no image. Try again.");
+  const out = await fitToSize(Buffer.from(b64, "base64"), w, h);
+  await db.insert(schema.generationLogs).values({
+    user: opts.user,
+    kind: "image-edit",
+    promptHash: Buffer.from(prompt).toString("base64").slice(0, 16),
+    model: IMAGE_MODEL,
+    inputTokens: res.usage?.input_tokens ?? 0,
+    outputTokens: res.usage?.output_tokens ?? 0,
+  });
+  return storeAsset({ data: out, mime: "image/jpeg", kind: "edit", label, user: opts.user, frameIndex: a.frameIndex, prompt, model: IMAGE_MODEL, creativeId: opts.creativeId });
+}
+
+/** Smart-crops one image to every other size for a platform (no AI, no cost). */
+export async function resizeToAll(opts: { assetId: string; specs: { w: number; h: number; label: string }[]; user: string; creativeId?: string | null }) {
+  const a = await loadAsset(opts.assetId);
+  if (!a || !a.mime.startsWith("image/")) throw new UserFacingError("That image no longer exists.");
+  const src = Buffer.from(a.dataBase64, "base64");
+  const out = [];
+  for (const s of opts.specs) {
+    if (s.w === a.width && s.h === a.height) continue;
+    const data = await sharp(src, { density: 144 })
+      .resize(s.w, s.h, { fit: "cover", position: sharp.strategy.attention })
+      .jpeg({ quality: 90, mozjpeg: true })
+      .toBuffer();
+    out.push(
+      await storeAsset({
+        data,
+        mime: "image/jpeg",
+        kind: "resize",
+        label: `${s.label}${a.label?.includes("with text") ? " · with text (check crop)" : ""}`,
+        user: opts.user,
+        frameIndex: a.frameIndex,
+        creativeId: opts.creativeId,
+      }),
+    );
+  }
+  return out;
+}
