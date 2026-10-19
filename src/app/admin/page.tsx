@@ -143,6 +143,20 @@ export default async function AdminPage() {
                 <Field label="Amber claims (need evidence)">
                   <textarea name="amberClaims" defaultValue={p.amberClaims.join("\n")} rows={6} className="input" />
                 </Field>
+                <div className="md:col-span-2">
+                  <Field
+                    label="Product story (makes ads specific)"
+                    hint="Taste and texture, what the pack looks like, when people really eat it, lines from real reviews, where ingredients come from. The more real detail, the less generic the ads."
+                  >
+                    <textarea
+                      name="story"
+                      defaultValue={p.story}
+                      rows={5}
+                      className="input"
+                      placeholder={"e.g. Deep cocoa, not too sweet; snaps cleanly then goes crumbly in chai.\nBrown kraft pack with a green window.\nPeople keep them at their desk for the 4pm slump; kids steal them from tiffins.\nReview: 'finally a cookie I don't have to hide from my nutritionist friend'"}
+                    />
+                  </Field>
+                </div>
                 <Field label="Red claims (never use)">
                   <textarea name="redClaims" defaultValue={p.redClaims.join("\n")} rows={4} className="input" />
                 </Field>
@@ -206,6 +220,14 @@ export default async function AdminPage() {
             </Field>
             <Field label="Tone">
               <textarea name="tone" defaultValue={brand.tone} rows={3} className="input" />
+            </Field>
+            <div className="md:col-span-2">
+              <Field label="Ads we like (examples the AI matches for voice)" hint="Paste 2–5 of your best ads or scripts. The AI copies the voice and specificity, not the lines.">
+                <textarea name="exampleAds" defaultValue={brand.exampleAds} rows={10} className="input font-serif" />
+              </Field>
+            </div>
+            <Field label="Words and phrases to never use" hint="One per line. Overused ad clichés make everything sound generic.">
+              <textarea name="avoidPhrases" defaultValue={brand.avoidPhrases} rows={8} className="input" />
             </Field>
             <Field label="Languages (one per line)">
               <textarea name="languages" defaultValue={brand.languages.join("\n")} rows={3} className="input" />

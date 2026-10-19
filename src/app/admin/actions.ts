@@ -34,6 +34,7 @@ const productSchema = z.object({
   statusReason: z.string().trim(),
   notes: z.string().trim(),
   allergens: z.string().trim(),
+  story: z.string().trim().max(5000),
   packImageUrl: z.string().trim(),
 });
 
@@ -117,6 +118,8 @@ export async function saveBrand(_: ActionState, fd: FormData): Promise<ActionSta
         brandContext: String(fd.get("brandContext") ?? "").trim(),
         hardRules: String(fd.get("hardRules") ?? "").trim(),
         tone: String(fd.get("tone") ?? "").trim(),
+        exampleAds: String(fd.get("exampleAds") ?? "").trim(),
+        avoidPhrases: String(fd.get("avoidPhrases") ?? "").trim(),
         angles: lines(fd.get("angles")),
         personas: lines(fd.get("personas")),
         languages: lines(fd.get("languages")),

@@ -1,7 +1,15 @@
 import type { Platform } from "./types";
 import { PLATFORM_LABELS } from "./types";
 
-type BrandLike = { brandContext: string; hardRules: string; tone?: string; angles?: string[]; personas?: string[] };
+type BrandLike = {
+  brandContext: string;
+  hardRules: string;
+  tone?: string;
+  angles?: string[];
+  personas?: string[];
+  exampleAds?: string;
+  avoidPhrases?: string;
+};
 type ProductLike = {
   slug: string;
   name: string;
@@ -11,6 +19,7 @@ type ProductLike = {
   redClaims: string[];
   notes: string;
   allergens?: string;
+  story?: string;
 };
 type RuleLike = { rules: string };
 
@@ -24,8 +33,30 @@ export type GenerationInput = {
   persona: string;
   language: string;
   extra?: string;
+  inspiration?: string;
   hasPackImage?: boolean;
 };
+
+/** Hook mechanisms the model rotates through so ideas don't all open the same way. */
+export const HOOK_MECHANISMS = [
+  "confession (\"I used to…\")",
+  "POV / first-person moment",
+  "counter-intuitive fact",
+  "label-reading challenge (flip the pack, read it out)",
+  "ASMR / crunch close-up demo",
+  "mini-story with a twist",
+  "relatable complaint → fix",
+  "price or swap comparison (what it replaces)",
+  "question that names a specific moment",
+  "list (\"3 things I keep on my desk\")",
+];
+
+/** One phrase per line (or comma-separated) → clean list. */
+export const phraseList = (text: string | undefined) =>
+  (text ?? "")
+    .split(/[\n,]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
 
 /** Angle/persona value meaning "let the model choose a varied mix". */
 export const AUTO = "auto";
@@ -45,6 +76,17 @@ export function buildGenerationPrompt(brand: BrandLike, product: ProductLike, ru
       ? "Give each concept a different angle or persona (and vary format, setting or language too) so no two look alike."
       : `Use the chosen angle and persona for the first concept; vary at least two of persona, angle, format,
 setting or language across the others so no two look alike.`;
+  const avoid = phraseList(brand.avoidPhrases);
+  const quality = `
+QUALITY BAR (this matters most; generic ads fail):
+- Be specific, never generic. Every concept is built on one concrete, recognisably Indian moment with a time, place and object (e.g. 4:30pm laptop slump with cutting chai, Mumbai local at 8:12, steel tiffin at a school gate, Sunday filter coffee). No stock "happy person eating snack" scenes.
+- Give each concept a different hook mechanism, chosen from: ${HOOK_MECHANISMS.join("; ")}. Say which one in why_it_fits.
+- The hook must work in 2 seconds with the sound off: short, surprising, concrete. No questions like "Looking for a healthy snack?".
+- Write like a real person talks (texting tone), not like an ad. Short lines. Light humour where it fits the brand tone.
+- Use real product proof as the reason to believe: exact ingredient %, jaggery, no maida, the QR, pack size, pairing. Prefer one sharp proof point over a list.
+- Visual directions must be shootable: say what's in frame, the camera move and the prop, not adjectives.${avoid.length ? `\n- Never use these overused phrases (or close variants): ${avoid.join("; ")}.` : ""}
+- Final check before answering: for each concept ask "could a competitor run this by swapping the logo?" If yes, rewrite it with a more specific moment and proof.
+${brand.exampleAds?.trim() ? `\nADS WE LIKE (match this voice, specificity and rhythm; do not copy lines):\n${brand.exampleAds.trim()}\n` : ""}${input.inspiration?.trim() ? `\nREFERENCE THE TEAM WANTS TO RIFF ON (borrow the structure/energy, not the words; never copy another brand's claims or name):\n${input.inspiration.trim()}\n` : ""}`;
   const shape = isVideoType(input.creativeType)
     ? "This is a video type: give 4–7 frames with timestamps (slot like \"0–2s\") totalling 15–30s, with visual, on-screen text and audio for every frame."
     : "This is an image/banner type: one frame per image (max 7) or per banner size; leave audio out.";
@@ -59,7 +101,7 @@ GREEN CLAIMS (allowed): ${list(product.greenClaims)}
 AMBER CLAIMS (only if flagged as amber, needs evidence): ${list(product.amberClaims)}
 RED CLAIMS (never use): ${list(product.redClaims)}
 NOTES: ${notes || "(none)"}
-
+${product.story?.trim() ? `PRODUCT STORY (real details: use them for specific, sensory, believable copy):\n${product.story.trim()}\n` : ""}
 PLATFORM: ${PLATFORM_LABELS[input.platform]}. CREATIVE TYPE: ${input.creativeType}.
 ${rule.rules}
 
@@ -71,6 +113,7 @@ List every claim used with its tier. Never include a red claim. Product details 
 ${shape}
 ${input.hasPackImage ? "A photo of the real pack is attached: describe it accurately in ai_prompt and visuals (colours, layout, text on pack). Do not invent pack details.\n" : ""}Set needs_real_person true when any shot needs a real human (always for Amazon people, testimonials and founder/farm footage). Set ai_label_needed true when a synthetic person or realistic synthetic scene appears.
 In why_it_fits, explain in one or two sentences why the concept suits ${PLATFORM_LABELS[input.platform]} specifically.
+${quality}
 Return exactly ${input.n} concepts.`;
 }
 

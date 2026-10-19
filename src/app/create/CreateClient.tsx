@@ -74,6 +74,7 @@ export function CreateClient({
   const [language, setLanguage] = useState(languages[0] ?? "English");
   const [n, setN] = useState(3);
   const [extra, setExtra] = useState("");
+  const [inspiration, setInspiration] = useState("");
   const [image, setImage] = useState<Img | null>(null);
   const [imageError, setImageError] = useState("");
   const [items, setItems] = useState<Item[]>([]);
@@ -94,6 +95,7 @@ export function CreateClient({
     language: language.trim() || "English",
     n,
     extra: extra || undefined,
+    inspiration: inspiration.trim() || undefined,
     image: image ? { mediaType: image.mediaType, base64: image.base64 } : null,
   });
 
@@ -179,7 +181,7 @@ export function CreateClient({
   }
 
   const plain = (xs: string[]) => xs.map((x) => ({ value: x, label: x }));
-  const changedOptions = [angle !== AUTO, persona !== AUTO, language !== (languages[0] ?? "English"), n !== 3, Boolean(extra.trim()), Boolean(image)].filter(Boolean).length;
+  const changedOptions = [angle !== AUTO, persona !== AUTO, language !== (languages[0] ?? "English"), n !== 3, Boolean(extra.trim()), Boolean(inspiration.trim()), Boolean(image)].filter(Boolean).length;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
@@ -257,6 +259,19 @@ export function CreateClient({
                 Anything else? <span className="font-normal text-ink-soft">(optional)</span>
               </label>
               <textarea id="extra" className="input" rows={2} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="e.g. Diwali gifting, 10% off this week" />
+            </div>
+            <div>
+              <label htmlFor="inspiration" className="label">
+                An ad you like <span className="font-normal text-ink-soft">(optional)</span>
+              </label>
+              <textarea
+                id="inspiration"
+                className="input"
+                rows={3}
+                value={inspiration}
+                onChange={(e) => setInspiration(e.target.value)}
+                placeholder="Paste or describe an ad (any brand) whose style you want to riff on. The AI borrows the energy, not the words."
+              />
             </div>
             <div>
               <label htmlFor="photo" className="label">

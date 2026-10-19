@@ -94,3 +94,45 @@ describe("auto angle and persona", () => {
     expect(p).not.toContain("Use the chosen angle and persona for the first concept");
   });
 });
+
+describe("creative quality inputs", () => {
+  const base = {
+    n: 3,
+    platform: "meta" as const,
+    creativeType: "9:16 UGC-style video (15–30s)",
+    angle: "auto",
+    persona: "auto",
+    language: "English",
+  };
+
+  it("always includes the quality bar, hook mechanisms and the competitor check", () => {
+    const p = buildGenerationPrompt(SEED_BRAND, choc, rule("meta"), base);
+    expect(p).toContain("QUALITY BAR");
+    expect(p).toContain("label-reading challenge");
+    expect(p).toContain("could a competitor run this by swapping the logo?");
+  });
+
+  it("adds product story, example ads, avoided phrases and the team's reference when given", () => {
+    const p = buildGenerationPrompt(
+      { ...SEED_BRAND, exampleAds: "EXAMPLE: 4:30 meeting hook", avoidPhrases: "indulge\nelevate, game-changer" },
+      { ...choc, story: "Snaps cleanly, goes crumbly in chai." },
+      rule("meta"),
+      { ...base, inspiration: "A Swiggy-style ad that lists 3 desk snacks" },
+    );
+    expect(p).toContain("PRODUCT STORY");
+    expect(p).toContain("Snaps cleanly, goes crumbly in chai.");
+    expect(p).toContain("ADS WE LIKE");
+    expect(p).toContain("EXAMPLE: 4:30 meeting hook");
+    expect(p).toContain("Never use these overused phrases (or close variants): indulge; elevate; game-changer.");
+    expect(p).toContain("REFERENCE THE TEAM WANTS TO RIFF ON");
+    expect(p).toContain("A Swiggy-style ad that lists 3 desk snacks");
+  });
+
+  it("leaves optional sections out when empty", () => {
+    const p = buildGenerationPrompt({ ...SEED_BRAND, exampleAds: "", avoidPhrases: "" }, { ...choc, story: "" }, rule("meta"), base);
+    expect(p).not.toContain("PRODUCT STORY");
+    expect(p).not.toContain("ADS WE LIKE");
+    expect(p).not.toContain("overused phrases");
+    expect(p).not.toContain("REFERENCE THE TEAM");
+  });
+});

@@ -21,6 +21,7 @@ const Body = z.object({
   language: z.string().trim().min(1).max(60),
   n: z.number().int().min(2).max(4).default(3),
   extra: z.string().max(1000).optional(),
+  inspiration: z.string().max(3000).optional(),
   image: z
     .object({ mediaType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]), base64: z.string().max(7_000_000) })
     .nullable()
@@ -87,6 +88,7 @@ export async function POST(req: Request) {
       persona: input.persona,
       language: input.language,
       extra: `${input.extra ?? ""}${avoid}`,
+      inspiration: input.inspiration,
       hasPackImage: Boolean(image),
     });
   }

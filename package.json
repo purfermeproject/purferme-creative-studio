@@ -14,7 +14,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",
     "db:reset-seed": "tsx scripts/seed.ts --reset",
-    "check:bundle": "node scripts/check-bundle.mjs"
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "vercel-build": "drizzle-kit migrate && next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

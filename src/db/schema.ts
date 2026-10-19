@@ -13,6 +13,7 @@ import type { AdapterAccountType } from "next-auth/adapters";
 import type { CreativeStatus, Platform, ProductStatus, Severity } from "@/lib/types";
 import type { ScanResult } from "@/lib/compliance";
 import type { VerdictThresholds } from "@/lib/verdicts";
+import { DEFAULT_AVOID_PHRASES, DEFAULT_EXAMPLE_ADS } from "@/lib/creative-defaults";
 
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -26,6 +27,8 @@ export const products = pgTable("products", {
   redClaims: text("red_claims").array().notNull().default([]),
   notes: text("notes").notNull().default(""),
   allergens: text("allergens").notNull().default(""),
+  // Taste, texture, pack look, real eating moments, real review lines: the specifics that make ads non-generic.
+  story: text("story").notNull().default(""),
   packImageUrl: text("pack_image_url"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -40,6 +43,8 @@ export const brandSettings = pgTable("brand_settings", {
   angles: text("angles").array().notNull().default([]),
   personas: text("personas").array().notNull().default([]),
   languages: text("languages").array().notNull().default([]),
+  exampleAds: text("example_ads").notNull().default(DEFAULT_EXAMPLE_ADS),
+  avoidPhrases: text("avoid_phrases").notNull().default(DEFAULT_AVOID_PHRASES),
   verdictThresholds: jsonb("verdict_thresholds").$type<VerdictThresholds>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
