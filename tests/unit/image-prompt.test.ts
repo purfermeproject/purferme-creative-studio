@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildImagePrompt, imageSizeFor, mockImageSvg } from "@/lib/image-prompt";
+import { buildImagePrompt, mockImageSvg } from "@/lib/image-prompt";
 
 const concept = {
   title: "Chai hook",
@@ -12,16 +12,6 @@ const concept = {
   ],
 };
 
-describe("imageSizeFor", () => {
-  it("uses portrait for Meta, landscape for 16:9 and banners, square for listing images", () => {
-    expect(imageSizeFor("meta", "9:16 UGC-style video (15–30s)")).toBe("1024x1536");
-    expect(imageSizeFor("meta", "Static image ad (4:5)")).toBe("1024x1536");
-    expect(imageSizeFor("amazon", "Sponsored Brands video (16:9, muted)")).toBe("1536x1024");
-    expect(imageSizeFor("flipkart", "Display banner (homepage/category)")).toBe("1536x1024");
-    expect(imageSizeFor("amazon", "Listing image stack (7 images)")).toBe("1024x1024");
-  });
-});
-
 describe("buildImagePrompt", () => {
   const base = { concept, platform: "meta" as const, creativeType: "9:16 UGC-style video (15–30s)", productName: "Chocolate Cookies", hasPackReference: true };
 
@@ -30,6 +20,13 @@ describe("buildImagePrompt", () => {
     expect(p).toContain("Scene: Cookie dunk");
     expect(p).toContain('"No maida."');
     expect(p).toContain("attached photo is the real pack");
+  });
+
+  it("tells the model the final size and crop", () => {
+    const p = buildImagePrompt({ ...base, frameIndex: 0, target: { w: 1080, h: 1920, label: "Reels / Stories 9:16", note: "Keep text out of the top 14%." } });
+    expect(p).toContain("Final image is 1080×1920 px (Reels / Stories 9:16)");
+    expect(p).toContain("centre-cropped");
+    expect(p).toContain("Keep text out of the top 14%.");
   });
 
   it("clamps an out-of-range scene and says not to invent pack text without a reference", () => {
@@ -47,7 +44,9 @@ describe("buildImagePrompt", () => {
 });
 
 describe("mockImageSvg", () => {
-  it("escapes the label", () => {
-    expect(mockImageSvg("1024x1024", '<b>"x"</b>')).not.toContain("<b>");
+  it("escapes the label and uses the target size", () => {
+    const svg = mockImageSvg("1080x1920", '<b>"x"</b>');
+    expect(svg).not.toContain("<b>");
+    expect(svg).toContain('width="1080" height="1920"');
   });
 });

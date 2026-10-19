@@ -2,16 +2,7 @@ import { isVideoType } from "./prompts";
 import type { Concept } from "./schemas";
 import { PLATFORM_LABELS, type Platform } from "./types";
 
-export type ImageSize = "1024x1536" | "1536x1024" | "1024x1024";
-
-/** Portrait for Meta feeds, landscape for marketplace video/banners, square for listing images. */
-export function imageSizeFor(platform: Platform, creativeType: string): ImageSize {
-  const t = creativeType.toLowerCase();
-  if (t.includes("16:9") || t.includes("banner") || t.includes("a+")) return "1536x1024";
-  if (t.includes("listing image") || t.includes("headline + custom image")) return "1024x1024";
-  if (platform === "meta" || t.includes("9:16") || t.includes("4:5")) return "1024x1536";
-  return "1024x1024";
-}
+export type ImageSize = `${number}x${number}`;
 
 /** Pure, testable: turns one frame of a concept into an image-model prompt. */
 export function buildImagePrompt(opts: {
@@ -21,6 +12,8 @@ export function buildImagePrompt(opts: {
   creativeType: string;
   productName: string;
   hasPackReference: boolean;
+  /** Final pixel size after cropping, so the model keeps important things inside the crop. */
+  target?: { w: number; h: number; label: string; note?: string };
 }): string {
   const { concept: c, platform } = opts;
   const frame = c.frames[Math.min(Math.max(opts.frameIndex, 0), Math.max(c.frames.length - 1, 0))];
@@ -40,6 +33,12 @@ export function buildImagePrompt(opts: {
       : "If a person appears, keep them natural and incidental; no doctors, experts or before/after framing.",
     "Warm, natural light; Indian home or work setting; clean, appetising, photo-real. No health claims, badges or certification marks.",
   ];
+  if (opts.target) {
+    const { w, h, label, note } = opts.target;
+    lines.push(
+      `Final image is ${w}×${h} px (${label}). It will be centre-cropped to that shape, so keep the pack, faces and all text well inside the centre, with comfortable margins on every side.${note ? ` ${note}` : ""}`,
+    );
+  }
   return lines.filter(Boolean).join("\n");
 }
 

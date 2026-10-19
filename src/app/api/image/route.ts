@@ -4,7 +4,8 @@ import { requireUser } from "@/auth";
 import { db, schema } from "@/db";
 import { errorMessage } from "@/lib/ai";
 import { getProduct } from "@/lib/data";
-import { buildImagePrompt, imageSizeFor } from "@/lib/image-prompt";
+import { buildImagePrompt } from "@/lib/image-prompt";
+import { defaultSpecFor, findSpec, MAX_SIDE, MIN_SIDE, ratioLabel } from "@/lib/image-specs";
 import { generateImage, loadReference, type Reference } from "@/lib/images";
 import { ConceptSchema } from "@/lib/schemas";
 import { PLATFORMS } from "@/lib/types";
@@ -18,6 +19,11 @@ const Body = z.object({
   concept: ConceptSchema,
   frameIndex: z.number().int().min(0).max(10).default(0),
   creativeId: z.string().uuid().nullable().optional(),
+  specId: z.string().max(40).nullable().optional(),
+  custom: z
+    .object({ w: z.number().int().min(MIN_SIDE).max(MAX_SIDE), h: z.number().int().min(MIN_SIDE).max(MAX_SIDE) })
+    .nullable()
+    .optional(),
   packImage: z
     .object({ mediaType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]), base64: z.string().max(7_000_000) })
     .nullable()
@@ -44,7 +50,9 @@ export async function POST(req: Request) {
     const reference: Reference = input.packImage
       ? { data: Buffer.from(input.packImage.base64, "base64"), mime: input.packImage.mediaType, name: "pack" }
       : await loadReference(product.packImageUrl);
-    const size = imageSizeFor(input.platform, input.creativeType);
+    const spec = input.custom
+      ? { w: input.custom.w, h: input.custom.h, label: `custom ${ratioLabel(input.custom.w, input.custom.h)}`, note: undefined as string | undefined }
+      : (input.specId ? findSpec(input.specId) : null) ?? defaultSpecFor(input.platform, input.creativeType);
     const prompt = buildImagePrompt({
       concept: input.concept,
       frameIndex: input.frameIndex,
@@ -52,15 +60,16 @@ export async function POST(req: Request) {
       creativeType: input.creativeType,
       productName: product.name,
       hasPackReference: Boolean(reference),
+      target: { w: spec.w, h: spec.h, label: spec.label, note: spec.note },
     });
-    const image = await generateImage({ prompt, size, reference, user, label: input.concept.frames[input.frameIndex]?.onscreen || input.concept.title });
+    const image = await generateImage({ prompt, target: { w: spec.w, h: spec.h }, reference, user, label: input.concept.frames[input.frameIndex]?.onscreen || input.concept.title });
     if (input.creativeId) {
       await db
         .update(schema.creatives)
         .set({ imageIds: sql`array_append(${schema.creatives.imageIds}, ${image.id}::uuid)`, updatedAt: new Date() })
         .where(eq(schema.creatives.id, input.creativeId));
     }
-    return Response.json({ ...image, usedPackPhoto: Boolean(reference) });
+    return Response.json({ ...image, label: spec.label, usedPackPhoto: Boolean(reference) });
   } catch (e) {
     return Response.json({ error: errorMessage(e) }, { status: 500 });
   }

@@ -146,12 +146,16 @@ test("Make image creates a picture that stays with the saved ad", async ({ page 
   const img = card.getByTestId("image-maker").locator("img");
   await expect(img).toHaveCount(1);
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+  // Meta video ideas default to the exact Reels size.
+  await expect(card.getByTestId("image-dims").first()).toContainText("1080×1920");
   await card.getByRole("button", { name: "Save", exact: true }).click();
   await card.getByRole("link", { name: /Saved/ }).click();
   const item = page.locator("details[open][data-testid^=creative-]");
   await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(1);
+  await item.getByLabel("Image size").selectOption({ label: "Feed 4:5 · 1080×1350" });
   await item.getByRole("button", { name: "Make another image" }).click();
   await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(2);
+  await expect(item.getByTestId("image-dims").nth(1)).toContainText("1080×1350");
   await page.reload();
   await expect(page.locator("details[open][data-testid^=creative-]").getByTestId("image-maker").locator("img")).toHaveCount(2);
 });

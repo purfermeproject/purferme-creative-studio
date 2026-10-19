@@ -1,9 +1,11 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import OpenAI, { toFile } from "openai";
+import sharp from "sharp";
 import { db, schema } from "@/db";
 import { UserFacingError, isMock } from "./ai";
-import { mockImageSvg, type ImageSize } from "./image-prompt";
+import { mockImageSvg } from "./image-prompt";
+import { generationSizeFor } from "./image-specs";
 
 export const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-flare";
 
@@ -38,7 +40,13 @@ export async function loadReference(url: string | null | undefined): Promise<Ref
 }
 
 /** Generates one image, stores it, logs usage, and returns the asset id. */
-export async function generateImage(opts: { prompt: string; size: ImageSize; reference: Reference; user: string; label: string }) {
+/** Centre-crop and resize to the exact platform size; JPEG keeps photos small enough to store. */
+export async function fitToSize(png: Buffer, w: number, h: number): Promise<Buffer> {
+  return sharp(png).resize(w, h, { fit: "cover", position: "centre" }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+}
+
+export async function generateImage(opts: { prompt: string; target: { w: number; h: number }; reference: Reference; user: string; label: string }) {
+  const size = generationSizeFor(opts.target.w, opts.target.h);
   let mime: string;
   let data: string;
   let model = IMAGE_MODEL;
@@ -48,7 +56,7 @@ export async function generateImage(opts: { prompt: string; size: ImageSize; ref
   // With an OpenAI key, images are always real, even while text generation is in mock mode.
   if (isMock() && !process.env.OPENAI_API_KEY) {
     mime = "image/svg+xml";
-    data = Buffer.from(mockImageSvg(opts.size, opts.label)).toString("base64");
+    data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label)).toString("base64");
     model = "mock";
   } else {
     const openai = getClient();
@@ -61,7 +69,7 @@ export async function generateImage(opts: { prompt: string; size: ImageSize; ref
           image: [await toFile(ref!.data, `${ref!.name}.${ref!.mime.split("/")[1] ?? "png"}`, { type: ref!.mime })],
           // Only the gpt-image-1 family accepts input_fidelity; newer models keep the reference faithfully by default.
           ...(withFidelity ? { input_fidelity: "high" as const } : {}),
-          size: opts.size,
+          size,
           n: 1,
         });
       let res;
@@ -73,12 +81,12 @@ export async function generateImage(opts: { prompt: string; size: ImageSize; ref
           else throw e;
         }
       } else {
-        res = await openai.images.generate({ model: IMAGE_MODEL, prompt: opts.prompt, size: opts.size, n: 1 });
+        res = await openai.images.generate({ model: IMAGE_MODEL, prompt: opts.prompt, size, n: 1 });
       }
       const b64 = res.data?.[0]?.b64_json;
       if (!b64) throw new UserFacingError("The image service returned no image. Try again.");
-      mime = "image/png";
-      data = b64;
+      mime = "image/jpeg";
+      data = (await fitToSize(Buffer.from(b64, "base64"), opts.target.w, opts.target.h)).toString("base64");
       inputTokens = res.usage?.input_tokens ?? 0;
       outputTokens = res.usage?.output_tokens ?? 0;
     } catch (e) {
@@ -112,5 +120,5 @@ export async function generateImage(opts: { prompt: string; size: ImageSize; ref
     inputTokens,
     outputTokens,
   });
-  return { id: row.id, url: `/api/assets/${row.id}` };
+  return { id: row.id, url: `/api/assets/${row.id}`, w: opts.target.w, h: opts.target.h };
 }
