@@ -5,7 +5,7 @@ import Google from "next-auth/providers/google";
 import Resend from "next-auth/providers/resend";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { getDb, schema } from "@/db";
-import { isAllowedEmail } from "@/lib/allowlist";
+import { checkTeamPassword, isAllowedEmail, teamIdentity, teamPasswordEnabled } from "@/lib/allowlist";
 
 /**
  * AUTH_DISABLED=true skips sign-in entirely for local use: everyone is treated
@@ -23,6 +23,25 @@ const emailLinks = Boolean(process.env.AUTH_RESEND_KEY && process.env.AUTH_EMAIL
 if (emailLinks) {
   providers.push(Resend({ from: process.env.AUTH_EMAIL_FROM }));
 }
+if (teamPasswordEnabled()) {
+  providers.push(
+    Credentials({
+      id: "password",
+      name: "Team password",
+      credentials: { name: { label: "Your name", type: "text" }, password: { label: "Password", type: "password" } },
+      authorize: async (creds) => {
+        const ok = checkTeamPassword(String(creds?.password ?? ""));
+        if (!ok) {
+          // Slow down guessing.
+          await new Promise((r) => setTimeout(r, 1000));
+          return null;
+        }
+        const who = teamIdentity(String(creds?.name ?? ""));
+        return { id: who.email, ...who };
+      },
+    }),
+  );
+}
 if (devLoginEnabled) {
   providers.push(
     Credentials({
@@ -37,7 +56,11 @@ if (devLoginEnabled) {
   );
 }
 
-export const providerIds = providers.map((p) => (typeof p === "function" ? p().id : p.id));
+// Credentials-type providers report id "credentials"; the custom id lives in options.
+export const providerIds = providers.map((p) => {
+  const cfg = (typeof p === "function" ? p() : p) as { id: string; options?: { id?: string } };
+  return cfg.options?.id ?? cfg.id;
+});
 
 const config: NextAuthConfig = {
   session: { strategy: "jwt" },

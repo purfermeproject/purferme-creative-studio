@@ -8,6 +8,7 @@ const env = {
   ANTHROPIC_MOCK: "true",
   AUTH_DEV_LOGIN: "true",
   AUTH_DISABLED: "false",
+  TEAM_PASSWORD: "e2e-team-password",
   AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-0123456789",
   AUTH_TRUST_HOST: "true",
   ALLOWED_EMAILS: "e2e@example.com",

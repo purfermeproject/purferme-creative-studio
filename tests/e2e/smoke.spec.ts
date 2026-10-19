@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 async function signIn(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Dev sign-in (local only)").fill("e2e@example.com");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
   await page.waitForURL("**/create");
 }
 
@@ -18,7 +18,7 @@ test("unauthenticated visitors are sent to login, and unknown emails are refused
   await page.goto("/library");
   await expect(page).toHaveURL(/\/login/);
   await page.getByLabel("Dev sign-in (local only)").fill("stranger@example.com");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
   await expect(page.getByText("isn't on the team list")).toBeVisible();
 });
 
@@ -154,4 +154,18 @@ test("Make image creates a picture that stays with the saved ad", async ({ page 
   await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(2);
   await page.reload();
   await expect(page.locator("details[open][data-testid^=creative-]").getByTestId("image-maker").locator("img")).toHaveCount(2);
+});
+
+test("team password: wrong password is refused, right one signs in with your name", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Team password").fill("nope");
+  await page.getByRole("button", { name: "Sign in", exact: true }).first().click();
+  await expect(page.getByText("That password isn't right")).toBeVisible();
+
+  await page.getByLabel(/Your name/).fill("Priya");
+  await page.getByLabel("Team password").fill("e2e-team-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).first().click();
+  await page.waitForURL("**/create");
+  await page.goto("/admin/usage");
+  await expect(page.getByRole("heading", { name: "Usage and cost" })).toBeVisible();
 });

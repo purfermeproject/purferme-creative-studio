@@ -41,6 +41,7 @@ Copy `.env.example` to `.env.local` and fill it in. Never prefix secrets with `N
 | `OPENAI_MODEL` | no | Text model when OpenAI writes the ads. Defaults to `gpt-5.5`. |
 | `AI_PROVIDER` | no | `openai` or `anthropic` to force which service writes the ads. |
 | `OPENAI_IMAGE_MODEL` | no | Defaults to `gpt-image-2.5-flare`. |
+| `TEAM_PASSWORD` | one sign-in method | Simplest login: everyone types this shared password (plus their name, shown in Usage and saved ads). Change it to lock everyone out. |
 | `AUTH_SECRET` | yes | `npx auth secret` or `openssl rand -base64 32`. |
 | `ALLOWED_EMAILS` | yes | Comma-separated team emails. Anyone else is refused. |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | one sign-in method | Google OAuth client (see below). |

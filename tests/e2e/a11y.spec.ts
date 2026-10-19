@@ -9,7 +9,7 @@ test("main pages have no serious or critical accessibility violations", async ({
   const problems: string[] = results.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? "")).map((v) => `/login: ${v.id} (${v.nodes.length})`);
 
   await page.getByLabel("Dev sign-in (local only)").fill("e2e@example.com");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
   await page.waitForURL("**/create");
 
   for (const path of PAGES) {

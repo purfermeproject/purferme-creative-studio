@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth, authDisabled, devLoginEnabled, providerIds, signIn } from "@/auth";
 
 const ERRORS: Record<string, string> = {
+  WrongPassword: "That password isn't right. Check with your team and try again.",
   AccessDenied: "That email isn't on the team list. Ask an admin to add it to ALLOWED_EMAILS, then try again.",
   CredentialsSignin: "That email isn't on the team list. Ask an admin to add it to ALLOWED_EMAILS, then try again.",
   Verification: "That sign-in link has expired or was already used. Request a new one below.",
@@ -18,6 +19,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const redirectTo = params.callbackUrl ?? "/create";
   const error = params.error ? (ERRORS[params.error] ?? "Sign-in failed. Try again, or ask an admin to check the setup.") : null;
   const hasGoogle = providerIds.includes("google");
+  const hasPassword = providerIds.includes("password");
   const hasEmail = providerIds.includes("resend");
 
   async function withAuthErrors(fn: () => Promise<void>) {
@@ -50,6 +52,37 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       ) : null}
 
       <div className="card mt-6 space-y-5">
+        {hasPassword ? (
+          <form
+            action={async (fd: FormData) => {
+              "use server";
+              try {
+                await signIn("password", { name: String(fd.get("name") ?? ""), password: String(fd.get("password") ?? ""), redirectTo });
+              } catch (e) {
+                if (e instanceof AuthError) redirect("/login?error=WrongPassword");
+                throw e;
+              }
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="label" htmlFor="team-name">
+                Your name <span className="font-normal text-ink-soft">(so the team knows who made what)</span>
+              </label>
+              <input id="team-name" name="name" autoComplete="name" className="input" placeholder="e.g. Priya" />
+            </div>
+            <div>
+              <label className="label" htmlFor="team-password">
+                Team password
+              </label>
+              <input id="team-password" name="password" type="password" required autoComplete="current-password" className="input" />
+            </div>
+            <button className="btn-primary w-full" type="submit">
+              Sign in
+            </button>
+          </form>
+        ) : null}
+
         {hasGoogle ? (
           <form
             action={async () => {
@@ -99,9 +132,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </form>
         ) : null}
 
-        {!hasGoogle && !hasEmail && !devLoginEnabled ? (
+        {!hasPassword && !hasGoogle && !hasEmail && !devLoginEnabled ? (
           <p className="hint">
-            No sign-in method is configured. Set AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET, or AUTH_RESEND_KEY and AUTH_EMAIL_FROM. The README explains how.
+            No sign-in method is set up. Add TEAM_PASSWORD in your hosting settings (or Google sign-in keys) and redeploy.
           </p>
         ) : null}
       </div>
