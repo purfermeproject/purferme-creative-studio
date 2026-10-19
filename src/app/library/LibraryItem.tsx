@@ -7,6 +7,7 @@ import type { Creative } from "@/db/schema";
 import { conceptToText } from "@/lib/concepts";
 import { approvalGate, requiredQaItems } from "@/lib/qa";
 import type { Concept } from "@/lib/schemas";
+import type { BrandKit } from "@/lib/brand-kit";
 import { CREATIVE_STATUSES, PLATFORM_LABELS, type CreativeStatus } from "@/lib/types";
 import { deleteCreative, rescan, setQa, setQaAll, setStatus } from "./actions";
 
@@ -37,12 +38,24 @@ function toConcept(c: Creative): Concept {
   };
 }
 
-export function LibraryItem({ creative: c, productName, defaultOpen }: { creative: Creative; productName: string; defaultOpen: boolean }) {
+export function LibraryItem({
+  creative: c,
+  productName,
+  defaultOpen,
+  kit,
+  images: initialImages,
+}: {
+  creative: Creative;
+  productName: string;
+  defaultOpen: boolean;
+  kit: BrandKit;
+  images: MadeImage[];
+}) {
   const [pending, start] = useTransition();
   const [qa, setQaOptimistic] = useOptimistic(c.qaChecked, (_cur: number[], next: number[]) => next);
   const [message, setMessage] = useState<{ text: string; missing?: string[]; ok?: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [images, setImages] = useState<MadeImage[]>(c.imageIds.map((id) => ({ id, url: `/api/assets/${id}` })));
+  const [images, setImages] = useState<MadeImage[]>(initialImages);
 
   const required = requiredQaItems(c.platform);
   const done = required.filter((i) => qa.includes(i.n)).length;
@@ -102,7 +115,7 @@ export function LibraryItem({ creative: c, productName, defaultOpen }: { creativ
           scan={c.scanResult}
           extra={
             c.productId ? (
-              <ImageMaker concept={toConcept(c)} platform={c.platform} creativeType={c.creativeType} productId={c.productId} creativeId={c.id} images={images} onImages={setImages} />
+              <ImageMaker concept={toConcept(c)} platform={c.platform} creativeType={c.creativeType} productId={c.productId} creativeId={c.id} images={images} onImages={setImages} kit={kit} />
             ) : null
           }
         />

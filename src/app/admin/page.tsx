@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ActionForm } from "@/components/ActionForm";
+import { BrandKitEditor } from "./BrandKitEditor";
 import { getAllPlatformRules, getBrand, getProducts, getTerms } from "@/lib/data";
 import { PLATFORMS, PLATFORM_LABELS, PRODUCT_STATUSES } from "@/lib/types";
 import {
@@ -73,6 +74,7 @@ export default async function AdminPage() {
           {[
             ["#products", "Products"],
             ["#brand", "Brand"],
+            ["#brand-kit", "Brand kit"],
             ["#platforms", "Platforms"],
             ["#terms", "Compliance terms"],
             ["#thresholds", "Verdict thresholds"],
@@ -240,6 +242,10 @@ export default async function AdminPage() {
             </Field>
           </ActionForm>
         </div>
+      </Section>
+
+      <Section id="brand-kit" title="Brand kit" intro="Logo, colours and fonts used when you add text and logo to images (Add text & logo).">
+        <BrandKitEditor initial={brand.kit} />
       </Section>
 
       <Section id="platforms" title="Platform rules and guide" intro="Rules go into the generation prompt; the guide and comparison show on the Platform guide page.">

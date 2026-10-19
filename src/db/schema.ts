@@ -14,6 +14,7 @@ import type { CreativeStatus, Platform, ProductStatus, Severity } from "@/lib/ty
 import type { ScanResult } from "@/lib/compliance";
 import type { VerdictThresholds } from "@/lib/verdicts";
 import { DEFAULT_AVOID_PHRASES, DEFAULT_EXAMPLE_ADS } from "@/lib/creative-defaults";
+import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brand-kit";
 
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -45,6 +46,7 @@ export const brandSettings = pgTable("brand_settings", {
   languages: text("languages").array().notNull().default([]),
   exampleAds: text("example_ads").notNull().default(DEFAULT_EXAMPLE_ADS),
   avoidPhrases: text("avoid_phrases").notNull().default(DEFAULT_AVOID_PHRASES),
+  kit: jsonb("kit").$type<BrandKit>().notNull().default(DEFAULT_BRAND_KIT),
   verdictThresholds: jsonb("verdict_thresholds").$type<VerdictThresholds>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -133,6 +135,13 @@ export const assets = pgTable("assets", {
   dataBase64: text("data_base64").notNull(),
   prompt: text("prompt").notNull().default(""),
   model: text("model").notNull().default(""),
+  /** generated | overlay | upload | edit | resize | logo | font | pack */
+  kind: text("kind").notNull().default("generated"),
+  label: text("label").notNull().default(""),
+  width: integer("width"),
+  height: integer("height"),
+  /** Which scene of the concept this image shows (storyboards). */
+  frameIndex: integer("frame_index"),
   createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

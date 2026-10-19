@@ -189,3 +189,34 @@ test("Write your own: custom ad type, angle and language are accepted", async ({
   await expect(card).toBeVisible({ timeout: 60_000 });
   await expect(card).toContainText("Monsoon chai-time snack");
 });
+
+test("Brand kit + Add text & logo saves a full-size image with crisp text", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/admin#brand-kit");
+  const kit = page.getByTestId("brand-kit");
+  await kit.getByLabel("Primary (buttons, CTA) hex").fill("#aa3300");
+  await kit.getByRole("button", { name: "Save brand kit" }).click();
+  await expect(kit.getByText("Brand kit saved.")).toBeVisible();
+
+  await page.goto("/create");
+  await choosePlatform(page, "Meta");
+  await page.getByLabel("Type of ad", { exact: true }).selectOption("Static image ad (4:5)");
+  await page.getByRole("button", { name: /Generate/ }).click();
+  const card = page.getByTestId("concept-0");
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await card.getByRole("button", { name: "Make image" }).click();
+  await expect(card.getByTestId("image-dims").first()).toContainText("1080×1350");
+  await card.getByRole("button", { name: "Add text & logo" }).first().click();
+  const editor = page.getByTestId("overlay-editor");
+  await expect(editor.getByTestId("overlay-canvas")).toBeVisible();
+  await editor.getByLabel("Headline").fill("3pm called. It wants chai.");
+  await editor.getByRole("button", { name: "Save as new image" }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(card.getByTestId("image-maker").locator("img")).toHaveCount(2);
+  await expect(card.getByTestId("image-dims").nth(1)).toContainText("1080×1350");
+  await card.getByRole("button", { name: "Save", exact: true }).click();
+  await card.getByRole("link", { name: /Saved/ }).click();
+  const item = page.locator("details[open][data-testid^=creative-]");
+  await expect(item.getByTestId("image-maker").locator("img")).toHaveCount(2);
+  await expect(item.getByText("with text")).toBeVisible();
+});

@@ -20,6 +20,7 @@ const Body = z.object({
   frameIndex: z.number().int().min(0).max(10).default(0),
   creativeId: z.string().uuid().nullable().optional(),
   specId: z.string().max(40).nullable().optional(),
+  textMode: z.enum(["overlay", "ai"]).default("overlay"),
   custom: z
     .object({ w: z.number().int().min(MIN_SIDE).max(MAX_SIDE), h: z.number().int().min(MIN_SIDE).max(MAX_SIDE) })
     .nullable()
@@ -61,8 +62,9 @@ export async function POST(req: Request) {
       productName: product.name,
       hasPackReference: Boolean(reference),
       target: { w: spec.w, h: spec.h, label: spec.label, note: spec.note },
+      textMode: input.textMode,
     });
-    const image = await generateImage({ prompt, target: { w: spec.w, h: spec.h }, reference, user, label: input.concept.frames[input.frameIndex]?.onscreen || input.concept.title });
+    const image = await generateImage({ prompt, target: { w: spec.w, h: spec.h }, reference, user, label: `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}`, frameIndex: input.frameIndex });
     if (input.creativeId) {
       await db
         .update(schema.creatives)

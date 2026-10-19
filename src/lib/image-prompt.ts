@@ -12,6 +12,8 @@ export function buildImagePrompt(opts: {
   creativeType: string;
   productName: string;
   hasPackReference: boolean;
+  /** "overlay" = no words in the picture; crisp brand text is added afterwards. */
+  textMode?: "overlay" | "ai";
   /** Final pixel size after cropping, so the model keeps important things inside the crop. */
   target?: { w: number; h: number; label: string; note?: string };
 }): string {
@@ -27,7 +29,13 @@ export function buildImagePrompt(opts: {
       : "Show the product pack clearly; do not invent detailed pack text.",
     isMainListing ? "Main listing image: the pack alone on a pure white background, centred, no props, no text." : `Scene: ${frame?.visual ?? c.ai_prompt}`,
     isMainListing ? "" : `Style and details: ${c.ai_prompt}`,
-    !isMainListing && text ? `On-image text, rendered exactly, large and legible on a phone: "${text}". No other words except what is printed on the pack.` : "No added text other than what is printed on the pack.",
+    isMainListing
+      ? "No added text other than what is printed on the pack."
+      : opts.textMode === "overlay"
+        ? "Do not render any added words, letters, numbers, prices, badges or logos anywhere (only what is physically printed on the pack). Leave a calm, uncluttered area across the lower third for a headline that will be added afterwards."
+        : text
+          ? `On-image text, rendered exactly, large and legible on a phone: "${text}". No other words except what is printed on the pack.`
+          : "No added text other than what is printed on the pack.",
     platform === "amazon" || c.needs_real_person
       ? "No people's faces; if hands are needed, show only hands."
       : "If a person appears, keep them natural and incidental; no doctors, experts or before/after framing.",

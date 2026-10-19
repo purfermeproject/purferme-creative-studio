@@ -1,4 +1,5 @@
-import { getProducts } from "@/lib/data";
+import { assetInfo } from "@/lib/asset-store";
+import { getBrand, getProducts } from "@/lib/data";
 import { parseFilters, queryCreatives } from "@/lib/library";
 import { getPlatform } from "@/lib/platform";
 import { CREATIVE_STATUSES, PLATFORMS, PLATFORM_LABELS } from "@/lib/types";
@@ -10,7 +11,9 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   const platform = await getPlatform();
   const filters = parseFilters(sp, platform);
-  const [rows, products] = await Promise.all([queryCreatives(filters), getProducts()]);
+  const [rows, products, brand] = await Promise.all([queryCreatives(filters), getProducts(), getBrand()]);
+  const infos = await assetInfo(rows.flatMap((r) => r.creative.imageIds));
+  const infoById = new Map(infos.map((i) => [i.id, i]));
   const highlight = typeof sp.highlight === "string" ? sp.highlight : "";
   const exportQs = new URLSearchParams({
     platform: filters.platform,
@@ -93,7 +96,16 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
         <ul className="space-y-3">
           {rows.map(({ creative, productName }) => (
             <li key={creative.id}>
-              <LibraryItem creative={creative} productName={productName ?? "(product deleted)"} defaultOpen={creative.id === highlight} />
+              <LibraryItem
+                creative={creative}
+                productName={productName ?? "(product deleted)"}
+                defaultOpen={creative.id === highlight}
+                kit={brand.kit}
+                images={creative.imageIds.map((id) => {
+                  const i = infoById.get(id);
+                  return { id, url: `/api/assets/${id}`, label: i?.label || undefined, frameIndex: i?.frameIndex ?? null };
+                })}
+              />
             </li>
           ))}
         </ul>

@@ -49,6 +49,7 @@ export default async function CreatePage() {
         angles={brand.angles}
         personas={brand.personas}
         languages={brand.languages}
+        kit={brand.kit}
       />
     </div>
   );

@@ -8,6 +8,7 @@ import { ImageMaker, type MadeImage } from "@/components/ImageMaker";
 import { conceptToText, type ScoredConcept } from "@/lib/concepts";
 import { AUTO } from "@/lib/prompts";
 import type { Concept } from "@/lib/schemas";
+import type { BrandKit } from "@/lib/brand-kit";
 import { PLATFORM_LABELS, type Platform } from "@/lib/types";
 import { saveCreative } from "./actions";
 
@@ -58,6 +59,7 @@ export function CreateClient({
   angles,
   personas,
   languages,
+  kit,
 }: {
   platform: Platform;
   products: ProductOption[];
@@ -65,6 +67,7 @@ export function CreateClient({
   angles: string[];
   personas: string[];
   languages: string[];
+  kit: BrandKit;
 }) {
   const firstReady = products.find((p) => p.status === "ready");
   const [productId, setProductId] = useState(products.find((p) => p.name.startsWith("Chocolate") && p.status === "ready")?.id ?? firstReady?.id ?? "");
@@ -334,6 +337,7 @@ export function CreateClient({
                 packImage={image ? { mediaType: image.mediaType, base64: image.base64 } : null}
                 images={it.images ?? []}
                 onImages={(images) => patch(it.key, { images })}
+                kit={kit}
               />
             }
             actions={

@@ -4,6 +4,7 @@ import OpenAI, { toFile } from "openai";
 import sharp from "sharp";
 import { db, schema } from "@/db";
 import { UserFacingError, isMock } from "./ai";
+import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
 
@@ -45,7 +46,14 @@ export async function fitToSize(png: Buffer, w: number, h: number): Promise<Buff
   return sharp(png).resize(w, h, { fit: "cover", position: "centre" }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
 
-export async function generateImage(opts: { prompt: string; target: { w: number; h: number }; reference: Reference; user: string; label: string }) {
+export async function generateImage(opts: {
+  prompt: string;
+  target: { w: number; h: number };
+  reference: Reference;
+  user: string;
+  label: string;
+  frameIndex?: number | null;
+}) {
   const size = generationSizeFor(opts.target.w, opts.target.h);
   let mime: string;
   let data: string;
@@ -108,10 +116,16 @@ export async function generateImage(opts: { prompt: string; target: { w: number;
     }
   }
 
-  const [row] = await db
-    .insert(schema.assets)
-    .values({ mime, dataBase64: data, prompt: opts.prompt, model, createdBy: opts.user })
-    .returning({ id: schema.assets.id });
+  const stored = await storeAsset({
+    data: Buffer.from(data, "base64"),
+    mime,
+    kind: "generated",
+    label: opts.label,
+    user: opts.user,
+    frameIndex: opts.frameIndex ?? null,
+    prompt: opts.prompt,
+    model,
+  });
   await db.insert(schema.generationLogs).values({
     user: opts.user,
     kind: "image",
@@ -120,5 +134,5 @@ export async function generateImage(opts: { prompt: string; target: { w: number;
     inputTokens,
     outputTokens,
   });
-  return { id: row.id, url: `/api/assets/${row.id}`, w: opts.target.w, h: opts.target.h };
+  return { id: stored.id, url: stored.url, w: opts.target.w, h: opts.target.h };
 }

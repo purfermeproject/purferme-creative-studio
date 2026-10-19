@@ -4,6 +4,7 @@ import { db, schema } from "@/db";
 import type { Platform } from "./types";
 import type { Term } from "./compliance";
 import { withDefaults } from "./verdicts";
+import { withKitDefaults } from "./brand-kit";
 
 export async function getProducts() {
   return db.select().from(schema.products).orderBy(asc(schema.products.name));
@@ -17,7 +18,7 @@ export async function getProduct(id: string) {
 export async function getBrand() {
   const [b] = await db.select().from(schema.brandSettings).where(eq(schema.brandSettings.id, 1));
   if (!b) throw new Error("Brand settings are missing. Run `npm run db:seed`.");
-  return { ...b, verdictThresholds: withDefaults(b.verdictThresholds) };
+  return { ...b, verdictThresholds: withDefaults(b.verdictThresholds), kit: withKitDefaults(b.kit) };
 }
 
 export async function getPlatformRule(platform: Platform) {

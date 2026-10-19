@@ -10,6 +10,7 @@ import { lines, type ActionState } from "@/lib/action-state";
 import { regexError } from "@/lib/compliance";
 import { PLATFORMS, PRODUCT_STATUSES, SEVERITIES, isPlatform } from "@/lib/types";
 import { DEFAULT_THRESHOLDS, type VerdictThresholds } from "@/lib/verdicts";
+import { isHexColor, withKitDefaults, type BrandKit } from "@/lib/brand-kit";
 
 const ok = (message: string): ActionState => ({ ok: true, message });
 const fail = (message: string): ActionState => ({ ok: false, message });
@@ -224,5 +225,29 @@ export async function deleteTerm(_: ActionState, fd: FormData): Promise<ActionSt
     await db.delete(schema.complianceTerms).where(eq(schema.complianceTerms.id, String(fd.get("id"))));
     refresh();
     return ok("Deleted.");
+  }) as Promise<ActionState>;
+}
+
+const fontSchema = z.object({ name: z.string().trim().min(1).max(60), url: z.string().max(200).nullable() });
+const kitSchema = z.object({
+  logoUrl: z.string().max(200).nullable(),
+  colors: z.object({ primary: z.string(), accent: z.string(), text: z.string(), band: z.string() }),
+  headingFont: fontSchema,
+  bodyFont: fontSchema,
+});
+
+export async function saveBrandKit(kit: BrandKit): Promise<ActionState> {
+  return guard(async () => {
+    const parsed = kitSchema.safeParse(kit);
+    if (!parsed.success) return fail("Some brand kit values aren't valid. Check the font names and colours.");
+    const bad = Object.entries(parsed.data.colors).find(([, v]) => !isHexColor(v));
+    if (bad) return fail(`"${bad[0]}" must be a colour like #6b3f2a.`);
+    const local = (u: string | null) => u === null || /^\/api\/assets\/[0-9a-f-]{36}$/i.test(u);
+    if (!local(parsed.data.logoUrl) || !local(parsed.data.headingFont.url) || !local(parsed.data.bodyFont.url)) {
+      return fail("Upload the logo and fonts here rather than linking to other sites.");
+    }
+    await db.update(schema.brandSettings).set({ kit: withKitDefaults(parsed.data), updatedAt: new Date() }).where(eq(schema.brandSettings.id, 1));
+    refresh();
+    return ok("Brand kit saved.");
   }) as Promise<ActionState>;
 }
