@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ConceptCard } from "@/components/ConceptCard";
+import { ChoiceOrCustom } from "@/components/ChoiceOrCustom";
 import { ImageMaker, type MadeImage } from "@/components/ImageMaker";
 import { conceptToText, type ScoredConcept } from "@/lib/concepts";
 import { AUTO } from "@/lib/prompts";
@@ -84,7 +85,17 @@ export function CreateClient({
   const blocked = product && product.status !== "ready";
   const busy = progress !== null;
 
-  const baseBody = () => ({ platform, productId, creativeType, angle, persona, language, n, extra: extra || undefined, image: image ? { mediaType: image.mediaType, base64: image.base64 } : null });
+  const baseBody = () => ({
+    platform,
+    productId,
+    creativeType: creativeType.trim(),
+    angle: angle.trim() || AUTO,
+    persona: persona.trim() || AUTO,
+    language: language.trim() || "English",
+    n,
+    extra: extra || undefined,
+    image: image ? { mediaType: image.mediaType, base64: image.base64 } : null,
+  });
 
   async function generate() {
     setError("");
@@ -167,20 +178,6 @@ export function CreateClient({
     reader.readAsDataURL(file);
   }
 
-  const select = (id: string, label: string, value: string, set: (v: string) => void, options: { value: string; label: string }[]) => (
-    <div>
-      <label htmlFor={id} className="label">
-        {label}
-      </label>
-      <select id={id} className="input" value={value} onChange={(e) => set(e.target.value)}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
   const plain = (xs: string[]) => xs.map((x) => ({ value: x, label: x }));
   const changedOptions = [angle !== AUTO, persona !== AUTO, language !== (languages[0] ?? "English"), n !== 3, Boolean(extra.trim()), Boolean(image)].filter(Boolean).length;
 
@@ -212,9 +209,9 @@ export function CreateClient({
             </p>
           ) : null}
         </div>
-        {select("ctype", "Type of ad", creativeType, setCreativeType, plain(creativeTypes))}
+        <ChoiceOrCustom id="ctype" label="Type of ad" value={creativeType} onChange={setCreativeType} options={plain(creativeTypes)} placeholder="e.g. 6s bumper video, WhatsApp status image" />
 
-        <button type="submit" className="btn-primary w-full py-3 text-lg" disabled={busy || !product || Boolean(blocked) || !creativeType}>
+        <button type="submit" className="btn-primary w-full py-3 text-lg" disabled={busy || !product || Boolean(blocked) || !creativeType.trim()}>
           {busy ? "Writing ideas…" : `Generate ${n} ad ideas`}
         </button>
 
@@ -227,9 +224,23 @@ export function CreateClient({
           </summary>
           <div className="space-y-4 border-t border-line p-3">
             <p className="hint">Leave these alone and the AI picks a varied mix for you.</p>
-            {select("angle", "Angle (what the ad is about)", angle, setAngle, [{ value: AUTO, label: "Let AI choose (varied)" }, ...plain(angles)])}
-            {select("persona", "Who it's for", persona, setPersona, [{ value: AUTO, label: "Let AI choose (varied)" }, ...plain(personas)])}
-            {select("language", "Language", language, setLanguage, plain(languages))}
+            <ChoiceOrCustom
+              id="angle"
+              label="Angle (what the ad is about)"
+              value={angle}
+              onChange={setAngle}
+              options={[{ value: AUTO, label: "Let AI choose (varied)" }, ...plain(angles)]}
+              placeholder="e.g. Monsoon chai-time snack"
+            />
+            <ChoiceOrCustom
+              id="persona"
+              label="Who it's for"
+              value={persona}
+              onChange={setPersona}
+              options={[{ value: AUTO, label: "Let AI choose (varied)" }, ...plain(personas)]}
+              placeholder="e.g. New moms back at work"
+            />
+            <ChoiceOrCustom id="language" label="Language" value={language} onChange={setLanguage} options={plain(languages)} placeholder="e.g. Punjabi, Kannada" />
             <fieldset>
               <legend className="label">How many ideas</legend>
               <div className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">

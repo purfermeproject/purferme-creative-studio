@@ -26,7 +26,7 @@ test("Meta: generate 3 UGC concepts with streamed progress and save one", async 
   await signIn(page);
   await choosePlatform(page, "Meta");
   await page.getByLabel("Product", { exact: true }).selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
-  await page.getByLabel("Type of ad").selectOption("9:16 UGC-style video (15–30s)");
+  await page.getByLabel("Type of ad", { exact: true }).selectOption("9:16 UGC-style video (15–30s)");
   await page.getByRole("button", { name: "Generate 3 ad ideas" }).click();
   await expect(page.getByTestId("progress")).toBeVisible();
   await expect(page.getByTestId("concept-2")).toBeVisible({ timeout: 60_000 });
@@ -40,10 +40,10 @@ test("Meta: generate 3 UGC concepts with streamed progress and save one", async 
 test("Amazon: creative types change and video scripts have on-screen text in every frame", async ({ page }) => {
   await signIn(page);
   await choosePlatform(page, "Amazon");
-  const types = await page.getByLabel("Type of ad").locator("option").allTextContents();
+  const types = await page.getByLabel("Type of ad", { exact: true }).locator("option").allTextContents();
   expect(types).toContain("Sponsored Brands video (16:9, muted)");
   expect(types).not.toContain("9:16 UGC-style video (15–30s)");
-  await page.getByLabel("Type of ad").selectOption("Sponsored Brands video (16:9, muted)");
+  await page.getByLabel("Type of ad", { exact: true }).selectOption("Sponsored Brands video (16:9, muted)");
   await page.getByRole("button", { name: /Generate/ }).click();
   const card = page.getByTestId("concept-0");
   await expect(card).toBeVisible({ timeout: 60_000 });
@@ -168,4 +168,20 @@ test("team password: wrong password is refused, right one signs in with your nam
   await page.waitForURL("**/create");
   await page.goto("/admin/usage");
   await expect(page.getByRole("heading", { name: "Usage and cost" })).toBeVisible();
+});
+
+test("Write your own: custom ad type, angle and language are accepted", async ({ page }) => {
+  await signIn(page);
+  await choosePlatform(page, "Meta");
+  await page.getByLabel("Type of ad", { exact: true }).selectOption({ label: "✏️ Write your own…" });
+  await page.getByLabel("Type of ad: write your own").fill("6s bumper video for Reels");
+  await page.getByText("More options").click();
+  await page.getByLabel("Angle (what the ad is about)", { exact: true }).selectOption({ label: "✏️ Write your own…" });
+  await page.getByLabel(/Angle .*write your own/).fill("Monsoon chai-time snack");
+  await page.getByLabel("Language", { exact: true }).selectOption({ label: "✏️ Write your own…" });
+  await page.getByLabel("Language: write your own").fill("Punjabi");
+  await page.getByRole("button", { name: /Generate/ }).click();
+  const card = page.getByTestId("concept-0");
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await expect(card).toContainText("Monsoon chai-time snack");
 });

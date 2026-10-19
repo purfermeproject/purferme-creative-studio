@@ -15,10 +15,10 @@ const Body = z.object({
   mode: z.enum(["generate", "regenerate", "variations"]).default("generate"),
   platform: z.enum(PLATFORMS),
   productId: z.string().uuid(),
-  creativeType: z.string().min(1),
-  angle: z.string().min(1),
-  persona: z.string().min(1),
-  language: z.string().min(1),
+  creativeType: z.string().trim().min(1).max(150),
+  angle: z.string().trim().min(1).max(150),
+  persona: z.string().trim().min(1).max(150),
+  language: z.string().trim().min(1).max(60),
   n: z.number().int().min(2).max(4).default(3),
   extra: z.string().max(1000).optional(),
   image: z
@@ -53,9 +53,6 @@ export async function POST(req: Request) {
       { error: `${product.name} is on ${product.status} and can't be generated: ${product.statusReason || "no reason given"}` },
       { status: 409 },
     );
-  }
-  if (!rule.creativeTypes.includes(input.creativeType)) {
-    return Response.json({ error: `"${input.creativeType}" isn't a ${input.platform} creative type. Pick one from the list.` }, { status: 400 });
   }
   if (input.mode !== "generate" && !input.concept) {
     return Response.json({ error: "Missing the concept to regenerate or vary." }, { status: 400 });

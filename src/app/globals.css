@@ -185,3 +185,25 @@ body {
   text-align: left;
   vertical-align: top;
 }
+
+/* File pickers: make the "Choose file" button clearly visible in light and dark mode. */
+input[type="file"] {
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+  max-width: 100%;
+}
+input[type="file"]::file-selector-button {
+  margin-right: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
