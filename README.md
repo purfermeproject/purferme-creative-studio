@@ -9,6 +9,7 @@ Internal tool for the Puŕ Fermé Project team. It generates ad creatives for **
 | Page | What it does |
 |---|---|
 | **Create** (`/create`) | A three-column workspace (a guided 3-step flow on mobile). **Brief** (product → objective → audience → platform and format → angle) → **3 proposals** → **develop** one as an ad concept, a UGC creator script or an ad copy set. The draft saves immediately and autosaves while you edit. The right-hand panel has **Check** (claims and brand validation, sign-off, approval), **Edit** (every line) and **History** (restore any version). Images, variations and the handoff ZIP all work from the open ad. Products on hold or blocked can't be generated. |
+| **Competitors** (`/competitors`) | Save competitor ads (pasted text and/or a screenshot, plus a reference link). The AI breaks each one down: hook, angle, audience, the claims they make rated against our rules, what works, weaknesses, white space for us, and 3 counter-ideas. **Use in a brief** makes proposals that stand apart from it, without naming, copying or comparing. Ad Library links are stored, not fetched (that needs Meta API access). |
 | **Platform guide** (`/guide`) | Comparison table of the three platforms (selected one highlighted) and the selected platform's guide. |
 | **Claim checker** (`/check`) | Instant inline highlighting of red/amber terms, plus a model "deep check" (FSSAI Advertising & Claims Regulations 2018, ASCI incl. AI-content labelling, IMS Act) returning a verdict, issues and a rewrite. |
 | **Library** (`/library`) | Every draft, with filters, search, status, CSV export and **Open in workspace**. An ad can only move to Approved (or later) when it has **no red flags or restricted claims**, its **uncertain claims are signed off by an approver**, and **every QA item is ticked**. |
@@ -29,6 +30,8 @@ Viewer (look, check copy) → Creator (make and edit ads) → Approver (sign off
 - With the shared team password, people are identified by the name they type, so roles are only as strong as that. Use Google sign-in or email links when roles must be relied on.
 
 ## Packaging stays original
+
+Proposals show an instant, free **sketch** with your real pack photo and the hook, clearly labelled "not an AI image". **Make a real image** creates one for a proposal, and it moves into the ad when you develop it. With **Make the first image automatically** ticked (the default), every developed ad opens with an image. Extra product photos (back of pack, product out of the pack…) can be added under each product in Settings and chosen in Images. Photos must be at least 300 px on each side.
 
 By default, images are made in two steps. The AI paints the scene with an empty spot, then the original pack photo from Settings is composited in with sharp, scaled but never redrawn. A transparent PNG cut-out looks best. "AI redraws it" is available for mood boards and is labelled as unsafe for launch. AI edits of an image containing the original pack are refused unless you explicitly allow it for a draft.
 

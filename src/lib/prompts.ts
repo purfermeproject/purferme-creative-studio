@@ -44,7 +44,26 @@ export type GenerationInput = {
   deliverable?: Deliverable;
   /** "proposals" = short directions to choose from; "concepts" = full creatives. */
   output?: "concepts" | "proposals";
+  /** A competitor ad to stand apart from (from the Competitors page). */
+  competitor?: CompetitorContext | null;
 };
+
+export type CompetitorContext = {
+  brand: string;
+  summary: string;
+  hook: string;
+  angle: string;
+  claims: string[];
+  whiteSpace: string[];
+};
+
+/** Rules for using a competitor ad as context: differentiate, never copy, name or knock them. */
+export function competitorBlock(c: CompetitorContext): string {
+  return `COMPETITOR TO STAND APART FROM (context only):
+${c.brand}'s ad: ${c.summary} Their hook: ${c.hook}. Their angle: ${c.angle}.${c.claims.length ? ` Claims they make: ${c.claims.join("; ")}.` : ""}
+${c.whiteSpace.length ? `White space they leave open: ${c.whiteSpace.join("; ")}.\n` : ""}- Make our ideas clearly different in moment, hook and proof; lean into the white space.
+- Never name, show, imitate or disparage the competitor or their pack. No comparative claims ("better than", "unlike other brands") and no claim we don't hold just because they make it.`;
+}
 
 /** What success looks like for each campaign objective. */
 export const OBJECTIVE_GUIDANCE: Record<Objective, string> = {
@@ -156,7 +175,7 @@ NOTES: ${notes || "(none)"}
 ${knowledge ? `${knowledge}\n` : ""}${product.story?.trim() ? `PRODUCT STORY (real details: use them for specific, sensory, believable copy):\n${product.story.trim()}\n` : ""}
 PLATFORM: ${PLATFORM_LABELS[input.platform]}. CREATIVE TYPE: ${input.creativeType}.${
     input.placement ? `\nPLACEMENT: ${input.placement.label}. ${input.placement.guidance || "Design natively for this placement's format, length and safe areas."}` : ""
-  }${objective ? `\nCAMPAIGN OBJECTIVE: ${objective.label}. ${OBJECTIVE_GUIDANCE[objective.id]}` : ""}
+  }${input.competitor ? `\n${competitorBlock(input.competitor)}` : ""}${objective ? `\nCAMPAIGN OBJECTIVE: ${objective.label}. ${OBJECTIVE_GUIDANCE[objective.id]}` : ""}
 ${rule.rules}
 
 DIRECTION: angle = ${angle}; persona = ${persona}; language = ${input.language}
@@ -269,4 +288,25 @@ LAST 7 DAYS OF RESULTS, WITH CREATIVE ATTRIBUTES WHERE LINKED:
 ${JSON.stringify(data, null, 2)}
 
 Return: winners and losers (name + why, using the numbers); the patterns behind winners (angle, persona, format, language, hook); converting marketplace search terms with a note on how to use each (empty if none in the data); exactly 5 concepts to brief next week; and a 2–3 sentence summary. If there is too little data, say so in the summary and base the concepts on the brand's strongest angles.`;
+}
+
+/** Breaks down a competitor ad and suggests clearly different ideas for our product. */
+export function buildCompetitorPrompt(brand: BrandLike, products: ProductLike[], ad: { brand: string; product: string; channel: string; adText: string; notes: string; hasImage: boolean }): string {
+  return `You are the creative strategist for an Indian D2C food brand. Break down a competitor's ad so the team can learn from its craft and find where we can be different. Never suggest copying its words, visuals or claims.
+
+OUR BRAND:
+${brand.brandContext}
+
+OUR HARD RULES (our counter-ideas must follow them):
+${brand.hardRules}
+
+OUR PRODUCTS AND ALLOWED (GREEN) CLAIMS:
+${products.map((p) => `- ${p.name}: ${list(p.greenClaims)}`).join("\n")}
+
+COMPETITOR AD:
+Brand: ${ad.brand}${ad.product ? `. Product: ${ad.product}` : ""}${ad.channel ? `. Ran on: ${ad.channel}` : ""}.
+${ad.adText.trim() ? `Text of the ad:\n"""\n${ad.adText.trim()}\n"""` : "(No text pasted.)"}
+${ad.hasImage ? "A screenshot of the ad is attached: read its visible text and describe what it shows.\n" : ""}${ad.notes.trim() ? `Team notes: ${ad.notes.trim()}\n` : ""}
+Rate every claim they make: "ok" (we could say the same if true for us), "check" (needs evidence), "risky" (would break our hard rules or FSSAI/ASCI: health, disease, "healthy", "guilt-free", "100%", unqualified nutrient claims, comparisons). In white_space, list moments, angles or proof points they don't own that our products can credibly claim.
+Give exactly 3 counter_ideas for us: clearly different from their ad, using only our green claims, never naming or knocking them.`;
 }

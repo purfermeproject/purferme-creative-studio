@@ -16,6 +16,7 @@ import type { ScanResult } from "@/lib/compliance";
 import type { VerdictThresholds } from "@/lib/verdicts";
 import { DEFAULT_AVOID_PHRASES, DEFAULT_EXAMPLE_ADS } from "@/lib/creative-defaults";
 import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brand-kit";
+import type { CompetitorAnalysis } from "@/lib/schemas";
 
 export type ClaimEvidence = { claim: string; evidence: string; source?: string };
 export type ProductUrl = { label: string; url: string };
@@ -40,6 +41,8 @@ export const products = pgTable("products", {
   messagingPriorities: text("messaging_priorities").array().notNull().default([]),
   claimEvidence: jsonb("claim_evidence").$type<ClaimEvidence[]>().notNull().default([]),
   productUrls: jsonb("product_urls").$type<ProductUrl[]>().notNull().default([]),
+  /** Extra real product photos (pack back, product out of pack, jar open…). Placed into images unchanged, like the pack. */
+  photoAssetIds: uuid("photo_asset_ids").array().notNull().default([]),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -93,6 +96,7 @@ export type GenerationMeta = {
   prompt?: string;
   sourceAssetIds?: string[];
   proposal?: { title: string; big_idea: string };
+  competitorId?: string;
   generatedAt?: string;
 };
 export type ClaimUsed = { text: string; tier: "green" | "amber" };
@@ -167,6 +171,24 @@ export const creativeVersions = pgTable("creative_versions", {
   createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("creative_versions_creative_idx").on(t.creativeId, t.revision)]);
+
+/** Competitor ads the team collects, with an AI breakdown used to brief differentiated ideas. */
+export const competitorAds = pgTable("competitor_ads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  brand: text("brand").notNull(),
+  product: text("product").notNull().default(""),
+  /** Where it ran: free text (Instagram, Amazon, YouTube…). */
+  channel: text("channel").notNull().default(""),
+  adText: text("ad_text").notNull().default(""),
+  link: text("link").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  imageAssetId: uuid("image_asset_id"),
+  analysis: jsonb("analysis").$type<CompetitorAnalysis>(),
+  analysisModel: text("analysis_model").notNull().default(""),
+  analysedAt: timestamp("analysed_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** Team roles. While this table is empty everyone is an admin (see src/lib/roles.ts). */
 export const userRoles = pgTable("user_roles", {
@@ -276,3 +298,4 @@ export type ComplianceTerm = typeof complianceTerms.$inferSelect;
 export type Creative = typeof creatives.$inferSelect;
 export type Result = typeof results.$inferSelect;
 export type CreativeVersion = typeof creativeVersions.$inferSelect;
+export type CompetitorAd = typeof competitorAds.$inferSelect;

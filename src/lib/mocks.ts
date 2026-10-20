@@ -1,4 +1,4 @@
-import type { Concept, DeepCheck, DesignRead, Proposal, WeeklyBrief } from "./schemas";
+import type { CompetitorAnalysis, Concept, DeepCheck, DesignRead, Proposal, WeeklyBrief } from "./schemas";
 import { isVideoType, type GenerationInput } from "./prompts";
 import type { ScanResult } from "./compliance";
 
@@ -149,4 +149,28 @@ export function mockDeveloped(input: GenerationInput, proposal: Proposal, produc
     };
   }
   return c;
+}
+
+export function mockCompetitorAnalysis(brand: string): CompetitorAnalysis {
+  return {
+    summary: `Sample breakdown (mock mode) of a ${brand} ad: a pack shot with a health-led headline.`,
+    hook: "“The healthy cookie your family deserves”",
+    hook_mechanism: "Benefit statement",
+    angle: "Health halo",
+    audience: "Parents",
+    format: "Static 1:1",
+    offer: "",
+    claims_made: [
+      { text: "Healthy", risk: "risky", note: "We never say “healthy” (brand rule; FSSAI)." },
+      { text: "High fibre", risk: "check", note: "Only with grams per serving and evidence." },
+    ],
+    what_works: ["Pack is visible in the first second", "One clear line of copy"],
+    weaknesses: ["Generic family scene", "Leans on a claim we can't and shouldn't match"],
+    white_space: ["A specific chai-time moment", "Ingredient % transparency", "Seed-to-fork QR"],
+    counter_ideas: [
+      { title: "Flip the pack", hook: "I read the back first.", angle: "Ingredient % transparency", why: "Proof they don't show." },
+      { title: "4:30 slump", hook: "3pm called. It wants chai.", angle: "Coffee/chai ritual", why: "A moment, not a health promise." },
+      { title: "Scan the QR", hook: "Where did this millet grow?", angle: "Seed-to-fork traceability", why: "Something only we can say." },
+    ],
+  };
 }

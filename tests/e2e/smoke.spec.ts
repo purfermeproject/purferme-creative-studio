@@ -15,6 +15,8 @@ type BriefOpts = {
   deliverable?: "Ad concept" | "UGC script" | "Ad copy set";
   objective?: string;
   extra?: string;
+  /** Make the first image automatically after developing (off by default in tests, so image counts stay exact). */
+  autoImage?: boolean;
 };
 
 async function fillBrief(page: Page, o: BriefOpts) {
@@ -26,6 +28,7 @@ async function fillBrief(page: Page, o: BriefOpts) {
   if (o.type) await page.getByLabel("Type of ad", { exact: true }).selectOption(o.type);
   if (o.placement) await page.getByLabel("Where it runs", { exact: true }).selectOption(o.placement);
   if (o.deliverable) await page.getByRole("radiogroup", { name: "What to make" }).getByText(o.deliverable, { exact: true }).click();
+  await page.getByLabel("Make the first image automatically").setChecked(Boolean(o.autoImage));
   if (o.extra) {
     await page.getByText("More direction").click();
     await page.getByLabel(/Anything else/).fill(o.extra);
@@ -463,6 +466,79 @@ test("Original pack is placed unchanged, and AI edits of it need explicit consen
   expect((await res.json()).error).toContain("original pack");
 });
 
+test("Proposals show the real pack; a proposal image carries into the ad; the first image can be automatic", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/create");
+  await fillBrief(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  await page.getByRole("button", { name: "Propose 3 concepts" }).click();
+  const first = page.getByTestId("proposal-0");
+  await expect(first.getByTestId("proposal-pack")).toBeVisible({ timeout: 60_000 });
+  await expect(first).toContainText("Sketch · not an AI image");
+  await first.getByRole("button", { name: "Make a real image" }).click();
+  await expect(first.getByTestId("proposal-image")).toBeVisible({ timeout: 60_000 });
+  await first.getByRole("button", { name: /^Develop as/ }).click();
+  const ws = page.getByTestId("workspace-creative");
+  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1, { timeout: 60_000 });
+  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack");
+  await expect(page.getByTestId("creative-preview").locator("img")).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByTestId("workspace-creative").getByTestId("image-gallery").locator("img")).toHaveCount(1);
+
+  const auto = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", autoImage: true });
+  await expect(auto.getByTestId("image-gallery").locator("img")).toHaveCount(1, { timeout: 60_000 });
+  await expect(auto.getByTestId("image-dims").first()).toContainText("original pack");
+});
+
+test("Extra product photos can be placed instead of the pack", async ({ page }) => {
+  const sharp = (await import("sharp")).default;
+  const photo = await sharp({ create: { width: 400, height: 400, channels: 3, background: "#c17d3c" } }).jpeg().toBuffer();
+  await signIn(page);
+  await page.goto("/admin");
+  const card = page.getByTestId("product-bfast");
+  await card.locator("summary").click();
+  const photos = card.getByTestId("photos-bfast");
+  await photos.getByLabel("What it shows").fill("Cookies out of the pack");
+  await photos.getByLabel(/Product photo for/).setInputFiles({ name: "cookies.jpg", mimeType: "image/jpeg", buffer: photo });
+  await photos.getByRole("button", { name: "Add photo" }).click();
+  await expect(photos.getByText("Photo added.")).toBeVisible();
+  await expect(photos.locator("img")).toHaveCount(1);
+
+  const ws = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  await ws.getByLabel("Which product photo").selectOption({ label: "Photo: Cookies out of the pack" });
+  await ws.getByRole("button", { name: "Make image" }).click();
+  await expect(ws.getByTestId("image-dims").first()).toContainText("original pack");
+});
+
+test("Competitors: save and analyse an ad, then brief ideas that stand apart from it", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/competitors");
+  await expect(page.getByTestId("competitors-empty")).toBeVisible();
+  const form = page.getByRole("form", { name: "Add a competitor ad" });
+  await form.getByRole("button", { name: "Save and analyse" }).click();
+  await form.getByLabel("Brand").fill("Crunchy Co");
+  await form.getByLabel("Link").fill("ftp://nope");
+  await form.getByRole("button", { name: "Save and analyse" }).click();
+  await expect(form.getByRole("alert")).toContainText("must start with http");
+  await form.getByLabel("Link").fill("https://www.facebook.com/ads/library/?id=1");
+  await form.getByRole("button", { name: "Save and analyse" }).click();
+  await expect(form.getByRole("alert")).toContainText("Paste the ad's text or upload a screenshot");
+  await form.getByLabel("Ad text").fill("The healthy cookie your family deserves! Guilt-free snacking.");
+  await form.getByRole("button", { name: "Save and analyse" }).click();
+  const ad = page.getByTestId("competitor").first();
+  await expect(ad.getByTestId("competitor-analysis")).toBeVisible({ timeout: 60_000 });
+  await expect(ad.getByTestId("competitor-claims")).toContainText("we can't say this");
+  await expect(ad.getByTestId("mock-badge")).toBeVisible();
+
+  await ad.getByRole("link", { name: "Use in a brief" }).click();
+  await page.locator("form[aria-label=Brief][data-ready]").waitFor();
+  await expect(page.getByLabel(/Stand apart from a competitor/)).not.toHaveValue("");
+  const sent = page.waitForRequest((r) => r.url().endsWith("/api/generate") && (r.postData() ?? "").includes('"competitorId"'));
+  await page.getByLabel("Make the first image automatically").uncheck();
+  await page.getByRole("button", { name: "Propose 3 concepts" }).click();
+  await sent;
+  await expect(page.getByTestId("proposal-2")).toBeVisible({ timeout: 60_000 });
+});
+
 test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {
   await signIn(page);
   await page.goto("/admin#roles");
@@ -490,5 +566,8 @@ test("Roles: a viewer can look but not create; the server refuses too", async ({
   expect(res.status()).toBe(403);
   await v.goto("/admin");
   await expect(v.getByText("only admins can change them")).toBeVisible();
+  await v.goto("/competitors");
+  await expect(v.getByText("Your role can view competitor ads but not add them.")).toBeVisible();
+  await expect(v.getByRole("button", { name: "Analyse again" })).toHaveCount(0);
   await ctx.close();
 });

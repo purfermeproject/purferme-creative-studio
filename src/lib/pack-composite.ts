@@ -9,6 +9,9 @@ export type PackScale = (typeof PACK_SCALES)[number];
 const HEIGHT: Record<PackScale, number> = { small: 0.32, medium: 0.45, large: 0.62 };
 const WIDTH: Record<PackScale, number> = { small: 0.34, medium: 0.48, large: 0.7 };
 
+/** The pack photo can't be used (too small, or not a readable image). */
+export class PackPhotoError extends Error {}
+
 export type PackBox = { left: number; top: number; width: number; height: number };
 
 /** True when the pack photo is a cut-out (has real transparency around the pack). */
@@ -44,9 +47,26 @@ export async function compositePack(
   opts: { w: number; h: number; position?: PackPosition; scale?: PackScale; format?: "jpeg" | "png" },
 ): Promise<{ data: Buffer; box: PackBox; cutout: boolean }> {
   const { w, h } = opts;
-  const cutout = await isCutout(pack);
-  // Trim only fully transparent margins of a cut-out; never crop a photo.
-  const source = cutout ? await sharp(pack).rotate().trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 1 }).png().toBuffer() : await sharp(pack).rotate().png().toBuffer();
+  let cutout: boolean;
+  let source: Buffer;
+  try {
+    cutout = await isCutout(pack);
+    source = await sharp(pack).rotate().png().toBuffer();
+  } catch {
+    throw new PackPhotoError("The product photo couldn't be read. Upload it again as a PNG or JPG in Settings → Products.");
+  }
+  const raw = await sharp(source).metadata();
+  if ((raw.width ?? 0) < 64 || (raw.height ?? 0) < 64) {
+    throw new PackPhotoError(`The product photo is too small (${raw.width ?? 0}×${raw.height ?? 0} px). Upload one at least 500 px tall in Settings → Products.`);
+  }
+  if (cutout) {
+    // Trim only fully transparent margins of a cut-out; never crop a photo.
+    source = await sharp(source)
+      .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 1 })
+      .png()
+      .toBuffer()
+      .catch(() => source);
+  }
   const meta = await sharp(source).metadata();
   const box = packBox({ w, h }, { w: meta.width ?? 1, h: meta.height ?? 1 }, opts.position ?? "right", opts.scale ?? "medium");
   const resized = await sharp(source).resize(box.width, box.height, { fit: "fill", kernel: "lanczos3" }).ensureAlpha().png().toBuffer();

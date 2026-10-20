@@ -18,7 +18,10 @@ export type ProductCard = {
   claimEvidence: { claim: string; evidence: string; source?: string }[];
   messagingPriorities: string[];
   evidenceCount: number;
+  photos: { id: string; url: string; label: string }[];
 };
+
+export type CompetitorOption = { id: string; brand: string; product: string; channel: string };
 
 export type PackUpload = { mediaType: "image/png" | "image/jpeg" | "image/webp"; base64: string; name: string };
 
@@ -35,6 +38,10 @@ export type Brief = {
   extra: string;
   inspiration: string;
   pack: PackUpload | null;
+  /** Analysed competitor ad to stand apart from ("" = none). */
+  competitorId: string;
+  /** Make the first image as soon as an idea is developed. */
+  autoImage: boolean;
 };
 
 export type ScoredProposal = Proposal & { scan: ScanResult };

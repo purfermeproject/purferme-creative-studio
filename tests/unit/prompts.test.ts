@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SEED_BRAND, SEED_PLATFORM_RULES, SEED_PRODUCTS } from "@/db/seed-data";
-import { buildCheckPrompt, buildDevelopPrompt, buildGenerationPrompt, buildVariationsPrompt, buildWeeklyBriefPrompt, isVideoType } from "@/lib/prompts";
+import { buildCheckPrompt, buildCompetitorPrompt, buildDevelopPrompt, buildGenerationPrompt, buildVariationsPrompt, buildWeeklyBriefPrompt, isVideoType } from "@/lib/prompts";
 
 const choc = SEED_PRODUCTS.find((p) => p.slug === "choc")!;
 const rule = (p: "meta" | "amazon" | "flipkart") => SEED_PLATFORM_RULES.find((r) => r.platform === p)!;
@@ -183,5 +183,26 @@ describe("workspace prompts", () => {
     const copy = buildDevelopPrompt(SEED_BRAND, product, rule("meta"), { ...p0, deliverable: "copy", proposal });
     expect(copy).toContain("copy.variants");
     expect(copy).toContain("first 125 characters");
+  });
+});
+
+describe("competitor prompts", () => {
+  it("competitor analysis rates their claims and gives counter-ideas within our green claims", () => {
+    const p = buildCompetitorPrompt(SEED_BRAND, [choc], { brand: "Crunchy Co", product: "Cookies", channel: "Instagram", adText: "The healthy cookie!", notes: "", hasImage: true });
+    expect(p).toContain("Crunchy Co");
+    expect(p).toContain("The healthy cookie!");
+    expect(p).toContain("A screenshot of the ad is attached");
+    expect(p).toContain(`- ${choc.name}: ${choc.greenClaims.join("; ")}`);
+    expect(p).toContain("never naming or knocking them");
+  });
+  it("briefs with a competitor stand apart without naming or comparing", () => {
+    const p = buildGenerationPrompt(SEED_BRAND, choc, rule("meta"), {
+      n: 3, platform: "meta", creativeType: "Static image ad (4:5)", angle: "auto", persona: "auto", language: "English", output: "proposals",
+      competitor: { brand: "Crunchy Co", summary: "Health-led pack shot.", hook: "The healthy cookie", angle: "Health halo", claims: ["Healthy"], whiteSpace: ["Chai moment"] },
+    });
+    expect(p).toContain("COMPETITOR TO STAND APART FROM");
+    expect(p).toContain("White space they leave open: Chai moment");
+    expect(p).toContain("Never name, show, imitate or disparage the competitor");
+    expect(p).toContain("no claim we don't hold just because they make it");
   });
 });

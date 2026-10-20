@@ -60,3 +60,10 @@ describe("compositePack", () => {
     expect(centre[0]).not.toBe(0xd9);
   });
 });
+
+describe("unusable pack photos", () => {
+  it("refuses a tiny photo with a clear message", async () => {
+    const tiny = await sharp({ create: { width: 4, height: 4, channels: 4, background: "#ffffff" } }).png().toBuffer();
+    await expect(compositePack(await scene(400, 400), tiny, { w: 400, h: 400 })).rejects.toThrow(/too small/);
+  });
+});

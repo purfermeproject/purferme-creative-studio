@@ -26,6 +26,7 @@ export function ImageMaker({
   productName = "",
   priceText = "",
   placement = "",
+  photos = [],
 }: {
   concept: Concept;
   platform: Platform;
@@ -39,6 +40,8 @@ export function ImageMaker({
   productName?: string;
   priceText?: string;
   placement?: string;
+  /** Extra real product photos that can be placed instead of the pack photo. */
+  photos?: { id: string; label: string }[];
 }) {
   const place = findPlacement(platform, placement);
   const [previewing, setPreviewing] = useState<MadeImage | null>(null);
@@ -52,6 +55,7 @@ export function ImageMaker({
   const [packPosition, setPackPosition] = useState<"right" | "center" | "left">("right");
   const [packScale, setPackScale] = useState<"small" | "medium" | "large">("medium");
   const [allowRedraw, setAllowRedraw] = useState(false);
+  const [photoId, setPhotoId] = useState("");
   const [editing, setEditing] = useState<MadeImage | null>(null);
   const [frame, setFrame] = useState(0);
   const specs = IMAGE_SPECS[platform];
@@ -86,6 +90,7 @@ export function ImageMaker({
         packMode,
         packPosition,
         packScale,
+        photoId: packMode === "locked" && photoId ? photoId : null,
         custom: specId === CUSTOM ? { w: customW, h: customH } : null,
       }),
     });
@@ -213,6 +218,21 @@ export function ImageMaker({
         </select>
         {packMode === "locked" ? (
           <>
+            {photos.length ? (
+              <>
+                <label htmlFor={`photo-${concept.title}`} className="sr-only">
+                  Which product photo
+                </label>
+                <select id={`photo-${concept.title}`} className="input w-auto py-1.5 text-sm" value={photoId} onChange={(e) => setPhotoId(e.target.value)}>
+                  <option value="">Photo: pack</option>
+                  {photos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      Photo: {p.label}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
             <label htmlFor={`packpos-${concept.title}`} className="sr-only">
               Pack position
             </label>

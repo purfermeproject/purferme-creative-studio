@@ -65,8 +65,9 @@ export function buildImagePrompt(opts: {
 }
 
 /** Placeholder used in mock mode so the flow works with no API key. */
-export function mockImageSvg(size: ImageSize, label: string): string {
+export function mockImageSvg(size: ImageSize, label: string, opts: { drawPack?: boolean } = {}): string {
   const [w, h] = size.split("x").map(Number);
+  const pack = opts.drawPack === false ? "" : `<rect x="${w / 2 - 140}" y="${h / 2 - 200}" width="280" height="360" rx="24" fill="#6b3f2a"/><text x="50%" y="${h / 2 - 20}" text-anchor="middle" font-family="sans-serif" font-size="36" fill="#fbf8f3">Puŕ Fermé</text>`;
   const safe = label.replace(/[<>&"]/g, " ").slice(0, 80);
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="#f3ede4"/><rect x="${w / 2 - 140}" y="${h / 2 - 200}" width="280" height="360" rx="24" fill="#6b3f2a"/><text x="50%" y="${h / 2 - 20}" text-anchor="middle" font-family="sans-serif" font-size="36" fill="#fbf8f3">Puŕ Fermé</text><text x="50%" y="${h - 120}" text-anchor="middle" font-family="sans-serif" font-size="34" fill="#2b1d14">${safe}</text><text x="50%" y="${h - 70}" text-anchor="middle" font-family="sans-serif" font-size="24" fill="#5e4c3f">Placeholder: add OPENAI_API_KEY for real images</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="#f3ede4"/>${pack}<text x="50%" y="${h - 120}" text-anchor="middle" font-family="sans-serif" font-size="34" fill="#2b1d14">${safe}</text><text x="50%" y="${h - 70}" text-anchor="middle" font-family="sans-serif" font-size="24" fill="#5e4c3f">Placeholder: add OPENAI_API_KEY for real images</text></svg>`;
 }

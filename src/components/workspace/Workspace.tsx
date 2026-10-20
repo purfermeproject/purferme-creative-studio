@@ -23,7 +23,11 @@ import { BriefPanel } from "./BriefPanel";
 import { CopyBlockView, CreativePreview, SceneList } from "./CreativePreview";
 import { EditorForm } from "./EditorForm";
 import { HistoryPanel } from "./HistoryPanel";
-import type { Brief, OpenCreative, ProductCard, RecentCreative, ScoredProposal } from "./types";
+import type { Brief, CompetitorOption, OpenCreative, ProductCard, RecentCreative, ScoredProposal } from "./types";
+import { ProposalVisual, sketchRatio } from "./ProposalVisual";
+import type { MadeImage } from "@/components/ImageMaker";
+import { findPlacement } from "@/lib/placements";
+import type { Concept } from "@/lib/schemas";
 import { useAutosave, type SaveState } from "./useAutosave";
 import { ValidationPanel } from "./ValidationPanel";
 
@@ -62,11 +66,29 @@ function MockBadge() {
   );
 }
 
-function ProposalCard({ p, index, mock, deliverableLabel, busy, onDevelop }: { p: ScoredProposal; index: number; mock: boolean; deliverableLabel: string; busy: boolean; onDevelop: () => void }) {
+function ProposalCard({
+  p,
+  index,
+  mock,
+  deliverableLabel,
+  busy,
+  onDevelop,
+  visual,
+}: {
+  p: ScoredProposal;
+  index: number;
+  mock: boolean;
+  deliverableLabel: string;
+  busy: boolean;
+  onDevelop: () => void;
+  visual: React.ReactNode;
+}) {
   const reds = p.scan.hits.filter((h) => h.severity === "red").length;
   const ambers = p.scan.hits.filter((h) => h.severity === "amber").length;
   return (
-    <article className="card space-y-3" data-testid={`proposal-${index}`} aria-label={p.title}>
+    <article className="card grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)]" data-testid={`proposal-${index}`} aria-label={p.title}>
+      {visual}
+      <div className="min-w-0 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="eyebrow">Direction {index + 1}</span>
         {mock ? <MockBadge /> : null}
@@ -87,6 +109,7 @@ function ProposalCard({ p, index, mock, deliverableLabel, busy, onDevelop }: { p
       <button type="button" className="btn-primary w-full sm:w-auto" onClick={onDevelop} disabled={busy}>
         Develop as {deliverableLabel.toLowerCase()}
       </button>
+      </div>
     </article>
   );
 }
@@ -130,6 +153,8 @@ export function Workspace({
   user,
   initialCreative,
   recent,
+  competitors,
+  initialCompetitorId,
 }: {
   initialPlatform: Platform;
   products: ProductCard[];
@@ -144,6 +169,8 @@ export function Workspace({
   user: string;
   initialCreative: OpenCreative | null;
   recent: RecentCreative[];
+  competitors: CompetitorOption[];
+  initialCompetitorId: string;
 }) {
   const defaultBrief = (platform: Platform): Brief => ({
     productId: products.find((p) => p.name.startsWith("Chocolate") && p.status === "ready")?.id ?? products.find((p) => p.status === "ready")?.id ?? products[0]?.id ?? "",
@@ -158,6 +185,8 @@ export function Workspace({
     extra: "",
     inspiration: "",
     pack: null,
+    competitorId: initialCompetitorId,
+    autoImage: true,
   });
 
   const [brief, setBrief] = useState<Brief>(() => defaultBrief(initialCreative?.platform ?? initialPlatform));
@@ -207,7 +236,9 @@ export function Workspace({
         const platform = saved.platform && saved.platform in creativeTypes ? saved.platform : b.platform;
         const productId = products.some((p) => p.id === saved.productId) ? saved.productId! : b.productId;
         if (platform !== b.platform) applyPlatform(platform);
-        return { ...b, ...saved, platform, productId, pack: null };
+        const competitorId = saved.competitorId && competitors.some((c) => c.id === saved.competitorId) ? saved.competitorId : "";
+        // A competitor chosen via a link (?competitor=) wins over the remembered brief.
+        return { ...b, ...saved, platform, productId, pack: null, competitorId: initialCompetitorId || competitorId };
       });
     });
     return () => cancelAnimationFrame(frame);
@@ -266,8 +297,81 @@ export function Workspace({
     extra: brief.extra || undefined,
     inspiration: brief.inspiration.trim() || undefined,
     image: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
+    competitorId: brief.competitorId || undefined,
     ...extra,
   });
+
+  // Images made for proposals (before developing), keyed by proposal title.
+  const [proposalImages, setProposalImages] = useState<Record<string, { image: MadeImage | null; busy: boolean; error: string }>>({});
+  const [firstImage, setFirstImage] = useState<{ busy: boolean; error: string }>({ busy: false, error: "" });
+
+  const placementSpec = (platform: Platform, placement: string) => findPlacement(platform, placement)?.specId ?? null;
+
+  async function requestImage(body: Record<string, unknown>): Promise<MadeImage> {
+    const res = await fetch("/api/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? "Couldn't make the image.");
+    return { id: data.id, url: data.url, label: data.label, frameIndex: 0 };
+  }
+
+  const proposalConcept = (p: Proposal): Concept => ({
+    title: p.title,
+    persona: p.persona,
+    angle: p.angle,
+    format: p.format,
+    language: brief.language,
+    hook: p.hook,
+    frames: [{ slot: "Key visual", visual: p.big_idea, onscreen: p.hook }],
+    copy: { headline: p.hook },
+    ai_prompt: p.big_idea,
+    needs_real_person: false,
+    ai_label_needed: false,
+    claims: p.claims,
+    why_it_fits: p.why,
+  });
+
+  async function imageForProposal(p: Proposal) {
+    setProposalImages((m) => ({ ...m, [p.title]: { image: null, busy: true, error: "" } }));
+    try {
+      const image = await requestImage({
+        platform: brief.platform,
+        productId: brief.productId,
+        creativeType: brief.creativeType.trim(),
+        concept: proposalConcept(p),
+        frameIndex: 0,
+        creativeId: null,
+        specId: placementSpec(brief.platform, brief.placement),
+        packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
+        packMode: "locked",
+      });
+      setProposalImages((m) => ({ ...m, [p.title]: { image, busy: false, error: "" } }));
+    } catch (e) {
+      setProposalImages((m) => ({ ...m, [p.title]: { image: null, busy: false, error: e instanceof Error ? e.message : "Couldn't make the image." } }));
+    }
+  }
+
+  /** The first image for a freshly developed ad, so it never opens as text only. */
+  async function makeFirstImage(c: OpenCreative) {
+    if (!c.productId) return;
+    setFirstImage({ busy: true, error: "" });
+    try {
+      const image = await requestImage({
+        platform: c.platform,
+        productId: c.productId,
+        creativeType: c.creativeType,
+        concept: snapshotToConcept(c.snapshot),
+        frameIndex: 0,
+        creativeId: c.id,
+        specId: placementSpec(c.platform, c.placement),
+        packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
+        packMode: "locked",
+      });
+      setCreative((cur) => (cur && cur.id === c.id ? { ...cur, images: [...cur.images, image] } : cur));
+      setFirstImage({ busy: false, error: "" });
+    } catch (e) {
+      setFirstImage({ busy: false, error: e instanceof Error ? e.message : "Couldn't make the first image." });
+    }
+  }
 
   async function stream<T>(body: unknown, label: string, total: number): Promise<T> {
     setProgress({ label, chars: 0, items: 0, total });
@@ -283,6 +387,7 @@ export function Workspace({
       const done = await stream<{ proposals: ScoredProposal[]; mock: boolean }>(requestBody({ mode: "proposals" }), "Writing proposals", 3);
       setProposals(done.proposals);
       setProposalsMock(done.mock);
+      setProposalImages({});
     } catch (e) {
       setError({ text: e instanceof Error ? e.message : "Couldn't write proposals.", retry: propose });
     } finally {
@@ -305,13 +410,14 @@ export function Workspace({
     setError(null);
     setLastProposal(p);
     const prod = product!;
+    const carried = proposalImages[p.title]?.image;
     try {
       const done = await stream<{ creative: { id: string; revision: number; status: CreativeStatus }; concept: ReturnType<typeof snapshotToConcept>; mock: boolean }>(
-        requestBody({ mode: "develop", proposal: p }),
+        requestBody({ mode: "develop", proposal: p, imageIds: carried ? [carried.id] : undefined }),
         `Developing “${p.title}”`,
         1,
       );
-      openCreative({
+      const opened: OpenCreative = {
         id: done.creative.id,
         platform: brief.platform,
         productId: prod.id,
@@ -323,7 +429,7 @@ export function Workspace({
         status: done.creative.status,
         revision: done.creative.revision,
         snapshot: conceptToSnapshot(done.concept),
-        images: [],
+        images: carried ? [carried] : [],
         qaChecked: [],
         claimsReviewedBy: "",
         approvedBy: "",
@@ -331,7 +437,9 @@ export function Workspace({
         createdAt: new Date().toISOString(),
         mock: done.mock,
         model: done.mock ? "mock" : "",
-      });
+      };
+      openCreative(opened);
+      if (!carried && brief.autoImage) void makeFirstImage(opened);
     } catch (e) {
       setError({ text: e instanceof Error ? e.message : "Couldn't develop that concept.", retry: () => develop(p) });
     } finally {
@@ -533,6 +641,7 @@ export function Workspace({
             packError={packError}
             onPackFile={onPackFile}
             ready={briefReady}
+            competitors={competitors}
           />
         </aside>
 
@@ -609,6 +718,18 @@ export function Workspace({
                 </div>
               </header>
 
+              {firstImage.busy ? (
+                <p className="rounded-xl bg-gold-soft p-3 text-sm" role="status" data-testid="first-image-busy">
+                  Making the first image with your real pack… (up to a minute). You can start editing meanwhile.
+                </p>
+              ) : firstImage.error ? (
+                <p className="rounded-xl border border-red/30 bg-red-bg p-3 text-sm text-red" role="alert">
+                  {firstImage.error}{" "}
+                  <button type="button" className="font-semibold underline" onClick={() => creative && makeFirstImage(creative)}>
+                    Try again
+                  </button>
+                </p>
+              ) : null}
               <div className="grid gap-5 xl:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
                 <CreativePreview
                   snapshot={snapshot}
@@ -657,6 +778,7 @@ export function Workspace({
                     productName={creative.productName}
                     placement={creative.placement}
                     priceText={creativeProduct?.priceText}
+                    photos={creativeProduct?.photos ?? []}
                   />
                 </section>
               ) : null}
@@ -692,7 +814,20 @@ export function Workspace({
                 <summary className="cursor-pointer font-semibold">Other directions from this brief ({proposals.length})</summary>
                 <div className="mt-3 space-y-3">
                   {proposals.map((p, i) => (
-                    <ProposalCard key={i} p={p} index={i} mock={proposalsMock} deliverableLabel={deliverableLabel} busy={working || !canGenerate} onDevelop={() => develop(p)} />
+                    <ProposalCard key={i} p={p} index={i} mock={proposalsMock} deliverableLabel={deliverableLabel} busy={working || !canGenerate} onDevelop={() => develop(p)}
+                      visual={
+                        <ProposalVisual
+                          hook={p.hook}
+                          packUrl={product?.packImageUrl ?? null}
+                          ratio={sketchRatio(brief.platform, brief.placement, brief.creativeType)}
+                          image={proposalImages[p.title]?.image ?? null}
+                          busy={Boolean(proposalImages[p.title]?.busy)}
+                          error={proposalImages[p.title]?.error ?? ""}
+                          canMake={canGenerate && !working}
+                          onMake={() => imageForProposal(p)}
+                        />
+                      }
+                    />
                   ))}
                 </div>
               </details>
@@ -704,7 +839,20 @@ export function Workspace({
                   <p className="hint mt-1">Each one is a different idea. Developing turns it into a full {deliverableLabel.toLowerCase()} and saves it as a draft.</p>
                 </div>
                 {proposals.map((p, i) => (
-                  <ProposalCard key={i} p={p} index={i} mock={proposalsMock} deliverableLabel={deliverableLabel} busy={working || !canGenerate} onDevelop={() => develop(p)} />
+                  <ProposalCard key={i} p={p} index={i} mock={proposalsMock} deliverableLabel={deliverableLabel} busy={working || !canGenerate} onDevelop={() => develop(p)}
+                      visual={
+                        <ProposalVisual
+                          hook={p.hook}
+                          packUrl={product?.packImageUrl ?? null}
+                          ratio={sketchRatio(brief.platform, brief.placement, brief.creativeType)}
+                          image={proposalImages[p.title]?.image ?? null}
+                          busy={Boolean(proposalImages[p.title]?.busy)}
+                          error={proposalImages[p.title]?.error ?? ""}
+                          canMake={canGenerate && !working}
+                          onMake={() => imageForProposal(p)}
+                        />
+                      }
+                    />
                 ))}
                 <button type="button" className="btn-secondary" onClick={propose} disabled={working || !canGenerate}>
                   Propose 3 more

@@ -13,6 +13,7 @@ import { buildDevelopPrompt, buildGenerationPrompt, buildVariationsPrompt } from
 import { ConceptSchema, GenerationResponseSchema, ProposalSchema, ProposalsResponseSchema } from "@/lib/schemas";
 import { DELIVERABLES, OBJECTIVES, PLATFORMS } from "@/lib/types";
 import { findPlacement } from "@/lib/placements";
+import { competitorContext } from "@/lib/competitors";
 
 export const maxDuration = 300;
 
@@ -39,6 +40,10 @@ const Body = z.object({
   /** develop only: write the result into this existing ad as a new version instead of a new ad. */
   creativeId: z.string().uuid().optional(),
   baseRevision: z.number().int().min(1).optional(),
+  /** An analysed competitor ad to stand apart from. */
+  competitorId: z.string().uuid().optional(),
+  /** Images made from the proposal before developing; attached to the new ad. */
+  imageIds: z.array(z.string().uuid()).max(10).optional(),
 });
 
 type Objective = (typeof OBJECTIVES)[number]["id"];
@@ -97,6 +102,7 @@ export async function POST(req: Request) {
   const n = input.mode === "regenerate" || input.mode === "develop" ? 1 : input.mode === "variations" ? 6 : input.n;
   const objective = input.objective as Objective | "";
   const deliverable = input.deliverable as Deliverable;
+  const competitor = input.competitorId ? await competitorContext(input.competitorId) : null;
   const common = {
     platform: input.platform,
     creativeType: input.creativeType,
@@ -106,6 +112,7 @@ export async function POST(req: Request) {
     placement,
     hasPackImage: Boolean(image),
     objective,
+    competitor,
   };
   let prompt: string;
   if (input.mode === "proposals") {
@@ -192,6 +199,7 @@ export async function POST(req: Request) {
             prompt,
             sourceAssetIds: !input.image && packAsset ? [packAsset] : [],
             proposal: { title: proposal.title, big_idea: proposal.big_idea },
+            competitorId: competitor ? input.competitorId : undefined,
             generatedAt: new Date().toISOString(),
           };
           if (input.creativeId) {
@@ -207,6 +215,7 @@ export async function POST(req: Request) {
               objective,
               deliverable,
               meta: genMeta,
+              imageIds: input.imageIds,
               user,
             });
             send({ type: "done", creative: { id: row.id, revision: row.revision, status: row.status }, concept, mock });

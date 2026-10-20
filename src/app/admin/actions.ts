@@ -12,6 +12,19 @@ import { PLATFORMS, PRODUCT_STATUSES, SEVERITIES, isPlatform } from "@/lib/types
 import { DEFAULT_THRESHOLDS, type VerdictThresholds } from "@/lib/verdicts";
 import { isHexColor, withKitDefaults, type BrandKit } from "@/lib/brand-kit";
 import { parseEvidence, parseUrls } from "@/lib/product-knowledge";
+import { storeAsset } from "@/lib/asset-store";
+import sharp from "sharp";
+
+/** Product photos are placed into images unchanged, so they need to be big enough to look sharp. */
+async function photoProblem(file: File): Promise<string | null> {
+  try {
+    const m = await sharp(Buffer.from(await file.arrayBuffer())).metadata();
+    if ((m.width ?? 0) < 300 || (m.height ?? 0) < 300) return `That photo is only ${m.width}×${m.height} px. Use one at least 300 px on each side (500+ looks best).`;
+    return null;
+  } catch {
+    return "That file couldn't be read as an image.";
+  }
+}
 import { isRole } from "@/lib/roles";
 import { count } from "drizzle-orm";
 
@@ -103,6 +116,8 @@ export async function uploadPackImage(_: ActionState, fd: FormData): Promise<Act
     if (!(file instanceof File) || file.size === 0) return fail("Choose an image file first.");
     if (!file.type.startsWith("image/")) return fail("That file isn't an image. Use a PNG, JPG or WebP.");
     if (file.size > 5 * 1024 * 1024) return fail("Images must be under 5 MB.");
+    const problem = await photoProblem(file);
+    if (problem) return fail(problem);
     let url: string;
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       url = (await put(`packs/${id}-${file.name}`, file, { access: "public", addRandomSuffix: true })).url;
@@ -297,5 +312,45 @@ export async function removeUserRole(_: ActionState, fd: FormData): Promise<Acti
     return ok("Removed.");
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Couldn't remove the role.");
+  }
+}
+
+// ---- Extra product photos (placed into images unchanged, like the pack) ----
+
+export async function uploadProductPhoto(_: ActionState, fd: FormData): Promise<ActionState> {
+  try {
+    const { user } = await requireRole("settings");
+    const id = String(fd.get("id") ?? "");
+    const label = String(fd.get("label") ?? "").trim().slice(0, 80);
+    const file = fd.get("file");
+    if (!(file instanceof File) || file.size === 0) return fail("Choose a photo first.");
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return fail("Use a PNG, JPG or WebP photo.");
+    if (file.size > 5 * 1024 * 1024) return fail("Photos must be under 5 MB.");
+    const problem = await photoProblem(file);
+    if (problem) return fail(problem);
+    const [product] = await db.select({ ids: schema.products.photoAssetIds }).from(schema.products).where(eq(schema.products.id, id));
+    if (!product) return fail("That product no longer exists.");
+    if (product.ids.length >= 12) return fail("A product can have up to 12 photos. Remove one first.");
+    const asset = await storeAsset({ data: Buffer.from(await file.arrayBuffer()), mime: file.type, kind: "product-photo", label: label || file.name.replace(/\.[a-z0-9]+$/i, ""), user });
+    await db.update(schema.products).set({ photoAssetIds: [...product.ids, asset.id], updatedAt: new Date() }).where(eq(schema.products.id, id));
+    refresh();
+    return ok("Photo added.");
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Couldn't add the photo.");
+  }
+}
+
+export async function removeProductPhoto(_: ActionState, fd: FormData): Promise<ActionState> {
+  try {
+    await requireRole("settings");
+    const id = String(fd.get("id") ?? "");
+    const assetId = String(fd.get("assetId") ?? "");
+    const [product] = await db.select({ ids: schema.products.photoAssetIds }).from(schema.products).where(eq(schema.products.id, id));
+    if (!product) return fail("That product no longer exists.");
+    await db.update(schema.products).set({ photoAssetIds: product.ids.filter((x) => x !== assetId), updatedAt: new Date() }).where(eq(schema.products.id, id));
+    refresh();
+    return ok("Removed.");
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Couldn't remove the photo.");
   }
 }

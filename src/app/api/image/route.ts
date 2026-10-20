@@ -26,6 +26,8 @@ const Body = z.object({
   packMode: z.enum(["locked", "reference", "none"]).default("locked"),
   packPosition: z.enum(PACK_POSITIONS).default("right"),
   packScale: z.enum(PACK_SCALES).default("medium"),
+  /** Which real product photo to place: the pack photo (default) or one of the product's extra photos. */
+  photoId: z.string().uuid().nullable().optional(),
   custom: z
     .object({ w: z.number().int().min(MIN_SIDE).max(MAX_SIDE), h: z.number().int().min(MIN_SIDE).max(MAX_SIDE) })
     .nullable()
@@ -56,12 +58,19 @@ export async function POST(req: Request) {
     const reference: Reference =
       input.packMode === "none"
         ? null
-        : input.packImage
-          ? { data: Buffer.from(input.packImage.base64, "base64"), mime: input.packImage.mediaType, name: "pack" }
-          : await loadReference(product.packImageUrl);
+        : input.photoId && product.photoAssetIds.includes(input.photoId)
+          ? await loadReference(`/api/assets/${input.photoId}`)
+          : input.packImage
+            ? { data: Buffer.from(input.packImage.base64, "base64"), mime: input.packImage.mediaType, name: "pack" }
+            : await loadReference(product.packImageUrl);
     // Without a pack photo there is nothing to lock; fall back to describing the pack.
     const packMode = !reference ? "none" : input.packMode;
-    const packAssetId = !input.packImage ? (/^\/api\/assets\/([0-9a-f-]{36})$/i.exec(product.packImageUrl ?? "")?.[1] ?? null) : null;
+    const packAssetId =
+      input.photoId && product.photoAssetIds.includes(input.photoId)
+        ? input.photoId
+        : !input.packImage
+          ? (/^\/api\/assets\/([0-9a-f-]{36})$/i.exec(product.packImageUrl ?? "")?.[1] ?? null)
+          : null;
     const spec = input.custom
       ? { w: input.custom.w, h: input.custom.h, label: `custom ${ratioLabel(input.custom.w, input.custom.h)}`, note: undefined as string | undefined }
       : (input.specId ? findSpec(input.specId) : null) ?? defaultSpecFor(input.platform, input.creativeType);

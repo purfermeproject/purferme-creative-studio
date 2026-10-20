@@ -7,13 +7,16 @@ import { asc } from "drizzle-orm";
 import { currentUser, roleOf } from "@/auth";
 import { db, schema } from "@/db";
 import { formatEvidence, formatUrls } from "@/lib/product-knowledge";
+import { assetInfo } from "@/lib/asset-store";
 import { can, ROLE_HINTS, ROLE_LABELS } from "@/lib/roles";
 import {
   createProduct,
   createTerm,
   deleteProduct,
   deleteTerm,
+  removeProductPhoto,
   removeUserRole,
+  uploadProductPhoto,
   setUserRole,
   saveBrand,
   savePlatformRule,
@@ -75,6 +78,7 @@ export default async function AdminPage() {
     db.select().from(schema.userRoles).orderBy(asc(schema.userRoles.email)),
   ]);
   const myRole = user ? await roleOf(user) : "viewer";
+  const photoInfo = new Map((await assetInfo(products.flatMap((p) => p.photoAssetIds))).map((a) => [a.id, a]));
   const isAdmin = can(myRole, "settings");
   const blocked = products.filter((p) => p.status === "blocked");
   const ruleBy = Object.fromEntries(rules.map((r) => [r.platform, r]));
@@ -231,6 +235,36 @@ export default async function AdminPage() {
                   </label>
                   <input id={`file-${p.id}`} name="file" type="file" accept="image/*" className="text-sm" />
                 </ActionForm>
+                <div className="w-full space-y-3 border-t border-line pt-4" data-testid={`photos-${p.slug}`}>
+                  <p className="label">More product photos</p>
+                  <p className="hint">Back of pack, product out of the pack, jar open, a few pieces on a plate… The workspace can place any of these into images unchanged, and shows them on proposals.</p>
+                  {p.photoAssetIds.length ? (
+                    <ul className="flex flex-wrap gap-3">
+                      {p.photoAssetIds.map((aid) => (
+                        <li key={aid} className="w-28 space-y-1 text-xs">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={`/api/assets/${aid}`} alt={photoInfo.get(aid)?.label || "Product photo"} className="h-28 w-28 rounded-lg border border-line bg-surface-2 object-contain" />
+                          <p className="truncate">{photoInfo.get(aid)?.label}</p>
+                          <ActionForm action={removeProductPhoto} submitLabel="Remove" submitClassName="text-xs font-semibold text-red underline">
+                            <input type="hidden" name="id" value={p.id} />
+                            <input type="hidden" name="assetId" value={aid} />
+                          </ActionForm>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <ActionForm action={uploadProductPhoto} submitLabel="Add photo" submitClassName="btn-secondary" className="flex flex-wrap items-end gap-3">
+                    <input type="hidden" name="id" value={p.id} />
+                    <label className="block">
+                      <span className="label">What it shows</span>
+                      <input name="label" className="input" maxLength={80} placeholder="e.g. Cookies out of the pack" />
+                    </label>
+                    <label className="block">
+                      <span className="label">Photo</span>
+                      <input name="file" type="file" accept="image/png,image/jpeg,image/webp" aria-label={`Product photo for ${p.name}`} />
+                    </label>
+                  </ActionForm>
+                </div>
                 <ActionForm
                   action={deleteProduct}
                   submitLabel="Delete product"

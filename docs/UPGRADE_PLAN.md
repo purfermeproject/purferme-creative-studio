@@ -98,6 +98,8 @@ October 2026. This document covers the state of the app before the upgrade, the 
 | Server-side claims and brand validation, human sign-off for uncertain claims | Implemented |
 | Roles enforced server-side | Implemented. With the shared team password, identity is self-declared, so use Google or email sign-in for roles you can rely on. |
 | Generation metadata and audit fields | Implemented |
+| Competitor ad library with AI breakdown, used in briefs to stand apart | Implemented (text/screenshot; Ad Library links stored, not fetched) |
+| Pack sketch on proposals, real image per proposal, automatic first image, extra product photos | Implemented |
 | Comments, assignments, notifications | Phase 2 |
 | Object storage for images, background removal | Phase 2 |
 | Meta/Amazon performance import, learning loop | Phase 3 (interfaces only) |

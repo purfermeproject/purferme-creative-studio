@@ -7,7 +7,17 @@ import { UserFacingError, isMock } from "./ai";
 import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
-import { compositePack, type PackPosition, type PackScale } from "./pack-composite";
+import { compositePack as composite, PackPhotoError, type PackPosition, type PackScale } from "./pack-composite";
+
+/** Composite, turning an unusable pack photo into a message the team can act on. */
+async function compositePack(...args: Parameters<typeof composite>) {
+  try {
+    return await composite(...args);
+  } catch (e) {
+    if (e instanceof PackPhotoError) throw new UserFacingError(e.message);
+    throw e;
+  }
+}
 
 export const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-flare";
 
@@ -67,7 +77,7 @@ export async function generateImage(opts: {
   // With an OpenAI key, images are always real, even while text generation is in mock mode.
   if (isMock() && !process.env.OPENAI_API_KEY) {
     mime = "image/svg+xml";
-    data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label)).toString("base64");
+    data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label, { drawPack: !opts.lockedPack })).toString("base64");
     model = "mock";
     if (opts.lockedPack) {
       // Placeholder scene, but the real pack is composited exactly as it would be for a real image.

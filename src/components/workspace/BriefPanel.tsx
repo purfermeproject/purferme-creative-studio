@@ -4,7 +4,8 @@ import { ChoiceOrCustom } from "@/components/ChoiceOrCustom";
 import { PLACEMENTS } from "@/lib/placements";
 import { AUTO } from "@/lib/prompts";
 import { DELIVERABLES, OBJECTIVES, PLATFORMS, type Deliverable, type Objective, type Platform } from "@/lib/types";
-import type { Brief, ProductCard } from "./types";
+import Link from "next/link";
+import type { Brief, CompetitorOption, ProductCard } from "./types";
 
 const PLATFORM_NAMES: Record<Platform, { title: string; sub: string }> = {
   meta: { title: "Instagram & Facebook", sub: "Meta ads" },
@@ -70,6 +71,7 @@ export function BriefPanel({
   packError,
   onPackFile,
   ready,
+  competitors,
 }: {
   brief: Brief;
   set: (patch: Partial<Brief>) => void;
@@ -84,6 +86,7 @@ export function BriefPanel({
   packError: string;
   onPackFile: (f: File | undefined) => void;
   ready: boolean;
+  competitors: CompetitorOption[];
 }) {
   const product = products.find((p) => p.id === brief.productId);
   const blocked = product && product.status !== "ready";
@@ -135,6 +138,16 @@ export function BriefPanel({
               </p>
               {product.messagingPriorities.length ? <p className="mt-1">Leads with: {product.messagingPriorities.slice(0, 3).join(" · ")}</p> : null}
               <p className="mt-1">{product.packImageUrl ? "Original pack photo on file: images place it unchanged." : "No pack photo yet: images will leave the pack out. Add one in Settings."}</p>
+              {product.packImageUrl || product.photos.length ? (
+                <ul className="mt-2 flex gap-1.5 overflow-x-auto" aria-label="Product photos">
+                  {[...(product.packImageUrl ? [{ id: "pack", url: product.packImageUrl, label: "Pack" }] : []), ...product.photos].map((ph) => (
+                    <li key={ph.id} className="shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={ph.url} alt={ph.label} title={ph.label} className="size-12 rounded-md border border-line bg-surface object-contain" />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           )
         ) : null}
@@ -215,6 +228,27 @@ export function BriefPanel({
           options={[{ value: AUTO, label: "Let AI pick a varied mix" }, ...plain(angles)]}
           placeholder="e.g. Monsoon chai-time snack"
         />
+        <div>
+          <label htmlFor="competitor" className="label">
+            Stand apart from a competitor <span className="font-normal text-ink-soft">(optional)</span>
+          </label>
+          {competitors.length ? (
+            <select id="competitor" className="input" value={brief.competitorId} onChange={(e) => set({ competitorId: e.target.value })}>
+              <option value="">No competitor</option>
+              {competitors.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.brand}
+                  {c.product ? ` · ${c.product}` : ""}
+                  {c.channel ? ` (${c.channel})` : ""}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="hint text-xs">
+              No analysed competitor ads yet. <Link href="/competitors" className="font-semibold text-purple underline">Add one</Link>
+            </p>
+          )}
+        </div>
         <ChoiceOrCustom id="language" label="Language" value={brief.language} onChange={(v) => set({ language: v })} options={plain(languages)} placeholder="e.g. Punjabi, Kannada" />
         <details className="group rounded-xl border border-line">
           <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-ink-soft hover:text-ink">
@@ -255,7 +289,13 @@ export function BriefPanel({
         </details>
       </Step>
 
-      <div className="sticky bottom-0 -mx-1 bg-gradient-to-t from-bg via-bg to-transparent px-1 pt-3 pb-1">
+      <div className="sticky bottom-0 -mx-1 space-y-2 bg-gradient-to-t from-bg via-bg to-transparent px-1 pt-3 pb-1">
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1 size-4 accent-(--purple)" checked={brief.autoImage} onChange={(e) => set({ autoImage: e.target.checked })} />
+          <span>
+            Make the first image automatically <span className="text-ink-soft">(with your real pack; uses image credits)</span>
+          </span>
+        </label>
         <button type="submit" className="btn-primary w-full py-3 text-base" disabled={busy || !canGenerate || !product || Boolean(blocked) || !brief.creativeType.trim()}>
           {busy ? "Working…" : "Propose 3 concepts"}
         </button>

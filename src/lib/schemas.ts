@@ -92,3 +92,28 @@ export const DesignReadSchema = z.object({
   notes: z.array(z.string()).describe("Short design observations: legibility, clutter, text over busy areas, before/after framing, etc."),
 });
 export type DesignRead = z.infer<typeof DesignReadSchema>;
+
+/** Breakdown of a competitor's ad: what it does, and where we can be different (never a copy). */
+export const CompetitorAnalysisSchema = z.object({
+  summary: z.string().describe("What the ad is, in 1–2 sentences"),
+  hook: z.string().describe("Their opening line or visual, quoted or described"),
+  hook_mechanism: z.string(),
+  angle: z.string(),
+  audience: z.string().describe("Who it seems aimed at"),
+  format: z.string(),
+  offer: z.string().describe("Price, discount or offer; empty if none"),
+  claims_made: z.array(
+    z.object({
+      text: z.string(),
+      risk: z.enum(["ok", "check", "risky"]).describe("risky = would break our hard rules or FSSAI/ASCI if we said it"),
+      note: z.string(),
+    }),
+  ),
+  what_works: z.array(z.string()).describe("Craft we can learn from (structure, pacing, proof), not words to copy"),
+  weaknesses: z.array(z.string()),
+  white_space: z.array(z.string()).describe("Angles, moments or proof points they don't own that our product can credibly claim"),
+  counter_ideas: z
+    .array(z.object({ title: z.string(), hook: z.string(), angle: z.string(), why: z.string() }))
+    .describe("3 ideas for us that are clearly different, using only our allowed claims"),
+});
+export type CompetitorAnalysis = z.infer<typeof CompetitorAnalysisSchema>;
