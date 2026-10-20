@@ -14,6 +14,8 @@ import { isHexColor, withKitDefaults, type BrandKit } from "@/lib/brand-kit";
 import { parseEvidence, parseUrls } from "@/lib/product-knowledge";
 import { storeAsset } from "@/lib/asset-store";
 import { removeBackdrop } from "@/lib/cutout";
+import { detectPackBox } from "@/lib/pack-detect";
+import { savePackCrop } from "@/lib/pack-source";
 import { isCutout } from "@/lib/pack-composite";
 import sharp from "sharp";
 
@@ -124,17 +126,28 @@ export async function uploadPackImage(_: ActionState, fd: FormData): Promise<Act
     const data = Buffer.from(await file.arrayBuffer());
     // A pack shot on a plain studio backdrop is lifted off it, so it sits naturally in scenes.
     // The original photo is kept as an extra product photo.
-    const lifted = (await isCutout(data).catch(() => true)) ? null : await removeBackdrop(data).catch(() => null);
-    if (lifted) {
+    if (!(await isCutout(data).catch(() => true))) {
+      // First choice: let the AI find the pack itself and crop to it (props around it left out).
       const original = await storeAsset({ data, mime: file.type, kind: "product-photo", label: "Pack photo (original background)", user });
-      const cut = await storeAsset({ data: lifted.png, mime: "image/png", kind: "pack", label: "Original pack (background removed)", user, sourceAssetIds: [original.id] });
-      const [p] = await db.select({ ids: schema.products.photoAssetIds }).from(schema.products).where(eq(schema.products.id, id));
-      await db
-        .update(schema.products)
-        .set({ packImageUrl: cut.url, photoAssetIds: [...(p?.ids ?? []), original.id].slice(-12), updatedAt: new Date() })
-        .where(eq(schema.products.id, id));
+      const [p0] = await db.select({ ids: schema.products.photoAssetIds }).from(schema.products).where(eq(schema.products.id, id));
+      await db.update(schema.products).set({ photoAssetIds: [...(p0?.ids ?? []), original.id].slice(-12) }).where(eq(schema.products.id, id));
+      const box = await detectPackBox(data, user);
+      if (box) {
+        await savePackCrop({ productId: id, sourceId: original.id, box, user, auto: true });
+        refresh();
+        return ok("Pack photo saved. We found the pack in your photo and cropped to just the pack. Check it below; use “Adjust pack crop” if anything is cut off or left in.");
+      }
+      // Without AI (or if it can't find the pack): remove a plain backdrop instead.
+      const lifted = await removeBackdrop(data).catch(() => null);
+      if (lifted) {
+        const cut = await storeAsset({ data: lifted.png, mime: "image/png", kind: "pack", label: "Original pack (background removed)", user, sourceAssetIds: [original.id] });
+        await db.update(schema.products).set({ packImageUrl: cut.url, updatedAt: new Date() }).where(eq(schema.products.id, id));
+        refresh();
+        return ok("Pack photo saved. Its plain background was removed automatically. If props around the pack are still showing, use “Adjust pack crop” to keep just the pack.");
+      }
+      await db.update(schema.products).set({ packImageUrl: original.url, updatedAt: new Date() }).where(eq(schema.products.id, id));
       refresh();
-      return ok("Pack photo saved. Its plain background was removed automatically so it sits naturally in scenes. Check it below; the original is kept under More product photos.");
+      return ok("Pack photo saved. Use “Adjust pack crop” to keep just the pack.");
     }
     let url: string;
     if (process.env.BLOB_READ_WRITE_TOKEN) {

@@ -94,7 +94,10 @@ export async function POST(req: Request) {
       user,
       label,
       frameIndex: input.frameIndex,
-      lockedPack: packMode === "locked" && reference ? { data: reference.data, position: input.packPosition, scale: input.packScale, assetId: packAssetId } : null,
+      lockedPack:
+        packMode === "locked" && reference
+          ? { data: reference.data, position: input.packPosition, scale: input.packScale, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
+          : null,
     });
     if (input.creativeId) {
       await db

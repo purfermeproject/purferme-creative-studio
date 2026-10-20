@@ -1,0 +1,66 @@
+import "server-only";
+import sharp from "sharp";
+import { z } from "zod";
+import { isMock, structuredCall } from "./ai";
+
+/** A rectangle as fractions (0–1) of the image's width and height. */
+export type Box = { x: number; y: number; w: number; h: number };
+
+const DetectSchema = z.object({
+  found: z.boolean().describe("True if a product pack (box, pouch, jar or bottle with a printed label) is visible"),
+  what: z.string().describe("What the pack is, e.g. 'cardboard box', 'stand-up pouch', 'glass jar'"),
+  left: z.number().describe("Left edge of the pack, as a fraction of image width (0–1)"),
+  top: z.number().describe("Top edge of the pack, as a fraction of image height (0–1)"),
+  right: z.number().describe("Right edge of the pack, as a fraction of image width (0–1)"),
+  bottom: z.number().describe("Bottom edge of the pack, as a fraction of image height (0–1)"),
+});
+
+/** Keeps a box inside the image and at least a sensible size; null if it can't be. */
+export function cleanBox(b: Box): Box | null {
+  const x = Math.min(Math.max(b.x, 0), 1);
+  const y = Math.min(Math.max(b.y, 0), 1);
+  const w = Math.min(Math.max(b.w, 0), 1 - x);
+  const h = Math.min(Math.max(b.h, 0), 1 - y);
+  if (w < 0.05 || h < 0.05) return null;
+  return { x, y, w, h };
+}
+
+/**
+ * Asks the vision model where the pack itself is (not the props around it).
+ * Returns null in mock mode, without an AI key, or when it can't find one.
+ */
+export async function detectPackBox(image: Buffer, user: string): Promise<Box | null> {
+  if (isMock() || (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY)) return null;
+  const small = await sharp(image).rotate().resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).flatten({ background: "#ffffff" }).jpeg({ quality: 85 }).toBuffer();
+  try {
+    const r = await structuredCall({
+      schema: DetectSchema,
+      prompt: `This is a product photo. Find the product PACK itself: the box, pouch, jar or bottle with the printed brand label. Return the tightest rectangle around just the pack.
+Do not include props or food around or in front of it (cookies, grains, nuts, spoons) unless they are printed on the pack. If several packs are shown, return the front-most, largest one.
+Give each edge as a fraction of the image size: left/right of the width, top/bottom of the height (0 = left/top edge, 1 = right/bottom edge).`,
+      image: { mediaType: "image/jpeg", base64: small.toString("base64") },
+      maxTokens: 1000,
+      effort: "low",
+      meta: { user, kind: "pack-detect" },
+      mock: () => ({ found: false, what: "", left: 0, top: 0, right: 1, bottom: 1 }),
+    });
+    if (!r.found) return null;
+    return cleanBox({ x: r.left, y: r.top, w: r.right - r.left, h: r.bottom - r.top });
+  } catch (e) {
+    console.error("pack detection failed", e);
+    return null;
+  }
+}
+
+/** Crops to the box. Pixels inside are copied exactly; nothing is redrawn. */
+export async function cropToBox(image: Buffer, box: Box): Promise<Buffer> {
+  const img = sharp(image).rotate();
+  const m = await img.metadata();
+  const W = m.width ?? 1;
+  const H = m.height ?? 1;
+  const left = Math.round(box.x * W);
+  const top = Math.round(box.y * H);
+  const width = Math.max(1, Math.min(W - left, Math.round(box.w * W)));
+  const height = Math.max(1, Math.min(H - top, Math.round(box.h * H)));
+  return img.extract({ left, top, width, height }).png().toBuffer();
+}

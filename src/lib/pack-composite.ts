@@ -45,7 +45,8 @@ export function packBox(canvas: { w: number; h: number }, pack: { w: number; h: 
 export async function compositePack(
   scene: Buffer,
   pack: Buffer,
-  opts: { w: number; h: number; position?: PackPosition; scale?: PackScale; format?: "jpeg" | "png" },
+  /** liftBackdrop: try removing a plain backdrop (off for packs cropped on purpose, whose edges are the pack). */
+  opts: { w: number; h: number; position?: PackPosition; scale?: PackScale; format?: "jpeg" | "png"; liftBackdrop?: boolean },
 ): Promise<{ data: Buffer; box: PackBox; cutout: boolean; backdropRemoved: boolean }> {
   const { w, h } = opts;
   let cutout: boolean;
@@ -54,7 +55,7 @@ export async function compositePack(
   try {
     cutout = await isCutout(pack);
     source = await sharp(pack).rotate().png().toBuffer();
-    if (!cutout) {
+    if (!cutout && opts.liftBackdrop !== false) {
       // A pack photo on a plain studio backdrop would look pasted on: lift it off the backdrop
       // (transparency only; the pack's pixels stay as they are).
       const lifted = await removeBackdrop(source);

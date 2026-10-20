@@ -30,15 +30,15 @@ function getClient() {
   return client;
 }
 
-export type Reference = { data: Buffer; mime: string; name: string } | null;
+export type Reference = { data: Buffer; mime: string; name: string; label?: string } | null;
 
 /** Fetches a saved pack image so it can be sent as the reference photo. */
 export async function loadReference(url: string | null | undefined): Promise<Reference> {
   if (!url) return null;
   const local = /^\/api\/assets\/([0-9a-f-]{36})$/i.exec(url);
   if (local) {
-    const [a] = await db.select({ mime: schema.assets.mime, data: schema.assets.dataBase64 }).from(schema.assets).where(eq(schema.assets.id, local[1]));
-    return a ? { data: Buffer.from(a.data, "base64"), mime: a.mime, name: "pack" } : null;
+    const [a] = await db.select({ mime: schema.assets.mime, data: schema.assets.dataBase64, label: schema.assets.label }).from(schema.assets).where(eq(schema.assets.id, local[1]));
+    return a ? { data: Buffer.from(a.data, "base64"), mime: a.mime, name: "pack", label: a.label } : null;
   }
   try {
     const res = await fetch(url);
@@ -65,7 +65,7 @@ export async function generateImage(opts: {
   label: string;
   frameIndex?: number | null;
   /** Composite this original pack photo into the scene (the model never draws the pack). */
-  lockedPack?: { data: Buffer; position: PackPosition; scale: PackScale; assetId?: string | null } | null;
+  lockedPack?: { data: Buffer; position: PackPosition; scale: PackScale; assetId?: string | null; liftBackdrop?: boolean } | null;
 }) {
   const size = generationSizeFor(opts.target.w, opts.target.h);
   let mime: string;
@@ -83,7 +83,7 @@ export async function generateImage(opts: {
       // Placeholder scene, but the real pack is composited exactly as it would be for a real image.
       const scene = await sharp(Buffer.from(data, "base64")).resize(opts.target.w, opts.target.h).png().toBuffer();
       mime = "image/jpeg";
-      data = (await compositePack(scene, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale })).data.toString("base64");
+      data = (await compositePack(scene, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale, liftBackdrop: opts.lockedPack.liftBackdrop })).data.toString("base64");
     }
   } else {
     const openai = getClient();
@@ -117,7 +117,7 @@ export async function generateImage(opts: {
       const fitted = await fitToSize(Buffer.from(b64, "base64"), opts.target.w, opts.target.h);
       data = (
         opts.lockedPack
-          ? (await compositePack(fitted, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale })).data
+          ? (await compositePack(fitted, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale, liftBackdrop: opts.lockedPack.liftBackdrop })).data
           : fitted
       ).toString("base64");
       inputTokens = res.usage?.input_tokens ?? 0;

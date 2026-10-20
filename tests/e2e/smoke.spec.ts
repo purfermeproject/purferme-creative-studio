@@ -509,6 +509,21 @@ test("A pack photo on a plain backdrop is cut out automatically on upload, with 
   const meta = await sharp(await res.body()).metadata();
   expect(meta.hasAlpha).toBe(true);
   expect(meta.width! / meta.height!).toBeCloseTo(320 / 480, 1);
+
+
+  // Keep just part of it by hand: the crop is saved as the pack, and later images use it as is.
+  await card.getByRole("button", { name: "Adjust pack crop" }).click();
+  const crop = card.getByRole("group", { name: /Crop the pack/ });
+  await expect(crop.getByTestId("crop-box")).toBeVisible();
+  await crop.getByLabel("Left %").fill("30");
+  await crop.getByLabel("Top %").fill("20");
+  await crop.getByLabel("Width %").fill("40");
+  await crop.getByLabel("Height %").fill("60");
+  await crop.getByRole("button", { name: "Use this as the pack" }).click();
+  await expect(card.getByText("Saved: images now use just the pack.")).toBeVisible();
+  await expect.poll(async () => (await card.getByTestId("pack-preview-pbu").getAttribute("src")) !== src).toBe(true);
+  const cropped = await sharp(await (await page.request.get((await card.getByTestId("pack-preview-pbu").getAttribute("src"))!)).body()).metadata();
+  expect([cropped.width, cropped.height]).toEqual([320, 480]);
 });
 
 test("Extra product photos can be placed instead of the pack", async ({ page }) => {

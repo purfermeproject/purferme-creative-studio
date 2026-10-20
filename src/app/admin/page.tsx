@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ActionForm } from "@/components/ActionForm";
 import { BrandKitEditor } from "./BrandKitEditor";
+import { PackCropper } from "./PackCropper";
 import { getAllPlatformRules, getBrand, getProducts, getTerms } from "@/lib/data";
 import { PLATFORMS, PLATFORM_LABELS, PRODUCT_STATUSES, ROLES } from "@/lib/types";
 import { asc } from "drizzle-orm";
@@ -235,6 +236,9 @@ export default async function AdminPage() {
                     style={{ backgroundImage: "repeating-conic-gradient(#e7e1d6 0% 25%, #fff 0% 50%)", backgroundSize: "14px 14px" }}
                     data-testid={`pack-preview-${p.slug}`}
                   />
+                ) : null}
+                {p.packImageUrl ? (
+                  <PackCropper productId={p.id} productName={p.name} />
                 ) : null}
                 <ActionForm action={uploadPackImage} submitLabel="Upload pack photo" submitClassName="btn-secondary">
                   <input type="hidden" name="id" value={p.id} />
