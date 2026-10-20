@@ -1,5 +1,6 @@
 import "server-only";
 import sharp from "sharp";
+import { removeBackdrop } from "./cutout";
 
 export const PACK_POSITIONS = ["right", "center", "left"] as const;
 export type PackPosition = (typeof PACK_POSITIONS)[number];
@@ -45,13 +46,24 @@ export async function compositePack(
   scene: Buffer,
   pack: Buffer,
   opts: { w: number; h: number; position?: PackPosition; scale?: PackScale; format?: "jpeg" | "png" },
-): Promise<{ data: Buffer; box: PackBox; cutout: boolean }> {
+): Promise<{ data: Buffer; box: PackBox; cutout: boolean; backdropRemoved: boolean }> {
   const { w, h } = opts;
   let cutout: boolean;
   let source: Buffer;
+  let backdropRemoved = false;
   try {
     cutout = await isCutout(pack);
     source = await sharp(pack).rotate().png().toBuffer();
+    if (!cutout) {
+      // A pack photo on a plain studio backdrop would look pasted on: lift it off the backdrop
+      // (transparency only; the pack's pixels stay as they are).
+      const lifted = await removeBackdrop(source);
+      if (lifted) {
+        source = lifted.png;
+        cutout = true;
+        backdropRemoved = true;
+      }
+    }
   } catch {
     throw new PackPhotoError("The product photo couldn't be read. Upload it again as a PNG or JPG in Settings → Products.");
   }
@@ -88,7 +100,7 @@ export async function compositePack(
   const base = sharp(scene).resize(w, h, { fit: "cover", position: "centre" });
   const out = base.composite([...(shadowLayer ? [shadowLayer] : []), { input: resized, left: box.left, top: box.top }]);
   const data = opts.format === "png" ? await out.png().toBuffer() : await out.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
-  return { data, box, cutout };
+  return { data, box, cutout, backdropRemoved };
 }
 
 /** Crops an overlay to the part that falls inside the canvas (sharp can't place layers partly outside). */

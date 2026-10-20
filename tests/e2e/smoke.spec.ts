@@ -489,6 +489,28 @@ test("Proposals show the real pack; a proposal image carries into the ad; the fi
   await expect(auto.getByTestId("image-dims").first()).toContainText("original pack");
 });
 
+test("A pack photo on a plain backdrop is cut out automatically on upload, with the original kept", async ({ page }) => {
+  const sharp = (await import("sharp")).default;
+  const box = await sharp({ create: { width: 320, height: 480, channels: 3, background: "#2d1b54" } }).png().toBuffer();
+  const photo = await sharp({ create: { width: 800, height: 800, channels: 3, background: "#e8dcc8" } }).composite([{ input: box, left: 240, top: 160 }]).jpeg().toBuffer();
+  await signIn(page);
+  await page.goto("/admin");
+  const card = page.getByTestId("product-pbu");
+  await card.locator("summary").click();
+  await card.getByLabel(/Original pack photo/).setInputFiles({ name: "pack-studio.jpg", mimeType: "image/jpeg", buffer: photo });
+  await card.getByRole("button", { name: "Upload pack photo" }).click();
+  await expect(card.getByText("background was removed automatically")).toBeVisible();
+  await expect(card.getByTestId("pack-preview-pbu")).toBeVisible();
+  const photos = card.getByTestId("photos-pbu");
+  await expect(photos).toContainText("Pack photo (original background)");
+  await expect(photos.getByRole("button", { name: "Use as pack" })).toBeVisible();
+  const src = await card.getByTestId("pack-preview-pbu").getAttribute("src");
+  const res = await page.request.get(src!);
+  const meta = await sharp(await res.body()).metadata();
+  expect(meta.hasAlpha).toBe(true);
+  expect(meta.width! / meta.height!).toBeCloseTo(320 / 480, 1);
+});
+
 test("Extra product photos can be placed instead of the pack", async ({ page }) => {
   const sharp = (await import("sharp")).default;
   const photo = await sharp({ create: { width: 400, height: 400, channels: 3, background: "#c17d3c" } }).jpeg().toBuffer();

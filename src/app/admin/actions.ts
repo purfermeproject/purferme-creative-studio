@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { put } from "@vercel/blob";
-import { requireRole } from "@/auth";
+import { requireRole, requireUser } from "@/auth";
 import { db, schema } from "@/db";
 import { lines, type ActionState } from "@/lib/action-state";
 import { regexError } from "@/lib/compliance";
@@ -13,6 +13,8 @@ import { DEFAULT_THRESHOLDS, type VerdictThresholds } from "@/lib/verdicts";
 import { isHexColor, withKitDefaults, type BrandKit } from "@/lib/brand-kit";
 import { parseEvidence, parseUrls } from "@/lib/product-knowledge";
 import { storeAsset } from "@/lib/asset-store";
+import { removeBackdrop } from "@/lib/cutout";
+import { isCutout } from "@/lib/pack-composite";
 import sharp from "sharp";
 
 /** Product photos are placed into images unchanged, so they need to be big enough to look sharp. */
@@ -118,6 +120,22 @@ export async function uploadPackImage(_: ActionState, fd: FormData): Promise<Act
     if (file.size > 5 * 1024 * 1024) return fail("Images must be under 5 MB.");
     const problem = await photoProblem(file);
     if (problem) return fail(problem);
+    const user = await requireUser();
+    const data = Buffer.from(await file.arrayBuffer());
+    // A pack shot on a plain studio backdrop is lifted off it, so it sits naturally in scenes.
+    // The original photo is kept as an extra product photo.
+    const lifted = (await isCutout(data).catch(() => true)) ? null : await removeBackdrop(data).catch(() => null);
+    if (lifted) {
+      const original = await storeAsset({ data, mime: file.type, kind: "product-photo", label: "Pack photo (original background)", user });
+      const cut = await storeAsset({ data: lifted.png, mime: "image/png", kind: "pack", label: "Original pack (background removed)", user, sourceAssetIds: [original.id] });
+      const [p] = await db.select({ ids: schema.products.photoAssetIds }).from(schema.products).where(eq(schema.products.id, id));
+      await db
+        .update(schema.products)
+        .set({ packImageUrl: cut.url, photoAssetIds: [...(p?.ids ?? []), original.id].slice(-12), updatedAt: new Date() })
+        .where(eq(schema.products.id, id));
+      refresh();
+      return ok("Pack photo saved. Its plain background was removed automatically so it sits naturally in scenes. Check it below; the original is kept under More product photos.");
+    }
     let url: string;
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       url = (await put(`packs/${id}-${file.name}`, file, { access: "public", addRandomSuffix: true })).url;
@@ -132,6 +150,19 @@ export async function uploadPackImage(_: ActionState, fd: FormData): Promise<Act
     await db.update(schema.products).set({ packImageUrl: url, updatedAt: new Date() }).where(eq(schema.products.id, id));
     refresh();
     return ok("Pack image uploaded.");
+  }) as Promise<ActionState>;
+}
+
+/** Use one of the product photos (e.g. the original with its background) as the pack photo. */
+export async function usePhotoAsPack(_: ActionState, fd: FormData): Promise<ActionState> {
+  return guard(async () => {
+    const id = String(fd.get("id") ?? "");
+    const assetId = String(fd.get("assetId") ?? "");
+    const [p] = await db.select({ ids: schema.products.photoAssetIds }).from(schema.products).where(eq(schema.products.id, id));
+    if (!p?.ids.includes(assetId)) return fail("That photo isn't one of this product's photos.");
+    await db.update(schema.products).set({ packImageUrl: `/api/assets/${assetId}`, updatedAt: new Date() }).where(eq(schema.products.id, id));
+    refresh();
+    return ok("Now using that photo as the pack.");
   }) as Promise<ActionState>;
 }
 

@@ -67,3 +67,26 @@ describe("unusable pack photos", () => {
     await expect(compositePack(await scene(400, 400), tiny, { w: 400, h: 400 })).rejects.toThrow(/too small/);
   });
 });
+
+describe("pack photo on a plain studio backdrop", () => {
+  it("is lifted off the backdrop automatically, keeping the pack's own pixels", async () => {
+    const box = await sharp({ create: { width: 160, height: 240, channels: 3, background: "#2d1b54" } }).png().toBuffer();
+    const photo = await sharp({ create: { width: 400, height: 400, channels: 3, background: "#e8dcc8" } })
+      .composite([{ input: box, left: 120, top: 80 }])
+      .png()
+      .toBuffer();
+    expect(await isCutout(photo)).toBe(false);
+    const { data, box: placed, backdropRemoved } = await compositePack(await scene(1080, 1080), photo, { w: 1080, h: 1080, position: "center", scale: "medium", format: "png" });
+    expect(backdropRemoved).toBe(true);
+    // Trimmed to the pack, so the placed box has the pack's 2:3 shape, not the photo's square.
+    expect(placed.width / placed.height).toBeCloseTo(160 / 240, 1);
+    const centre = await sharp(data).extract({ left: placed.left + Math.floor(placed.width / 2), top: placed.top + Math.floor(placed.height / 2), width: 1, height: 1 }).raw().toBuffer();
+    expect([...centre.subarray(0, 3)]).toEqual([0x2d, 0x1b, 0x54]);
+  });
+
+  it("keeps a busy photo as it is instead of guessing", async () => {
+    const pack = await stripedPack(200, 300);
+    const { backdropRemoved } = await compositePack(await scene(800, 800), pack, { w: 800, h: 800, format: "png" });
+    expect(backdropRemoved).toBe(false);
+  });
+});

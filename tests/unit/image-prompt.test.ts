@@ -50,3 +50,12 @@ describe("mockImageSvg", () => {
     expect(svg).toContain('width="1080" height="1920"');
   });
 });
+
+describe("locked pack: scene text never asks for a pack", () => {
+  it("replaces pack mentions and the product name, leaving other words alone", async () => {
+    const { withoutPack } = await import("@/lib/image-prompt");
+    const out = withoutPack("Close-up: Chocolate Cookies, millet & oats, 240g pack on a desk; a pouch peeks out of her backpack", "Chocolate Cookies, millet & oats, 240g");
+    expect(out).toBe("Close-up: [empty spot: the real pack is added later] on a desk; a [empty spot: the real pack is added later] peeks out of her backpack");
+    expect(withoutPack("Snack boxes and packaging", "X")).not.toMatch(/box|packaging/i);
+  });
+});

@@ -17,6 +17,7 @@ import {
   removeProductPhoto,
   removeUserRole,
   uploadProductPhoto,
+  usePhotoAsPack,
   setUserRole,
   saveBrand,
   savePlatformRule,
@@ -226,7 +227,14 @@ export default async function AdminPage() {
               <div className="mt-4 flex flex-wrap items-start justify-between gap-4 border-t border-line pt-4">
                 {p.packImageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.packImageUrl} alt={`${p.name} pack`} className="h-28 w-28 rounded-lg border border-line bg-surface-2 object-contain" />
+                  <img
+                    src={p.packImageUrl}
+                    alt={`${p.name} pack`}
+                    title="Shown on a checkerboard: anything you can see the squares through is transparent"
+                    className="h-28 w-28 rounded-lg border border-line object-contain"
+                    style={{ backgroundImage: "repeating-conic-gradient(#e7e1d6 0% 25%, #fff 0% 50%)", backgroundSize: "14px 14px" }}
+                    data-testid={`pack-preview-${p.slug}`}
+                  />
                 ) : null}
                 <ActionForm action={uploadPackImage} submitLabel="Upload pack photo" submitClassName="btn-secondary">
                   <input type="hidden" name="id" value={p.id} />
@@ -245,6 +253,14 @@ export default async function AdminPage() {
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={`/api/assets/${aid}`} alt={photoInfo.get(aid)?.label || "Product photo"} className="h-28 w-28 rounded-lg border border-line bg-surface-2 object-contain" />
                           <p className="truncate">{photoInfo.get(aid)?.label}</p>
+                          {p.packImageUrl !== `/api/assets/${aid}` ? (
+                            <ActionForm action={usePhotoAsPack} submitLabel="Use as pack" submitClassName="text-xs font-semibold text-purple underline">
+                              <input type="hidden" name="id" value={p.id} />
+                              <input type="hidden" name="assetId" value={aid} />
+                            </ActionForm>
+                          ) : (
+                            <p className="text-xs font-semibold text-leaf">Used as pack</p>
+                          )}
                           <ActionForm action={removeProductPhoto} submitLabel="Remove" submitClassName="text-xs font-semibold text-red underline">
                             <input type="hidden" name="id" value={p.id} />
                             <input type="hidden" name="assetId" value={aid} />

@@ -2,6 +2,17 @@ import { isVideoType } from "./prompts";
 import type { Concept } from "./schemas";
 import { PLATFORM_LABELS, type Platform } from "./types";
 
+const PACK_WORDS = "pack(?:et)?s?|pouch(?:es)?|box(?:es)?|jars?|wrappers?|cartons?|packaging|tins?|tubs?";
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Scene text with every mention of the pack replaced, so the model leaves the spot empty instead of drawing one. */
+export function withoutPack(text: string, productName: string): string {
+  const name = escapeRe(productName.trim());
+  return text
+    .replace(new RegExp(`\\b(?:the\\s+)?(?:${name}\\s*)?(?:${PACK_WORDS})\\b`, "gi"), "[empty spot: the real pack is added later]")
+    .replace(new RegExp(name, "gi"), "the product");
+}
+
 export type ImageSize = `${number}x${number}`;
 
 /** Pure, testable: turns one frame of a concept into an image-model prompt. */
@@ -41,8 +52,9 @@ export function buildImagePrompt(opts: {
       ? locked
         ? "Main listing image: a plain pure white background only, no objects, no props, no text (the pack is added afterwards)."
         : "Main listing image: the pack alone on a pure white background, centred, no props, no text."
-      : `Scene: ${frame?.visual ?? c.ai_prompt}${locked ? " (wherever the scene mentions the pack, leave its spot empty)" : ""}`,
-    isMainListing ? "" : `Style and details: ${c.ai_prompt}`,
+      : `Scene: ${locked ? withoutPack(frame?.visual ?? c.ai_prompt, opts.productName) : (frame?.visual ?? c.ai_prompt)}`,
+    isMainListing ? "" : `Style and details: ${locked ? withoutPack(c.ai_prompt, opts.productName) : c.ai_prompt}`,
+    locked ? "Nobody holds, carries or shows any packaged product: no pouches, boxes, wrappers, jars or snack packets anywhere, and no brand names or logos." : "",
     isMainListing
       ? "No added text other than what is printed on the pack."
       : opts.textMode === "overlay"
