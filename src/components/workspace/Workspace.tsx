@@ -23,7 +23,7 @@ import { BriefPanel } from "./BriefPanel";
 import { CopyBlockView, CreativePreview, SceneList } from "./CreativePreview";
 import { EditorForm } from "./EditorForm";
 import { HistoryPanel } from "./HistoryPanel";
-import type { Brief, CompetitorOption, OpenCreative, ProductCard, RecentCreative, ScoredProposal } from "./types";
+import type { Brief, CompetitorOption, OpenCreative, PlaybookOption, ProductCard, RecentCreative, ScoredProposal } from "./types";
 import { ProposalVisual, sketchRatio } from "./ProposalVisual";
 import type { MadeImage } from "@/components/ImageMaker";
 import { findPlacement } from "@/lib/placements";
@@ -155,6 +155,7 @@ export function Workspace({
   recent,
   competitors,
   initialCompetitorId,
+  playbooks,
 }: {
   initialPlatform: Platform;
   products: ProductCard[];
@@ -171,6 +172,7 @@ export function Workspace({
   recent: RecentCreative[];
   competitors: CompetitorOption[];
   initialCompetitorId: string;
+  playbooks: PlaybookOption[];
 }) {
   const defaultBrief = (platform: Platform): Brief => ({
     productId: products.find((p) => p.name.startsWith("Chocolate") && p.status === "ready")?.id ?? products.find((p) => p.status === "ready")?.id ?? products[0]?.id ?? "",
@@ -187,6 +189,7 @@ export function Workspace({
     pack: null,
     competitorId: initialCompetitorId,
     autoImage: true,
+    usePlaybook: true,
   });
 
   const [brief, setBrief] = useState<Brief>(() => defaultBrief(initialCreative?.platform ?? initialPlatform));
@@ -298,6 +301,7 @@ export function Workspace({
     inspiration: brief.inspiration.trim() || undefined,
     image: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
     competitorId: brief.competitorId || undefined,
+    usePlaybook: brief.usePlaybook,
     ...extra,
   });
 
@@ -642,6 +646,7 @@ export function Workspace({
             onPackFile={onPackFile}
             ready={briefReady}
             competitors={competitors}
+            playbooks={playbooks}
           />
         </aside>
 

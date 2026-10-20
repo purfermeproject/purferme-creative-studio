@@ -554,6 +554,43 @@ test("Competitors: found automatically for a product category, broken down, and 
   await expect(page.getByTestId("proposal-2")).toBeVisible({ timeout: 60_000 });
 });
 
+test("Amazon: see what's working (top listings + playbook) and use it in Amazon briefs", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/create");
+  await fillBrief(page, { platform: "Amazon" });
+  await expect(page.getByTestId("playbook-missing")).toBeVisible();
+
+  await page.goto("/competitors");
+  const find = page.getByRole("form", { name: "Find competitors" });
+  await find.getByLabel("Our product").selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
+  await find.getByLabel("Where to look").selectOption({ label: "Amazon.in: what's selling and why" });
+  await expect(find.getByLabel("Look at")).toHaveCount(0);
+  await find.getByText("3", { exact: true }).click();
+  await find.getByRole("button", { name: "See what's working on Amazon" }).click();
+  await expect(page.getByTestId("research-summary")).toContainText("Studied 3 Amazon listings", { timeout: 60_000 });
+  const playbook = page.getByTestId("playbook-amazon");
+  await expect(playbook).toContainText("Title formula");
+  await expect(playbook).toContainText("Image stack, in order");
+  await expect(playbook).toContainText("Do this for our listing and ads");
+  await expect(page.getByTestId("listing-facts")).toHaveCount(3);
+  await expect(page.getByTestId("listing-facts").first()).toContainText("per 100 g");
+  await expect(page.getByTestId("competitor-analysis")).toHaveCount(await page.getByTestId("competitor").count(), { timeout: 60_000 });
+
+  await page.goto("/create");
+  await fillBrief(page, { platform: "Amazon" });
+  const toggle = page.getByTestId("playbook-toggle");
+  await expect(toggle).toContainText("Use what's working on Amazon");
+  await expect(toggle.getByRole("checkbox")).toBeChecked();
+  const sent = page.waitForRequest((r) => r.url().endsWith("/api/generate") && (r.postData() ?? "").includes('"usePlaybook":true'));
+  await page.getByRole("button", { name: "Propose 3 concepts" }).click();
+  await sent;
+  await expect(page.getByTestId("proposal-2")).toBeVisible({ timeout: 60_000 });
+  // Flipkart has no research yet.
+  await fillBrief(page, { platform: "Flipkart" });
+  await expect(page.getByTestId("playbook-missing")).toContainText("No Flipkart research");
+  await fillBrief(page, { platform: "Instagram & Facebook" });
+});
+
 test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {
   await signIn(page);
   await page.goto("/admin#roles");

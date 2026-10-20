@@ -1,11 +1,11 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { isMock, MODEL, OPENAI_TEXT_MODEL, structuredCall, textProvider, UserFacingError } from "./ai";
 import { getBrand, getProducts } from "./data";
-import { mockCompetitorAnalysis, mockDiscovery } from "./mocks";
-import { buildCompetitorPrompt, buildDiscoveryPrompt, type CompetitorContext, type DiscoveryFocus } from "./prompts";
-import { CompetitorAnalysisSchema, CompetitorDiscoverySchema } from "./schemas";
+import { mockCompetitorAnalysis, mockDiscovery, mockMarketplace } from "./mocks";
+import { buildCompetitorPrompt, buildDiscoveryPrompt, buildMarketplacePrompt, type CompetitorContext, type DiscoveryFocus, type PlaybookContext } from "./prompts";
+import { CompetitorAnalysisSchema, CompetitorDiscoverySchema, MarketplaceResearchSchema } from "./schemas";
 import type { WebSource } from "./ai";
 
 export async function listCompetitors() {
@@ -120,5 +120,106 @@ export async function discoverCompetitors(opts: { category: string; focus: Disco
     gaps: result.gaps,
     skipped: result.competitors.length - fresh.length,
     mock: isMock(),
+  };
+}
+
+/**
+ * Studies the strongest Amazon/Flipkart listings for a category: saves the
+ * playbook, and saves (or updates) each listing's brand as a competitor.
+ */
+export async function researchMarketplace(opts: { platform: "amazon" | "flipkart"; category: string; count: number; productId: string | null; user: string }) {
+  const [brand, products, existing] = await Promise.all([getBrand(), getProducts(), listCompetitors()]);
+  const product = products.find((p) => p.id === opts.productId) ?? null;
+  let searched: WebSource[] = [];
+  const result = await structuredCall({
+    schema: MarketplaceResearchSchema,
+    prompt: buildMarketplacePrompt(brand, product, opts),
+    maxTokens: 32000,
+    effort: "medium",
+    webSearch: { maxUses: Math.min(20, opts.count * 2 + 6) },
+    onSources: (s) => (searched = s),
+    meta: { user: opts.user, kind: `research-${opts.platform}`, platform: opts.platform, productId: product?.id ?? null },
+    mock: () => mockMarketplace(opts.platform, opts.count),
+  });
+  const seen = new Set(searched.map((s) => urlKey(s.url)).filter(Boolean));
+  const checked = (url: string) => /^https?:\/\//i.test(url) ? { url: url.slice(0, 1000), verified: seen.has(urlKey(url)) } : null;
+  const label = opts.platform === "amazon" ? "Amazon" : "Flipkart";
+  const model = isMock() ? "mock" : textProvider() === "openai" ? OPENAI_TEXT_MODEL : MODEL;
+
+  const listings = result.listings.filter((l) => l.brand.trim() && !OWN_BRAND.test(l.brand)).slice(0, opts.count);
+  const allSources = listings.flatMap((l) => {
+    const c = checked(l.url);
+    return c ? [{ title: `${l.brand}: ${l.title}`.slice(0, 200), ...c }] : [];
+  });
+  const [playbook] = await db
+    .insert(schema.marketPlaybooks)
+    .values({ platform: opts.platform, category: opts.category.slice(0, 150), productId: product?.id ?? null, summary: result.summary, playbook: result.playbook, sources: allSources, model, createdBy: opts.user })
+    .returning({ id: schema.marketPlaybooks.id });
+
+  const byBrand = new Map(existing.map((e) => [e.brand.trim().toLowerCase(), e]));
+  const ids: string[] = [];
+  for (const l of listings) {
+    const source = checked(l.url);
+    const sources = source ? [{ title: l.title.slice(0, 200), ...source }] : [];
+    const adText = [`Listing title: ${l.title}`, l.offers && `Offers: ${l.offers}`, l.praise.length && `Reviewers like: ${l.praise.join("; ")}`, l.complaints.length && `Reviewers complain: ${l.complaints.join("; ")}`]
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 5000);
+    const listing = { ...l, platform: opts.platform };
+    const prev = byBrand.get(l.brand.trim().toLowerCase());
+    if (prev) {
+      // Already tracked: refresh its listing and add the new source; re-analyse with the listing text.
+      await db
+        .update(schema.competitorAds)
+        .set({ listing, adText: prev.adText ? `${prev.adText}\n${adText}`.slice(0, 5000) : adText, sources: [...prev.sources.filter((s) => s.url !== source?.url), ...sources].slice(0, 10) })
+        .where(eq(schema.competitorAds.id, prev.id));
+      ids.push(prev.id);
+    } else {
+      const [row] = await db
+        .insert(schema.competitorAds)
+        .values({
+          brand: l.brand.slice(0, 100),
+          product: [l.pack_size && `${l.pack_size}`, l.price].filter(Boolean).join(" · ").slice(0, 150),
+          channel: label,
+          adText,
+          notes: [l.rating && `Rating ${l.rating}${l.review_count ? ` (${l.review_count})` : ""}`, l.badges.length && `Badges: ${l.badges.join(", ")}`, l.rank && `Rank: ${l.rank}`].filter(Boolean).join("\n"),
+          link: source?.url ?? "",
+          source: "research",
+          category: opts.category.slice(0, 150),
+          focus: opts.platform,
+          sources,
+          listing,
+          createdBy: opts.user,
+        })
+        .returning({ id: schema.competitorAds.id });
+      ids.push(row.id);
+    }
+  }
+  return { playbookId: playbook.id, ids, summary: result.summary, mock: isMock() };
+}
+
+export async function listPlaybooks() {
+  return db.select().from(schema.marketPlaybooks).orderBy(desc(schema.marketPlaybooks.createdAt)).limit(20);
+}
+
+/** Latest playbook for a platform, preferring one made for this product. */
+export async function latestPlaybook(platform: "amazon" | "flipkart", productId: string | null): Promise<PlaybookContext | null> {
+  const rows = await db
+    .select()
+    .from(schema.marketPlaybooks)
+    .where(and(eq(schema.marketPlaybooks.platform, platform), productId ? or(eq(schema.marketPlaybooks.productId, productId), isNull(schema.marketPlaybooks.productId)) : undefined))
+    .orderBy(desc(schema.marketPlaybooks.createdAt))
+    .limit(10);
+  const p = rows.find((r) => r.productId === productId) ?? rows[0];
+  if (!p) return null;
+  return {
+    platform,
+    date: p.createdAt.toISOString().slice(0, 10),
+    summary: p.summary,
+    titleFormula: p.playbook.title_formula,
+    keywords: p.playbook.must_have_keywords,
+    imageStack: p.playbook.image_stack,
+    reviewThemes: p.playbook.review_themes_to_answer,
+    adTips: p.playbook.ad_tips,
   };
 }

@@ -42,7 +42,11 @@ export type Brief = {
   competitorId: string;
   /** Make the first image as soon as an idea is developed. */
   autoImage: boolean;
+  /** Amazon/Flipkart: use the latest "what's working" research. */
+  usePlaybook: boolean;
 };
+
+export type PlaybookOption = { platform: "amazon" | "flipkart"; productId: string | null; category: string; date: string };
 
 export type ScoredProposal = Proposal & { scan: ScanResult };
 

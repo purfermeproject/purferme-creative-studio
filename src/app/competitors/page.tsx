@@ -1,12 +1,12 @@
 import { currentUser, roleOf } from "@/auth";
-import { listCompetitors } from "@/lib/competitors";
+import { listCompetitors, listPlaybooks } from "@/lib/competitors";
 import { getProducts } from "@/lib/data";
 import { CompetitorsClient } from "./CompetitorsClient";
 
 export const metadata = { title: "Competitors · Puŕ Fermé Creative Studio" };
 
 export default async function CompetitorsPage() {
-  const [rows, user, products] = await Promise.all([listCompetitors(), currentUser(), getProducts()]);
+  const [rows, user, products, playbooks] = await Promise.all([listCompetitors(), currentUser(), getProducts(), listPlaybooks()]);
   const role = user ? await roleOf(user) : "viewer";
   return (
     <div className="space-y-6">
@@ -21,6 +21,10 @@ export default async function CompetitorsPage() {
       </div>
       <CompetitorsClient
         role={role}
+        playbooks={(["amazon", "flipkart"] as const).flatMap((pl) => {
+          const p = playbooks.find((x) => x.platform === pl);
+          return p ? [{ id: p.id, platform: pl, category: p.category, summary: p.summary, playbook: p.playbook, sources: p.sources, mock: p.model === "mock", date: p.createdAt.toISOString() }] : [];
+        })}
         products={products.filter((p) => p.status !== "blocked").map((p) => ({ id: p.id, name: p.name }))}
         rows={rows.map((r) => ({
           id: r.id,
@@ -38,6 +42,7 @@ export default async function CompetitorsPage() {
           source: r.source,
           category: r.category,
           sources: r.sources,
+          listing: r.listing,
         }))}
       />
     </div>

@@ -46,7 +46,32 @@ export type GenerationInput = {
   output?: "concepts" | "proposals";
   /** A competitor ad to stand apart from (from the Competitors page). */
   competitor?: CompetitorContext | null;
+  /** What's working on Amazon/Flipkart for this category (from marketplace research). */
+  playbook?: PlaybookContext | null;
 };
+
+export type PlaybookContext = {
+  platform: "amazon" | "flipkart";
+  date: string;
+  summary: string;
+  titleFormula: string;
+  keywords: string[];
+  imageStack: string[];
+  reviewThemes: string[];
+  adTips: string[];
+};
+
+/** Marketplace research as guidance: copy the pattern, never a competitor's words or claims. */
+export function playbookBlock(p: PlaybookContext): string {
+  const where = p.platform === "amazon" ? "Amazon.in" : "Flipkart";
+  return `WHAT'S WORKING ON ${where.toUpperCase()} IN THIS CATEGORY (research from ${p.date}; use the patterns, never a competitor's words, and only our allowed claims):
+${p.summary}
+- Winning title pattern: ${p.titleFormula}
+- Shopper keywords: ${p.keywords.join(", ") || "(none recorded)"}
+- Image stack that wins: ${p.imageStack.join(" → ") || "(none recorded)"}
+- Doubts to answer up front (from reviews): ${p.reviewThemes.join("; ") || "(none recorded)"}
+- Ad practices of the winners: ${p.adTips.join("; ") || "(none recorded)"}`;
+}
 
 export type CompetitorContext = {
   brand: string;
@@ -175,7 +200,7 @@ NOTES: ${notes || "(none)"}
 ${knowledge ? `${knowledge}\n` : ""}${product.story?.trim() ? `PRODUCT STORY (real details: use them for specific, sensory, believable copy):\n${product.story.trim()}\n` : ""}
 PLATFORM: ${PLATFORM_LABELS[input.platform]}. CREATIVE TYPE: ${input.creativeType}.${
     input.placement ? `\nPLACEMENT: ${input.placement.label}. ${input.placement.guidance || "Design natively for this placement's format, length and safe areas."}` : ""
-  }${input.competitor ? `\n${competitorBlock(input.competitor)}` : ""}${objective ? `\nCAMPAIGN OBJECTIVE: ${objective.label}. ${OBJECTIVE_GUIDANCE[objective.id]}` : ""}
+  }${input.competitor ? `\n${competitorBlock(input.competitor)}` : ""}${input.playbook ? `\n${playbookBlock(input.playbook)}` : ""}${objective ? `\nCAMPAIGN OBJECTIVE: ${objective.label}. ${OBJECTIVE_GUIDANCE[objective.id]}` : ""}
 ${rule.rules}
 
 DIRECTION: angle = ${angle}; persona = ${persona}; language = ${input.language}
@@ -346,4 +371,23 @@ How to research:
 - List the claims they make (on pack, listing or ads) word for word where possible.
 - In "sources", list only pages you actually opened in this search, with their real URLs. Never invent a URL, price or claim; leave a field empty if you didn't find it.
 - In "gaps", say what nobody in the category owns yet.`;
+}
+
+/** Research brief: read the best-selling listings for a category on Amazon.in or Flipkart and say what's working. */
+export function buildMarketplacePrompt(
+  brand: BrandLike,
+  product: ProductLike | null,
+  opts: { platform: "amazon" | "flipkart"; category: string; count: number },
+): string {
+  const where = opts.platform === "amazon" ? "Amazon.in" : "Flipkart (flipkart.com)";
+  return `You are a marketplace growth analyst for an Indian D2C food brand. Use web search to study what is working on ${where} right now for this category: ${opts.category}.
+
+Find the ${opts.count} strongest listings: best sellers, "Amazon's Choice"/"Bestseller"/"Flipkart Assured" badges, highest ratings with many reviews, top of search for the main keywords. Open the listing pages (and bestseller or search pages for the category) and read them.
+
+OUR BRAND (do not list our own listings): ${brand.brandContext}
+${product ? `OUR PRODUCT: ${product.name}. Our allowed claims: ${list(product.greenClaims)}. Never-use claims: ${list(product.redClaims)}.` : ""}
+
+For each listing record: brand, exact title, URL, price, pack size, price per 100 g (if you can work it out), rating, number of ratings/reviews, badges, rank or search position, what the images show in order, A+ content modules, keywords in the title, what reviewers repeatedly praise and complain about, and offers (coupons, combos, subscribe & save).
+Then write the playbook: the title formula winners use, must-have keywords, the image stack slot by slot, A+ modules, the price/pack sweet spot, review doubts our listing and ads should answer up front, ad practices the winners show (Sponsored Products/Brands, Flipkart Ads), and specific changes for our product that use only our allowed claims (never copy a competitor's health claims).
+Only report what you actually saw; leave a field empty rather than guessing. Use real URLs only.`;
 }

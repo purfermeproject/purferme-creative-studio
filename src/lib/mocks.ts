@@ -1,4 +1,4 @@
-import type { CompetitorAnalysis, CompetitorDiscovery, Concept, DeepCheck, DesignRead, Proposal, WeeklyBrief } from "./schemas";
+import type { CompetitorAnalysis, CompetitorDiscovery, MarketplaceResearch, Concept, DeepCheck, DesignRead, Proposal, WeeklyBrief } from "./schemas";
 import { isVideoType, type GenerationInput } from "./prompts";
 import type { ScanResult } from "./compliance";
 
@@ -191,5 +191,40 @@ export function mockDiscovery(category: string, count: number): CompetitorDiscov
       sources: [],
     })),
     gaps: ["A specific chai-time moment", "Ingredient % transparency"],
+  };
+}
+
+export function mockMarketplace(platform: "amazon" | "flipkart", count: number): MarketplaceResearch {
+  const where = platform === "amazon" ? "Amazon" : "Flipkart";
+  return {
+    summary: `Sample research (mock mode, no web search ran): this is what the ${where} playbook looks like.`,
+    listings: Array.from({ length: Math.min(count, 3) }, (_, i) => ({
+      brand: `Sample ${where} Brand ${i + 1} (mock)`,
+      title: "Brand Millet Cookies | No Maida | Jaggery | 200g Pack of 2",
+      url: "",
+      price: "Rs 299",
+      pack_size: "2 × 200 g",
+      price_per_100g: "Rs 75",
+      rating: "4.2",
+      review_count: "3,100 ratings",
+      badges: i === 0 ? ["Bestseller"] : [],
+      rank: "",
+      image_stack: "Pack on white → ingredient infographic → cookie close-up → lifestyle with chai",
+      a_plus: "Comparison chart, ingredient story",
+      title_keywords: ["millet cookies", "no maida", "jaggery"],
+      praise: ["Crunchy", "Not too sweet"],
+      complaints: ["Broken pieces on delivery", "Small pack"],
+      offers: "5% coupon",
+    })),
+    playbook: {
+      title_formula: "Brand + product + key ingredient + 'No Maida' + sweetener + pack size",
+      must_have_keywords: ["millet cookies", "no maida", "jaggery cookies"],
+      image_stack: ["Pack on white", "Ingredient % infographic", "Texture close-up", "With chai", "Back of pack"],
+      a_plus_modules: ["Ingredient story", "How to enjoy"],
+      price_and_pack: "Packs of 2 around Rs 75 per 100 g",
+      review_themes_to_answer: ["Does it arrive broken?", "How sweet is it?"],
+      ad_tips: ["Sponsored Brands video with on-screen text", "Bid on 'no maida cookies'"],
+      for_our_product: ["Put 'No maida, sweetened with jaggery' in the first 80 characters of the title"],
+    },
   };
 }

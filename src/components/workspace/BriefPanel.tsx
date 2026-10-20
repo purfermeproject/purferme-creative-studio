@@ -5,7 +5,7 @@ import { PLACEMENTS } from "@/lib/placements";
 import { AUTO } from "@/lib/prompts";
 import { DELIVERABLES, OBJECTIVES, PLATFORMS, type Deliverable, type Objective, type Platform } from "@/lib/types";
 import Link from "next/link";
-import type { Brief, CompetitorOption, ProductCard } from "./types";
+import type { Brief, CompetitorOption, PlaybookOption, ProductCard } from "./types";
 
 const PLATFORM_NAMES: Record<Platform, { title: string; sub: string }> = {
   meta: { title: "Instagram & Facebook", sub: "Meta ads" },
@@ -72,6 +72,7 @@ export function BriefPanel({
   onPackFile,
   ready,
   competitors,
+  playbooks,
 }: {
   brief: Brief;
   set: (patch: Partial<Brief>) => void;
@@ -87,12 +88,18 @@ export function BriefPanel({
   onPackFile: (f: File | undefined) => void;
   ready: boolean;
   competitors: CompetitorOption[];
+  playbooks: PlaybookOption[];
 }) {
   const product = products.find((p) => p.id === brief.productId);
   const blocked = product && product.status !== "ready";
   const placements = PLACEMENTS[brief.platform];
   const plain = (xs: string[]) => xs.map((x) => ({ value: x, label: x }));
   const types = creativeTypes[brief.platform];
+  // Same choice as the server: research for this product if there is some, else category-only research.
+  const market = brief.platform === "meta" ? null : brief.platform;
+  const forPlatform = playbooks.filter((p) => p.platform === market);
+  const playbook = forPlatform.find((p) => p.productId === brief.productId) ?? forPlatform.find((p) => p.productId === null) ?? null;
+  const marketName = market === "amazon" ? "Amazon" : "Flipkart";
 
   return (
     <form
@@ -184,6 +191,27 @@ export function BriefPanel({
             </Tile>
           ))}
         </div>
+        {market ? (
+          playbook ? (
+            <label className="flex items-start gap-2 rounded-xl bg-gold-soft p-3 text-sm" data-testid="playbook-toggle">
+              <input type="checkbox" className="mt-1 size-4 accent-(--purple)" checked={brief.usePlaybook} onChange={(e) => set({ usePlaybook: e.target.checked })} />
+              <span>
+                Use what&apos;s working on {marketName}
+                <span className="block text-xs text-ink-soft">
+                  Research on “{playbook.category}” from {new Date(playbook.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}: title pattern, keywords, image stack, review doubts.
+                </span>
+              </span>
+            </label>
+          ) : (
+            <p className="rounded-xl bg-surface-2 p-3 text-xs text-ink-soft" data-testid="playbook-missing">
+              No {marketName} research for this product yet.{" "}
+              <Link href="/competitors" className="font-semibold text-purple underline">
+                See what&apos;s working on {marketName}
+              </Link>{" "}
+              to make these ads follow what sells.
+            </p>
+          )
+        ) : null}
         <ChoiceOrCustom
           key={`type-${brief.platform}`}
           id="ctype"

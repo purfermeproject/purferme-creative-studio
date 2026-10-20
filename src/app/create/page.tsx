@@ -5,7 +5,7 @@ import type { OpenCreative, ProductCard, RecentCreative } from "@/components/wor
 import { db, schema } from "@/db";
 import { assetInfo } from "@/lib/asset-store";
 import { loadCreative } from "@/lib/creative-store";
-import { listCompetitors } from "@/lib/competitors";
+import { listCompetitors, listPlaybooks } from "@/lib/competitors";
 import { getAllPlatformRules, getBrand, getProducts, getTerms } from "@/lib/data";
 import { getPlatform } from "@/lib/platform";
 import { phraseList } from "@/lib/prompts";
@@ -63,6 +63,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   ]);
   const photoLabels = new Map((await assetInfo(products.flatMap((p) => p.photoAssetIds))).map((a) => [a.id, a.label]));
   const competitorRows = (await listCompetitors()).filter((c) => c.analysis);
+  const playbookRows = await listPlaybooks();
   const competitorParam = typeof sp.competitor === "string" ? sp.competitor : "";
   const creativeTypes = Object.fromEntries(PLATFORMS.map((p) => [p, rules.find((r) => r.platform === p)?.creativeTypes ?? []])) as Record<Platform, string[]>;
   const cards: ProductCard[] = products.map((p) => ({
@@ -99,6 +100,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       initialCreative={initialCreative}
       recent={recent}
       competitors={competitorRows.map((c) => ({ id: c.id, brand: c.brand, product: c.product, channel: c.channel }))}
+      playbooks={playbookRows.map((p) => ({ platform: p.platform, productId: p.productId, category: p.category, date: p.createdAt.toISOString() }))}
       initialCompetitorId={competitorRows.some((c) => c.id === competitorParam) ? competitorParam : ""}
     />
   );

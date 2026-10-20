@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { can } from "@/lib/roles";
-import type { CompetitorAnalysis } from "@/lib/schemas";
+import type { CompetitorAnalysis, ListingInsight, MarketplaceResearch } from "@/lib/schemas";
 import type { Role } from "@/lib/types";
 import { deleteCompetitor } from "./actions";
 
@@ -24,7 +24,143 @@ type Row = {
   source: string;
   category: string;
   sources: { title: string; url: string; verified: boolean }[];
+  listing: (ListingInsight & { platform: "amazon" | "flipkart" }) | null;
 };
+
+type Playbook = {
+  id: string;
+  platform: "amazon" | "flipkart";
+  category: string;
+  summary: string;
+  playbook: MarketplaceResearch["playbook"];
+  sources: { title: string; url: string; verified: boolean }[];
+  mock: boolean;
+  date: string;
+};
+
+const WHERE: [string, string][] = [
+  ["web", "Across the web (brands and their marketing)"],
+  ["amazon", "Amazon.in: what's selling and why"],
+  ["flipkart", "Flipkart: what's selling and why"],
+];
+const MARKET_LABEL = { amazon: "Amazon", flipkart: "Flipkart" } as const;
+
+function PlaybookCard({ p }: { p: Playbook }) {
+  const b = p.playbook;
+  return (
+    <article className="space-y-4 rounded-2xl border border-line bg-surface p-5" data-testid={`playbook-${p.platform}`} aria-label={`What's working on ${MARKET_LABEL[p.platform]}`}>
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <p className="eyebrow">What&apos;s working on {MARKET_LABEL[p.platform]}</p>
+          <h2 className="display text-2xl">{p.category}</h2>
+        </div>
+        <p className="text-xs text-ink-soft">
+          Researched {new Date(p.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · used automatically in {MARKET_LABEL[p.platform]} briefs
+        </p>
+      </header>
+      {p.mock ? (
+        <span className="chip-amber" data-testid="mock-badge">
+          Sample output (mock mode)
+        </span>
+      ) : null}
+      <p className="text-sm">{p.summary}</p>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-3">
+          <div>
+            <p className="eyebrow mb-1">Title formula</p>
+            <p className="rounded-lg bg-surface-2 p-2 font-mono text-xs">{b.title_formula}</p>
+          </div>
+          {b.must_have_keywords.length ? (
+            <div>
+              <p className="eyebrow mb-1">Keywords shoppers use</p>
+              <ul className="flex flex-wrap gap-1.5">
+                {b.must_have_keywords.map((k) => (
+                  <li key={k} className="chip">
+                    {k}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {b.image_stack.length ? (
+            <div>
+              <p className="eyebrow mb-1">Image stack, in order</p>
+              <ol className="list-decimal space-y-0.5 pl-5 text-sm">
+                {b.image_stack.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+          {b.price_and_pack ? (
+            <p className="text-sm">
+              <span className="font-semibold">Price and pack: </span>
+              {b.price_and_pack}
+            </p>
+          ) : null}
+        </div>
+        <div className="space-y-3">
+          <List title="A+ content that winners use" items={b.a_plus_modules} />
+          <List title="Doubts to answer up front (from reviews)" items={b.review_themes_to_answer} />
+          <List title="Ad practices" items={b.ad_tips} />
+        </div>
+      </div>
+      {b.for_our_product.length ? (
+        <div className="rounded-xl bg-gold-soft p-4">
+          <p className="eyebrow mb-1">Do this for our listing and ads</p>
+          <ul className="list-disc space-y-0.5 pl-5 text-sm">
+            {b.for_our_product.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function ListingFacts({ l }: { l: ListingInsight & { platform: "amazon" | "flipkart" } }) {
+  const facts = [
+    l.rating && `★ ${l.rating}${l.review_count ? ` · ${l.review_count}` : ""}`,
+    l.price && `${l.price}${l.pack_size ? ` for ${l.pack_size}` : ""}`,
+    l.price_per_100g && `${l.price_per_100g} per 100 g`,
+    l.rank,
+  ].filter(Boolean) as string[];
+  return (
+    <div className="mb-4 space-y-2 rounded-xl border border-line p-3 text-sm" data-testid="listing-facts">
+      <p className="eyebrow">{MARKET_LABEL[l.platform]} listing</p>
+      <p className="font-semibold">{l.title}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {facts.map((f) => (
+          <span key={f} className="chip">
+            {f}
+          </span>
+        ))}
+        {l.badges.map((b) => (
+          <span key={b} className="chip-green">
+            {b}
+          </span>
+        ))}
+      </div>
+      {l.image_stack ? (
+        <p>
+          <span className="font-semibold">Images: </span>
+          {l.image_stack}
+        </p>
+      ) : null}
+      {l.a_plus ? (
+        <p>
+          <span className="font-semibold">A+ content: </span>
+          {l.a_plus}
+        </p>
+      ) : null}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <List title="Reviewers like" items={l.praise} />
+        <List title="Reviewers complain" items={l.complaints} />
+      </div>
+    </div>
+  );
+}
 
 const FOCUS: [string, string][] = [
   ["overall", "Everything (positioning and marketing)"],
@@ -121,8 +257,9 @@ function Analysis({ a, mock }: { a: CompetitorAnalysis; mock: boolean }) {
   );
 }
 
-export function CompetitorsClient({ rows, role, products }: { rows: Row[]; role: Role; products: { id: string; name: string }[] }) {
+export function CompetitorsClient({ rows, role, products, playbooks }: { rows: Row[]; role: Role; products: { id: string; name: string }[]; playbooks: Playbook[] }) {
   const router = useRouter();
+  const [where, setWhere] = useState("web");
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [category, setCategory] = useState(categoryFrom(products[0]?.name ?? ""));
   const [focus, setFocus] = useState("overall");
@@ -146,14 +283,31 @@ export function CompetitorsClient({ rows, role, products }: { rows: Row[]; role:
   }
 
   async function find() {
-    setResearch({ status: "Searching the web for competitors… (usually 1–3 minutes)", error: "", summary: "", gaps: [], note: "" });
-    const res = await fetch("/api/competitors/discover", {
+    const market = where === "amazon" || where === "flipkart";
+    setResearch({
+      status: market ? `Reading the top ${MARKET_LABEL[where as "amazon"]} listings… (usually 2–4 minutes)` : "Searching the web for competitors… (usually 1–3 minutes)",
+      error: "",
+      summary: "",
+      gaps: [],
+      note: "",
+    });
+    const res = await fetch(market ? "/api/competitors/marketplace" : "/api/competitors/discover", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ category, focus, count, productId: productId || null }),
+      body: JSON.stringify(market ? { platform: where, category, count, productId: productId || null } : { category, focus, count, productId: productId || null }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return setResearch((r) => ({ ...r, status: "", error: data.error ?? "The search didn't work. Try again." }));
+    if (market) {
+      setResearch({ status: "", error: "", summary: "", gaps: [], note: `Studied ${data.ids.length} ${MARKET_LABEL[where as "amazon"]} listings. The playbook below will be used in ${MARKET_LABEL[where as "amazon"]} briefs.${data.mock ? " Mock mode: sample listings, no web search ran." : ""}` });
+      router.refresh();
+      for (let i = 0; i < data.ids.length; i++) {
+        setResearch((r) => ({ ...r, status: `Breaking down ${i + 1} of ${data.ids.length}…` }));
+        await analyse(data.ids[i]);
+      }
+      setResearch((r) => ({ ...r, status: "" }));
+      return;
+    }
     const note = data.ids.length
       ? `Found ${data.ids.length} new competitor${data.ids.length > 1 ? "s" : ""}${data.skipped ? ` (${data.skipped} already on your list or not a competitor)` : ""}.`
       : "No new competitors found: everything it found is already on your list. Try a wider category or another focus.";
@@ -219,17 +373,33 @@ export function CompetitorsClient({ rows, role, products }: { rows: Row[]; role:
             <input id="f-category" className="input" value={category} onChange={(e) => setCategory(e.target.value)} maxLength={150} placeholder="e.g. millet cookies, peanut butter" />
           </div>
           <div>
-            <label htmlFor="f-focus" className="label">
-              Look at
+            <label htmlFor="f-where" className="label">
+              Where to look
             </label>
-            <select id="f-focus" className="input" value={focus} onChange={(e) => setFocus(e.target.value)}>
-              {FOCUS.map(([v, l]) => (
+            <select id="f-where" className="input" value={where} onChange={(e) => setWhere(e.target.value)}>
+              {WHERE.map(([v, l]) => (
                 <option key={v} value={v}>
                   {l}
                 </option>
               ))}
             </select>
           </div>
+          {where === "web" ? (
+            <div>
+              <label htmlFor="f-focus" className="label">
+                Look at
+              </label>
+              <select id="f-focus" className="input" value={focus} onChange={(e) => setFocus(e.target.value)}>
+                {FOCUS.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p className="hint text-xs">Reads the best-selling listings: titles, image order, A+ content, ratings and reviews, badges, price per 100 g and offers. Then writes a playbook for your listing and ads.</p>
+          )}
           <fieldset>
             <legend className="label">How many brands</legend>
             <div className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">
@@ -242,7 +412,7 @@ export function CompetitorsClient({ rows, role, products }: { rows: Row[]; role:
             </div>
           </fieldset>
           <button type="submit" className="btn-primary w-full" disabled={Boolean(research.status) || category.trim().length < 3}>
-            {research.status ? "Working…" : "Find competitors"}
+            {research.status ? "Working…" : where === "web" ? "Find competitors" : `See what's working on ${MARKET_LABEL[where as "amazon"]}`}
           </button>
           <p className="hint text-xs">Uses web search on your AI account (a few searches per brand), plus one breakdown per brand found.</p>
           {research.status ? (
@@ -352,6 +522,9 @@ export function CompetitorsClient({ rows, role, products }: { rows: Row[]; role:
             ) : null}
           </div>
         ) : null}
+        {playbooks.map((p) => (
+          <PlaybookCard key={p.id} p={p} />
+        ))}
         {rows.length === 0 ? (
           <div className="card border-dashed text-center" data-testid="competitors-empty">
             <p className="display text-xl">No competitor ads yet</p>
@@ -424,6 +597,7 @@ export function CompetitorsClient({ rows, role, products }: { rows: Row[]; role:
                   {r.notes && r.source === "research" ? <p className="rounded-lg bg-surface-2 p-2 text-xs whitespace-pre-line text-ink-soft">{r.notes}</p> : null}
                 </div>
                 <div className="min-w-0">
+                  {r.listing ? <ListingFacts l={r.listing} /> : null}
                   {busy[r.id] ? (
                     <div className="space-y-2" aria-busy="true">
                       <p className="text-sm font-semibold">{busy[r.id]}</p>

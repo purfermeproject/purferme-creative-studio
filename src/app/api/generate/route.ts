@@ -13,7 +13,7 @@ import { buildDevelopPrompt, buildGenerationPrompt, buildVariationsPrompt } from
 import { ConceptSchema, GenerationResponseSchema, ProposalSchema, ProposalsResponseSchema } from "@/lib/schemas";
 import { DELIVERABLES, OBJECTIVES, PLATFORMS } from "@/lib/types";
 import { findPlacement } from "@/lib/placements";
-import { competitorContext } from "@/lib/competitors";
+import { competitorContext, latestPlaybook } from "@/lib/competitors";
 
 export const maxDuration = 300;
 
@@ -42,6 +42,8 @@ const Body = z.object({
   baseRevision: z.number().int().min(1).optional(),
   /** An analysed competitor ad to stand apart from. */
   competitorId: z.string().uuid().optional(),
+  /** Amazon/Flipkart: include the latest "what's working" playbook (default on). */
+  usePlaybook: z.boolean().default(true),
   /** Images made from the proposal before developing; attached to the new ad. */
   imageIds: z.array(z.string().uuid()).max(10).optional(),
 });
@@ -103,6 +105,7 @@ export async function POST(req: Request) {
   const objective = input.objective as Objective | "";
   const deliverable = input.deliverable as Deliverable;
   const competitor = input.competitorId ? await competitorContext(input.competitorId) : null;
+  const playbook = input.platform !== "meta" && input.usePlaybook ? await latestPlaybook(input.platform, product.id) : null;
   const common = {
     platform: input.platform,
     creativeType: input.creativeType,
@@ -113,6 +116,7 @@ export async function POST(req: Request) {
     hasPackImage: Boolean(image),
     objective,
     competitor,
+    playbook,
   };
   let prompt: string;
   if (input.mode === "proposals") {

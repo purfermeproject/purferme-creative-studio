@@ -100,6 +100,8 @@ October 2026. This document covers the state of the app before the upgrade, the 
 | Generation metadata and audit fields | Implemented |
 | Competitor discovery by web search per product category and focus, with sources checked against search results | Implemented (uses the AI provider's web search) |
 | Competitor breakdown, used in briefs to stand apart; manual add by text or screenshot | Implemented |
+| "What's working" on Amazon.in / Flipkart: top listings, playbook, used in marketplace briefs | Implemented (web search; not the sellers' own Amazon Brand Analytics data) |
+| Amazon Brand Analytics / search-term reports from our seller account | Later (needs Selling Partner / Ads API access) |
 | Reading competitors' live ads from Meta Ad Library | Later (needs Meta Ad Library API access and identity verification) |
 | Pack sketch on proposals, real image per proposal, automatic first image, extra product photos | Implemented |
 | Comments, assignments, notifications | Phase 2 |

@@ -138,3 +138,41 @@ export const CompetitorDiscoverySchema = z.object({
   gaps: z.array(z.string()).describe("Openings in the category that nobody owns yet"),
 });
 export type CompetitorDiscovery = z.infer<typeof CompetitorDiscoverySchema>;
+
+/** One marketplace listing as seen on Amazon.in or Flipkart. */
+export const ListingInsightSchema = z.object({
+  brand: z.string(),
+  title: z.string().describe("The listing title exactly as shown"),
+  url: z.string(),
+  price: z.string().describe("Selling price as shown, e.g. Rs 299; empty if not seen"),
+  pack_size: z.string(),
+  price_per_100g: z.string().describe("Work it out if price and size are known; else empty"),
+  rating: z.string().describe("e.g. 4.3; empty if not seen"),
+  review_count: z.string().describe("e.g. 12,480 ratings; empty if not seen"),
+  badges: z.array(z.string()).describe("Bestseller, Amazon's Choice, Flipkart Assured, Limited time deal…"),
+  rank: z.string().describe("Best Sellers Rank or position in search, if seen"),
+  image_stack: z.string().describe("What the listing images show, in order (main image, infographics, lifestyle, back of pack…)"),
+  a_plus: z.string().describe("A+ / brand content modules seen; empty if none"),
+  title_keywords: z.array(z.string()),
+  praise: z.array(z.string()).describe("What reviewers repeatedly like"),
+  complaints: z.array(z.string()).describe("What reviewers repeatedly complain about"),
+  offers: z.string().describe("Coupons, bank offers, subscribe & save, combos"),
+});
+export type ListingInsight = z.infer<typeof ListingInsightSchema>;
+
+/** What's working on a marketplace for a category, plus what to do about it. */
+export const MarketplaceResearchSchema = z.object({
+  summary: z.string().describe("2–3 sentences: what the winning listings in this category have in common"),
+  listings: z.array(ListingInsightSchema),
+  playbook: z.object({
+    title_formula: z.string().describe("The title pattern winners use, as a template"),
+    must_have_keywords: z.array(z.string()),
+    image_stack: z.array(z.string()).describe("Recommended images in order, slot by slot"),
+    a_plus_modules: z.array(z.string()),
+    price_and_pack: z.string().describe("Where the price/pack sweet spot is"),
+    review_themes_to_answer: z.array(z.string()).describe("Doubts and complaints our listing and ads should answer up front"),
+    ad_tips: z.array(z.string()).describe("Sponsored Products/Brands or Flipkart Ads practices that the winners show"),
+    for_our_product: z.array(z.string()).describe("Specific changes for our product, using only our allowed claims"),
+  }),
+});
+export type MarketplaceResearch = z.infer<typeof MarketplaceResearchSchema>;

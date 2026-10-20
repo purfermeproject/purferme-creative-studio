@@ -16,7 +16,7 @@ import type { ScanResult } from "@/lib/compliance";
 import type { VerdictThresholds } from "@/lib/verdicts";
 import { DEFAULT_AVOID_PHRASES, DEFAULT_EXAMPLE_ADS } from "@/lib/creative-defaults";
 import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brand-kit";
-import type { CompetitorAnalysis } from "@/lib/schemas";
+import type { CompetitorAnalysis, ListingInsight, MarketplaceResearch } from "@/lib/schemas";
 
 export type ClaimEvidence = { claim: string; evidence: string; source?: string };
 export type ProductUrl = { label: string; url: string };
@@ -190,9 +190,25 @@ export const competitorAds = pgTable("competitor_ads", {
   focus: text("focus").notNull().default(""),
   /** Web pages the research is based on. verified = the URL came back from the search tool itself. */
   sources: jsonb("sources").$type<{ title: string; url: string; verified: boolean }[]>().notNull().default([]),
+  /** Their marketplace listing as researched (Amazon/Flipkart), if any. */
+  listing: jsonb("listing").$type<ListingInsight & { platform: "amazon" | "flipkart" }>(),
   analysis: jsonb("analysis").$type<CompetitorAnalysis>(),
   analysisModel: text("analysis_model").notNull().default(""),
   analysedAt: timestamp("analysed_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** "What's working" on Amazon or Flipkart for a category, from researching the top listings. */
+export const marketPlaybooks = pgTable("market_playbooks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  platform: text("platform").$type<"amazon" | "flipkart">().notNull(),
+  category: text("category").notNull(),
+  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+  summary: text("summary").notNull().default(""),
+  playbook: jsonb("playbook").$type<MarketplaceResearch["playbook"]>().notNull(),
+  sources: jsonb("sources").$type<{ title: string; url: string; verified: boolean }[]>().notNull().default([]),
+  model: text("model").notNull().default(""),
   createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -306,3 +322,4 @@ export type Creative = typeof creatives.$inferSelect;
 export type Result = typeof results.$inferSelect;
 export type CreativeVersion = typeof creativeVersions.$inferSelect;
 export type CompetitorAd = typeof competitorAds.$inferSelect;
+export type MarketPlaybook = typeof marketPlaybooks.$inferSelect;

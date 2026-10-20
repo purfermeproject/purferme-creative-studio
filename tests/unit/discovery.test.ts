@@ -29,3 +29,28 @@ describe("competitor discovery", () => {
     expect(() => extractJson("no json")).toThrow();
   });
 });
+
+describe("marketplace research", () => {
+  it("reads the best-selling listings and asks for a playbook that keeps to our claims", async () => {
+    const { buildMarketplacePrompt } = await import("@/lib/prompts");
+    const p = buildMarketplacePrompt(SEED_BRAND, choc, { platform: "flipkart", category: "millet cookies", count: 5 });
+    expect(p).toContain("what is working on Flipkart (flipkart.com) right now for this category: millet cookies");
+    expect(p).toContain("price per 100 g");
+    expect(p).toContain("what reviewers repeatedly praise and complain about");
+    expect(p).toContain(`Never-use claims: ${choc.redClaims.join("; ")}`);
+    expect(p).toContain("Only report what you actually saw");
+  });
+
+  it("adds what's working to Amazon briefs without copying competitors", async () => {
+    const { buildGenerationPrompt, playbookBlock } = await import("@/lib/prompts");
+    const { SEED_PLATFORM_RULES } = await import("@/db/seed-data");
+    const playbook = { platform: "amazon" as const, date: "2026-10-20", summary: "Winners lead with no maida.", titleFormula: "Brand + Millet Cookies + No Maida + size", keywords: ["millet cookies"], imageStack: ["Pack on white", "Infographic"], reviewThemes: ["Arrives broken?"], adTips: ["SB video"] };
+    expect(playbookBlock(playbook)).toContain("WHAT'S WORKING ON AMAZON.IN");
+    const p = buildGenerationPrompt(SEED_BRAND, choc, SEED_PLATFORM_RULES.find((r) => r.platform === "amazon")!, {
+      n: 3, platform: "amazon", creativeType: "Sponsored Brands video (16:9, muted)", angle: "auto", persona: "auto", language: "English", playbook,
+    });
+    expect(p).toContain("Image stack that wins: Pack on white → Infographic");
+    expect(p).toContain("Doubts to answer up front (from reviews): Arrives broken?");
+    expect(p).toContain("never a competitor's words");
+  });
+});
