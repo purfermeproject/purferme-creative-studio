@@ -117,3 +117,24 @@ export const CompetitorAnalysisSchema = z.object({
     .describe("3 ideas for us that are clearly different, using only our allowed claims"),
 });
 export type CompetitorAnalysis = z.infer<typeof CompetitorAnalysisSchema>;
+
+/** Competitors found by web search for one product category. */
+export const CompetitorDiscoverySchema = z.object({
+  category_summary: z.string().describe("2–3 sentences on how this category is marketed in India right now"),
+  competitors: z.array(
+    z.object({
+      brand: z.string(),
+      products: z.string().describe("Their competing product(s), with pack size if known"),
+      positioning: z.string().describe("How they position themselves, in one sentence"),
+      price: z.string().describe("Price and pack size as seen, with where; empty if not found"),
+      messaging: z.string().describe("Their main taglines, hooks and ad lines as actually seen, quoted where possible"),
+      claims: z.array(z.string()).describe("Claims they make on pack, listing or ads"),
+      channels: z.array(z.string()).describe("Where they sell or advertise (website, Amazon, Flipkart, Blinkit, Instagram…)"),
+      focus_notes: z.string().describe("What you found about the requested focus"),
+      why_relevant: z.string(),
+      sources: z.array(z.object({ title: z.string(), url: z.string() })).describe("Pages you actually read for this brand"),
+    }),
+  ),
+  gaps: z.array(z.string()).describe("Openings in the category that nobody owns yet"),
+});
+export type CompetitorDiscovery = z.infer<typeof CompetitorDiscoverySchema>;

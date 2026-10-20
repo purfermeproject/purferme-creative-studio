@@ -50,6 +50,13 @@
       "when": 1792499335840,
       "tag": "0006_competitors",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792500388859,
+      "tag": "0007_competitor_research",
+      "breakpoints": true
     }
   ]
 }

@@ -509,27 +509,42 @@ test("Extra product photos can be placed instead of the pack", async ({ page }) 
   await expect(ws.getByTestId("image-dims").first()).toContainText("original pack");
 });
 
-test("Competitors: save and analyse an ad, then brief ideas that stand apart from it", async ({ page }) => {
+test("Competitors: found automatically for a product category, broken down, and used in a brief", async ({ page }) => {
   await signIn(page);
   await page.goto("/competitors");
   await expect(page.getByTestId("competitors-empty")).toBeVisible();
+  const find = page.getByRole("form", { name: "Find competitors" });
+  await expect(find.getByLabel("Category to search")).toHaveValue("breakfast cookies, millet & oats");
+  await find.getByLabel("Our product").selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
+  await expect(find.getByLabel("Category to search")).toHaveValue("chocolate cookies, millet & oats");
+  await find.getByLabel("Look at").selectOption({ label: "The claims they make" });
+  await find.getByText("3", { exact: true }).click();
+  await find.getByRole("button", { name: "Find competitors" }).click();
+  await expect(page.getByTestId("research-summary")).toContainText("Found 3 new competitors", { timeout: 60_000 });
+  await expect(page.getByTestId("research-summary")).toContainText("Mock mode: sample brands, no web search ran.");
+  await expect(page.getByTestId("competitor")).toHaveCount(3);
+  await expect(page.getByTestId("competitor-analysis")).toHaveCount(3, { timeout: 60_000 });
+  await expect(page.getByTestId("competitor").first()).toContainText("found by web research");
+  await expect(page.getByTestId("competitor").first().getByTestId("competitor-claims")).toContainText("we can't say this");
+
+  // Searching again skips brands already on the list.
+  await find.getByRole("button", { name: "Find competitors" }).click();
+  await expect(page.getByTestId("research-summary")).toContainText("No new competitors found", { timeout: 60_000 });
+  await expect(page.getByTestId("competitor")).toHaveCount(3);
+
+  // Adding one by hand still works.
+  await page.getByText("Add one yourself").click();
   const form = page.getByRole("form", { name: "Add a competitor ad" });
-  await form.getByRole("button", { name: "Save and analyse" }).click();
   await form.getByLabel("Brand").fill("Crunchy Co");
   await form.getByLabel("Link").fill("ftp://nope");
   await form.getByRole("button", { name: "Save and analyse" }).click();
   await expect(form.getByRole("alert")).toContainText("must start with http");
-  await form.getByLabel("Link").fill("https://www.facebook.com/ads/library/?id=1");
+  await form.getByLabel("Link").fill("");
+  await form.getByLabel("Ad text").fill("The healthy cookie your family deserves!");
   await form.getByRole("button", { name: "Save and analyse" }).click();
-  await expect(form.getByRole("alert")).toContainText("Paste the ad's text or upload a screenshot");
-  await form.getByLabel("Ad text").fill("The healthy cookie your family deserves! Guilt-free snacking.");
-  await form.getByRole("button", { name: "Save and analyse" }).click();
-  const ad = page.getByTestId("competitor").first();
-  await expect(ad.getByTestId("competitor-analysis")).toBeVisible({ timeout: 60_000 });
-  await expect(ad.getByTestId("competitor-claims")).toContainText("we can't say this");
-  await expect(ad.getByTestId("mock-badge")).toBeVisible();
+  await expect(page.getByTestId("competitor")).toHaveCount(4, { timeout: 30_000 });
 
-  await ad.getByRole("link", { name: "Use in a brief" }).click();
+  await page.getByTestId("competitor").last().getByRole("link", { name: "Use in a brief" }).click();
   await page.locator("form[aria-label=Brief][data-ready]").waitFor();
   await expect(page.getByLabel(/Stand apart from a competitor/)).not.toHaveValue("");
   const sent = page.waitForRequest((r) => r.url().endsWith("/api/generate") && (r.postData() ?? "").includes('"competitorId"'));

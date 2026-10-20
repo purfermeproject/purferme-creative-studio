@@ -183,6 +183,13 @@ export const competitorAds = pgTable("competitor_ads", {
   link: text("link").notNull().default(""),
   notes: text("notes").notNull().default(""),
   imageAssetId: uuid("image_asset_id"),
+  /** manual = a team member added it; research = found by web search. */
+  source: text("source").notNull().default("manual"),
+  /** Category searched and what the search focused on (research only). */
+  category: text("category").notNull().default(""),
+  focus: text("focus").notNull().default(""),
+  /** Web pages the research is based on. verified = the URL came back from the search tool itself. */
+  sources: jsonb("sources").$type<{ title: string; url: string; verified: boolean }[]>().notNull().default([]),
   analysis: jsonb("analysis").$type<CompetitorAnalysis>(),
   analysisModel: text("analysis_model").notNull().default(""),
   analysedAt: timestamp("analysed_at", { withTimezone: true }),

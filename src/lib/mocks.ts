@@ -1,4 +1,4 @@
-import type { CompetitorAnalysis, Concept, DeepCheck, DesignRead, Proposal, WeeklyBrief } from "./schemas";
+import type { CompetitorAnalysis, CompetitorDiscovery, Concept, DeepCheck, DesignRead, Proposal, WeeklyBrief } from "./schemas";
 import { isVideoType, type GenerationInput } from "./prompts";
 import type { ScanResult } from "./compliance";
 
@@ -172,5 +172,24 @@ export function mockCompetitorAnalysis(brand: string): CompetitorAnalysis {
       { title: "4:30 slump", hook: "3pm called. It wants chai.", angle: "Coffee/chai ritual", why: "A moment, not a health promise." },
       { title: "Scan the QR", hook: "Where did this millet grow?", angle: "Seed-to-fork traceability", why: "Something only we can say." },
     ],
+  };
+}
+
+export function mockDiscovery(category: string, count: number): CompetitorDiscovery {
+  return {
+    category_summary: `Sample research (mock mode, no web search ran) for “${category}”.`,
+    competitors: Array.from({ length: Math.min(count, 3) }, (_, i) => ({
+      brand: `Sample Brand ${String.fromCharCode(65 + i)} (mock)`,
+      products: "Millet cookies, 200 g",
+      positioning: "Health-led snacking for families.",
+      price: "",
+      messaging: "“The healthy cookie your family deserves”",
+      claims: ["Healthy", "High fibre"],
+      channels: ["Website", "Amazon"],
+      focus_notes: "Sample text from mock mode.",
+      why_relevant: "Same shelf and price band.",
+      sources: [],
+    })),
+    gaps: ["A specific chai-time moment", "Ingredient % transparency"],
   };
 }

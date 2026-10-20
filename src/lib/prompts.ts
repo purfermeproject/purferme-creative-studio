@@ -291,7 +291,11 @@ Return: winners and losers (name + why, using the numbers); the patterns behind 
 }
 
 /** Breaks down a competitor ad and suggests clearly different ideas for our product. */
-export function buildCompetitorPrompt(brand: BrandLike, products: ProductLike[], ad: { brand: string; product: string; channel: string; adText: string; notes: string; hasImage: boolean }): string {
+export function buildCompetitorPrompt(
+  brand: BrandLike,
+  products: ProductLike[],
+  ad: { brand: string; product: string; channel: string; adText: string; notes: string; hasImage: boolean; researched?: boolean },
+): string {
   return `You are the creative strategist for an Indian D2C food brand. Break down a competitor's ad so the team can learn from its craft and find where we can be different. Never suggest copying its words, visuals or claims.
 
 OUR BRAND:
@@ -303,10 +307,43 @@ ${brand.hardRules}
 OUR PRODUCTS AND ALLOWED (GREEN) CLAIMS:
 ${products.map((p) => `- ${p.name}: ${list(p.greenClaims)}`).join("\n")}
 
-COMPETITOR AD:
+${ad.researched ? "COMPETITOR'S PUBLIC MESSAGING (found by web research; treat it as their ad):" : "COMPETITOR AD:"}
 Brand: ${ad.brand}${ad.product ? `. Product: ${ad.product}` : ""}${ad.channel ? `. Ran on: ${ad.channel}` : ""}.
 ${ad.adText.trim() ? `Text of the ad:\n"""\n${ad.adText.trim()}\n"""` : "(No text pasted.)"}
 ${ad.hasImage ? "A screenshot of the ad is attached: read its visible text and describe what it shows.\n" : ""}${ad.notes.trim() ? `Team notes: ${ad.notes.trim()}\n` : ""}
 Rate every claim they make: "ok" (we could say the same if true for us), "check" (needs evidence), "risky" (would break our hard rules or FSSAI/ASCI: health, disease, "healthy", "guilt-free", "100%", unqualified nutrient claims, comparisons). In white_space, list moments, angles or proof points they don't own that our products can credibly claim.
 Give exactly 3 counter_ideas for us: clearly different from their ad, using only our green claims, never naming or knocking them.`;
+}
+
+export const DISCOVERY_FOCUS = {
+  overall: "Overall positioning and marketing",
+  ads: "Their ads and hooks: Instagram, YouTube and marketplace creatives, taglines and offers",
+  claims: "The claims they make on pack, listings and ads",
+  pricing: "Price, pack sizes, offers and bundles",
+  packaging: "Packaging and pack design as seen on listings",
+  reviews: "What customers praise and complain about in reviews",
+} as const;
+export type DiscoveryFocus = keyof typeof DISCOVERY_FOCUS;
+
+/** Web research brief: find real competitors for one of our products in the Indian market. */
+export function buildDiscoveryPrompt(
+  brand: BrandLike,
+  product: ProductLike | null,
+  opts: { category: string; focus: DiscoveryFocus; count: number; exclude: string[] },
+): string {
+  return `You are a market researcher for an Indian D2C food brand. Use web search to find the ${opts.count} most relevant competing brands selling in India right now in this category: ${opts.category}.
+
+OUR BRAND (do not list it):
+${brand.brandContext}
+${product ? `OUR PRODUCT TO COMPARE WITH: ${product.name}. Our allowed claims: ${list(product.greenClaims)}` : ""}
+${opts.exclude.length ? `Already tracked (skip these): ${opts.exclude.join(", ")}` : ""}
+
+FOCUS: ${DISCOVERY_FOCUS[opts.focus]}.
+
+How to research:
+- Prefer brands actually on sale in India now: their own site, Amazon.in, Flipkart, Blinkit/Zepto/Swiggy Instamart, and their Instagram or YouTube. Mix big brands and fast-growing D2C challengers.
+- Read real pages. Quote their actual taglines, listing titles and ad lines in "messaging" where you can.
+- List the claims they make (on pack, listing or ads) word for word where possible.
+- In "sources", list only pages you actually opened in this search, with their real URLs. Never invent a URL, price or claim; leave a field empty if you didn't find it.
+- In "gaps", say what nobody in the category owns yet.`;
 }

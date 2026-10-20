@@ -21,7 +21,22 @@ type Row = {
   mock: boolean;
   analysedAt: string | null;
   createdBy: string;
+  source: string;
+  category: string;
+  sources: { title: string; url: string; verified: boolean }[];
 };
+
+const FOCUS: [string, string][] = [
+  ["overall", "Everything (positioning and marketing)"],
+  ["ads", "Their ads and hooks"],
+  ["claims", "The claims they make"],
+  ["pricing", "Price, pack sizes and offers"],
+  ["packaging", "Packaging"],
+  ["reviews", "What customers say"],
+];
+
+/** "Chocolate Cookies, millet & oats, 240g" → "chocolate cookies, millet & oats" as a search category. */
+const categoryFrom = (name: string) => name.replace(/,?\s*\d+\s*(g|kg|ml|l)\b.*$/i, "").trim().toLowerCase();
 
 const RISK: Record<"ok" | "check" | "risky", [string, string]> = {
   ok: ["chip-green", "fine"],
@@ -106,8 +121,13 @@ function Analysis({ a, mock }: { a: CompetitorAnalysis; mock: boolean }) {
   );
 }
 
-export function CompetitorsClient({ rows, role }: { rows: Row[]; role: Role }) {
+export function CompetitorsClient({ rows, role, products }: { rows: Row[]; role: Role; products: { id: string; name: string }[] }) {
   const router = useRouter();
+  const [productId, setProductId] = useState(products[0]?.id ?? "");
+  const [category, setCategory] = useState(categoryFrom(products[0]?.name ?? ""));
+  const [focus, setFocus] = useState("overall");
+  const [count, setCount] = useState(5);
+  const [research, setResearch] = useState<{ status: string; error: string; summary: string; gaps: string[]; note: string }>({ status: "", error: "", summary: "", gaps: [], note: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<Record<string, string>>({});
@@ -125,6 +145,27 @@ export function CompetitorsClient({ rows, role }: { rows: Row[]; role: Role }) {
     router.refresh();
   }
 
+  async function find() {
+    setResearch({ status: "Searching the web for competitors… (usually 1–3 minutes)", error: "", summary: "", gaps: [], note: "" });
+    const res = await fetch("/api/competitors/discover", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ category, focus, count, productId: productId || null }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return setResearch((r) => ({ ...r, status: "", error: data.error ?? "The search didn't work. Try again." }));
+    const note = data.ids.length
+      ? `Found ${data.ids.length} new competitor${data.ids.length > 1 ? "s" : ""}${data.skipped ? ` (${data.skipped} already on your list or not a competitor)` : ""}.`
+      : "No new competitors found: everything it found is already on your list. Try a wider category or another focus.";
+    setResearch({ status: "", error: "", summary: data.summary, gaps: data.gaps, note: data.mock ? `${note} Mock mode: sample brands, no web search ran.` : note });
+    router.refresh();
+    for (let i = 0; i < data.ids.length; i++) {
+      setResearch((r) => ({ ...r, status: `Breaking down ${i + 1} of ${data.ids.length}…` }));
+      await analyse(data.ids[i]);
+    }
+    setResearch((r) => ({ ...r, status: "" }));
+  }
+
   async function add(form: HTMLFormElement) {
     setSaving(true);
     setError("");
@@ -139,9 +180,88 @@ export function CompetitorsClient({ rows, role }: { rows: Row[]; role: Role }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-      {canAdd ? (
+      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+      {canAnalyse ? (
         <form
-          className="card h-fit space-y-3 lg:sticky lg:top-4"
+          className="card space-y-3"
+          aria-label="Find competitors"
+          onSubmit={(e) => {
+            e.preventDefault();
+            find();
+          }}
+        >
+          <h2 className="display text-xl">Find competitors</h2>
+          <div>
+            <label htmlFor="f-product" className="label">
+              Our product
+            </label>
+            <select
+              id="f-product"
+              className="input"
+              value={productId}
+              onChange={(e) => {
+                setProductId(e.target.value);
+                setCategory(categoryFrom(products.find((p) => p.id === e.target.value)?.name ?? ""));
+              }}
+            >
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+              <option value="">None (just a category)</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="f-category" className="label">
+              Category to search
+            </label>
+            <input id="f-category" className="input" value={category} onChange={(e) => setCategory(e.target.value)} maxLength={150} placeholder="e.g. millet cookies, peanut butter" />
+          </div>
+          <div>
+            <label htmlFor="f-focus" className="label">
+              Look at
+            </label>
+            <select id="f-focus" className="input" value={focus} onChange={(e) => setFocus(e.target.value)}>
+              {FOCUS.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </div>
+          <fieldset>
+            <legend className="label">How many brands</legend>
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">
+              {[3, 5, 8].map((k) => (
+                <label key={k} className={`cursor-pointer rounded-md py-1.5 text-center text-sm font-semibold has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-purple ${count === k ? "bg-purple text-accent-ink" : "text-ink-soft"}`}>
+                  <input type="radio" name="count" value={k} checked={count === k} onChange={() => setCount(k)} className="sr-only" />
+                  {k}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <button type="submit" className="btn-primary w-full" disabled={Boolean(research.status) || category.trim().length < 3}>
+            {research.status ? "Working…" : "Find competitors"}
+          </button>
+          <p className="hint text-xs">Uses web search on your AI account (a few searches per brand), plus one breakdown per brand found.</p>
+          {research.status ? (
+            <p role="status" className="text-sm font-semibold" data-testid="research-status">
+              {research.status}
+            </p>
+          ) : null}
+          {research.error ? (
+            <p role="alert" className="text-sm text-red">
+              {research.error}
+            </p>
+          ) : null}
+        </form>
+      ) : null}
+      {canAdd ? (
+        <details className="card">
+          <summary className="cursor-pointer font-semibold">Add one yourself (paste an ad or a screenshot)</summary>
+        <form
+          className="mt-3 space-y-3"
           aria-label="Add a competitor ad"
           onSubmit={(e) => {
             e.preventDefault();
@@ -208,15 +328,34 @@ export function CompetitorsClient({ rows, role }: { rows: Row[]; role: Role }) {
             </p>
           ) : null}
         </form>
+        </details>
       ) : (
         <p className="card h-fit text-sm text-ink-soft">Your role can view competitor ads but not add them.</p>
       )}
+      </div>
 
       <section aria-label="Competitor ads" className="min-w-0 space-y-4">
+        {research.summary || research.note ? (
+          <div className="rounded-2xl border border-line bg-gradient-to-br from-surface to-pink-soft p-5" data-testid="research-summary">
+            <p className="eyebrow">Category research</p>
+            {research.note ? <p className="mt-1 font-semibold">{research.note}</p> : null}
+            {research.summary ? <p className="mt-2 text-sm">{research.summary}</p> : null}
+            {research.gaps.length ? (
+              <div className="mt-3">
+                <p className="eyebrow mb-1">Nobody owns yet</p>
+                <ul className="list-disc pl-5 text-sm">
+                  {research.gaps.map((g) => (
+                    <li key={g}>{g}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {rows.length === 0 ? (
           <div className="card border-dashed text-center" data-testid="competitors-empty">
             <p className="display text-xl">No competitor ads yet</p>
-            <p className="hint mt-1">Add one on the left: paste its text or upload a screenshot.</p>
+            <p className="hint mt-1">Use “Find competitors” on the left, or add one yourself.</p>
           </div>
         ) : (
           rows.map((r) => (
@@ -224,7 +363,7 @@ export function CompetitorsClient({ rows, role }: { rows: Row[]; role: Role }) {
               <header className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="display text-2xl">{r.brand}</h2>
-                  <p className="hint text-sm">{[r.product, r.channel, `added by ${r.createdBy}`].filter(Boolean).join(" · ")}</p>
+                  <p className="hint text-sm">{[r.product, r.channel, r.source === "research" ? `found by web research${r.category ? ` for “${r.category}”` : ""}` : `added by ${r.createdBy}`].filter(Boolean).join(" · ")}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {r.analysis ? (
@@ -260,11 +399,29 @@ export function CompetitorsClient({ rows, role }: { rows: Row[]; role: Role }) {
                     <img src={r.imageUrl} alt={`Screenshot of the ${r.brand} ad`} className="w-full rounded-lg border border-line bg-surface-2 object-contain" />
                   ) : null}
                   {r.adText ? <p className="line-clamp-6 rounded-lg bg-surface-2 p-2 text-xs whitespace-pre-line text-ink-soft">{r.adText}</p> : null}
-                  {r.link ? (
+                  {r.sources.length ? (
+                    <div data-testid="competitor-sources">
+                      <p className="eyebrow mb-1">Sources</p>
+                      <ul className="space-y-1 text-xs">
+                        {r.sources.map((s) => (
+                          <li key={s.url} className="flex items-start gap-1">
+                            <span title={s.verified ? "Returned by the web search" : "Cited by the AI but not in the search results: double-check"} aria-hidden>
+                              {s.verified ? "✓" : "?"}
+                            </span>
+                            <a href={s.url} target="_blank" rel="noopener noreferrer nofollow" className="min-w-0 truncate text-purple underline">
+                              {s.title || new URL(s.url).hostname}
+                            </a>
+                            <span className="sr-only">{s.verified ? "(confirmed by search)" : "(not confirmed by search)"}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : r.link ? (
                     <a href={r.link} target="_blank" rel="noopener noreferrer nofollow" className="block truncate text-xs text-purple underline">
                       Open link
                     </a>
                   ) : null}
+                  {r.notes && r.source === "research" ? <p className="rounded-lg bg-surface-2 p-2 text-xs whitespace-pre-line text-ink-soft">{r.notes}</p> : null}
                 </div>
                 <div className="min-w-0">
                   {busy[r.id] ? (

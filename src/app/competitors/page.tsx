@@ -1,11 +1,12 @@
 import { currentUser, roleOf } from "@/auth";
 import { listCompetitors } from "@/lib/competitors";
+import { getProducts } from "@/lib/data";
 import { CompetitorsClient } from "./CompetitorsClient";
 
 export const metadata = { title: "Competitors · Puŕ Fermé Creative Studio" };
 
 export default async function CompetitorsPage() {
-  const [rows, user] = await Promise.all([listCompetitors(), currentUser()]);
+  const [rows, user, products] = await Promise.all([listCompetitors(), currentUser(), getProducts()]);
   const role = user ? await roleOf(user) : "viewer";
   return (
     <div className="space-y-6">
@@ -13,12 +14,14 @@ export default async function CompetitorsPage() {
         <p className="eyebrow">Competitive intelligence</p>
         <h1 className="display text-4xl">Competitor ads</h1>
         <p className="hint mt-1 max-w-3xl">
-          Collect ads from other brands. The AI breaks down each one (hook, angle, claims and how risky they are, what works) and finds the white space your products can own. Then
-          use it in a brief to get ideas that are clearly different. It never copies them, names them or makes comparative claims.
+          Pick one of your products and what to look at. The AI searches the web (brand sites, Amazon, Flipkart, quick commerce, Instagram) for competing brands in India, saves them
+          with their sources and breaks each one down: hook, angle, claims and how risky they are, and the white space your product can own. Use any of them in a brief to get
+          ideas that are clearly different. It never copies them, names them or makes comparative claims.
         </p>
       </div>
       <CompetitorsClient
         role={role}
+        products={products.filter((p) => p.status !== "blocked").map((p) => ({ id: p.id, name: p.name }))}
         rows={rows.map((r) => ({
           id: r.id,
           brand: r.brand,
@@ -32,6 +35,9 @@ export default async function CompetitorsPage() {
           mock: r.analysisModel === "mock",
           analysedAt: r.analysedAt?.toISOString() ?? null,
           createdBy: r.createdBy,
+          source: r.source,
+          category: r.category,
+          sources: r.sources,
         }))}
       />
     </div>
