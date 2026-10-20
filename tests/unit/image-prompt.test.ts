@@ -13,13 +13,13 @@ const concept = {
 };
 
 describe("buildImagePrompt", () => {
-  const base = { concept, platform: "meta" as const, creativeType: "9:16 UGC-style video (15–30s)", productName: "Chocolate Cookies", hasPackReference: true };
+  const base = { concept, platform: "meta" as const, creativeType: "9:16 UGC-style video (15–30s)", productName: "Chocolate Cookies" };
 
   it("uses the chosen scene and its exact on-screen text", () => {
     const p = buildImagePrompt({ ...base, frameIndex: 1 });
     expect(p).toContain("Scene: Cookie dunk");
     expect(p).toContain('"No maida."');
-    expect(p).toContain("attached photo is the real pack");
+    expect(p).toContain("the real, unaltered pack photo will be placed into the image afterwards");
   });
 
   it("tells the model the final size and crop", () => {
@@ -29,15 +29,25 @@ describe("buildImagePrompt", () => {
     expect(p).toContain("Keep text out of the top 14%.");
   });
 
-  it("clamps an out-of-range scene and says not to invent pack text without a reference", () => {
-    const p = buildImagePrompt({ ...base, frameIndex: 9, hasPackReference: false });
-    expect(p).toContain("Scene: Cookie dunk");
-    expect(p).toContain("do not invent detailed pack text");
+  it("clamps an out-of-range scene", () => {
+    expect(buildImagePrompt({ ...base, frameIndex: 9 })).toContain("Scene: Cookie dunk");
   });
 
-  it("makes the Amazon main listing image pack-only on white, with no people", () => {
+  it("never asks the AI to draw a pack, with or without our pack photo", () => {
+    for (const packMode of ["locked", "none"] as const) {
+      const p = buildImagePrompt({ ...base, frameIndex: 0, packMode });
+      expect(p).toContain("Do NOT show any product pack");
+      expect(p).toContain("Never invent packaging");
+      expect(p).not.toMatch(/Show the product pack|attached photo is the real pack/);
+      // The scene's own mention of the pack is replaced too.
+      expect(p).toContain("Scene: [empty spot: the real pack is added later] next to a cup of chai");
+    }
+    expect(buildImagePrompt({ ...base, frameIndex: 0, packMode: "none" })).toContain("this image shows the scene only");
+  });
+
+  it("makes the Amazon main listing image plain white (the real pack goes on top), with no people", () => {
     const p = buildImagePrompt({ ...base, platform: "amazon", creativeType: "Listing image stack (7 images)", frameIndex: 0 });
-    expect(p).toContain("pure white background");
+    expect(p).toContain("plain pure white background only");
     expect(p).not.toContain("3pm called.");
     expect(p).toContain("No people's faces");
   });

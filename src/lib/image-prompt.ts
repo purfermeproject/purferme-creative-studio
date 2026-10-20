@@ -22,12 +22,11 @@ export function buildImagePrompt(opts: {
   platform: Platform;
   creativeType: string;
   productName: string;
-  hasPackReference: boolean;
   /**
-   * "locked": the model leaves space and the original pack photo is composited afterwards (pack never redrawn).
-   * "reference": the model redraws the pack from the photo (can alter printed text).
+   * "locked": the model leaves space and the original pack photo is composited afterwards.
+   * "none": a scene without the product. The model never draws a pack in either case.
    */
-  packMode?: "locked" | "reference" | "none";
+  packMode?: "locked" | "none";
   packPosition?: "right" | "center" | "left";
   /** "overlay" = no words in the picture; crisp brand text is added afterwards. */
   textMode?: "overlay" | "ai";
@@ -38,23 +37,18 @@ export function buildImagePrompt(opts: {
   const frame = c.frames[Math.min(Math.max(opts.frameIndex, 0), Math.max(c.frames.length - 1, 0))];
   const text = (frame?.onscreen || c.copy.headline || "").trim();
   const isMainListing = platform === "amazon" && opts.creativeType.toLowerCase().includes("listing") && opts.frameIndex === 0;
-  const locked = opts.packMode === "locked";
+  const locked = opts.packMode !== "none";
   const spot = { right: "lower right", center: "lower centre", left: "lower left" }[opts.packPosition ?? "right"];
   const lines = [
     `Advertising image for ${PLATFORM_LABELS[platform]} (${opts.creativeType}${isVideoType(opts.creativeType) ? ", a still for one scene of the video" : ""}).`,
     `Product: ${opts.productName}.`,
     locked
       ? `Do NOT show any product pack, box, jar, wrapper, label or brand logo anywhere: the real, unaltered pack photo will be placed into the image afterwards. Leave a clear, uncluttered spot on a surface at the ${spot} of the frame where a pack can stand, lit to match the scene, with nothing in front of it.`
-      : opts.hasPackReference
-        ? "The attached photo is the real pack. Show it exactly as it is: same shape, colours, logo and printed text. Do not redesign or invent pack text."
-        : "Show the product pack clearly; do not invent detailed pack text.",
-    isMainListing
-      ? locked
-        ? "Main listing image: a plain pure white background only, no objects, no props, no text (the pack is added afterwards)."
-        : "Main listing image: the pack alone on a pure white background, centred, no props, no text."
-      : `Scene: ${locked ? withoutPack(frame?.visual ?? c.ai_prompt, opts.productName) : (frame?.visual ?? c.ai_prompt)}`,
-    isMainListing ? "" : `Style and details: ${locked ? withoutPack(c.ai_prompt, opts.productName) : c.ai_prompt}`,
-    locked ? "Nobody holds, carries or shows any packaged product: no pouches, boxes, wrappers, jars or snack packets anywhere, and no brand names or logos." : "",
+      : "Do NOT show any product pack, box, jar, wrapper, label or brand logo anywhere: this image shows the scene only.",
+    isMainListing ? "Main listing image: a plain pure white background only, no objects, no props, no text (the pack is added afterwards)." : `Scene: ${withoutPack(frame?.visual ?? c.ai_prompt, opts.productName)}`,
+    isMainListing ? "" : `Style and details: ${withoutPack(c.ai_prompt, opts.productName)}`,
+    "Nobody holds, carries or shows any packaged product: no pouches, boxes, wrappers, jars or snack packets anywhere, and no brand names or logos. Never invent packaging: only the brand's real pack photo is ever used.",
+    "No close-ups of the product itself (cookies, spread, bars): if food appears, keep it small and natural in the scene, so it can't be mistaken for the real product shot.",
     isMainListing
       ? "No added text other than what is printed on the pack."
       : opts.textMode === "overlay"

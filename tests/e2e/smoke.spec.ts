@@ -400,6 +400,8 @@ test("Make all scenes builds a storyboard and the handoff pack ZIP has everythin
 test("Edit with words, All sizes and Compare", async ({ page }) => {
   await signIn(page);
   const ws = await develop(page, { type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  // AI edits are only for scene-only images; images with our real pack can't be redrawn.
+  await ws.getByLabel("Pack in the image").selectOption("none");
   await ws.getByRole("button", { name: "Make image" }).click();
   const gallery = ws.getByTestId("image-gallery");
   await expect(gallery.locator("img")).toHaveCount(1);
@@ -437,7 +439,7 @@ test("Where it runs: Instagram placement shapes the ad, image size and is saved"
   expect(csv).toContain("Instagram Carousel");
 });
 
-test("Original pack is placed unchanged, and AI edits of it need explicit consent", async ({ page }) => {
+test("Original pack is placed unchanged, and images with it can't be AI-edited", async ({ page }) => {
   const sharp = (await import("sharp")).default;
   // A cut-out pack: transparent margin around a solid block.
   const pack = await sharp({ create: { width: 300, height: 420, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
@@ -456,14 +458,13 @@ test("Original pack is placed unchanged, and AI edits of it need explicit consen
   await expect(ws.getByLabel("Pack in the image")).toHaveValue("locked");
   await ws.getByRole("button", { name: "Make image" }).click();
   await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack");
-  await ws.getByRole("button", { name: "Edit with words" }).first().click();
-  await ws.getByLabel("Describe the change").fill("make it warmer");
-  await expect(ws.getByRole("button", { name: "Apply change" })).toBeDisabled();
+  await expect(ws.getByRole("button", { name: "Edit with words" })).toHaveCount(0);
+  await expect(ws.getByLabel("Pack in the image").locator("option")).toHaveText(["Pack: our real pack photo", "No pack in this image"]);
   // The server refuses too.
   const assetUrl = await ws.getByTestId("image-gallery").locator("img").first().getAttribute("src");
   const res = await page.request.post("/api/image/edit", { data: { assetId: assetUrl!.split("/").pop(), instruction: "make it warmer" } });
   expect(res.status()).toBe(400);
-  expect((await res.json()).error).toContain("original pack");
+  expect((await res.json()).error).toContain("real pack");
 });
 
 test("Proposals show the real pack; a proposal image carries into the ad; the first image can be automatic", async ({ page }) => {
@@ -693,6 +694,17 @@ test("Research: one run finds competitors per platform and proposes ideas for ea
   await expect(ws).toBeVisible({ timeout: 60_000 });
   await expect(ws).toContainText("Amazon");
   await expect(ws).toContainText("Ragi & Cocoa Peanut Butter");
+});
+
+test("No pack photo, no pack: the app asks for the real photo instead of letting the AI invent one", async ({ page }) => {
+  await signIn(page);
+  const ws = await develop(page, { product: "PuŕGrain Millet Bar, 10g protein" });
+  await ws.getByRole("button", { name: "Make image" }).click();
+  await expect(ws.getByRole("alert")).toContainText("no pack photo for");
+  await expect(ws.getByTestId("image-gallery")).toHaveCount(0);
+  await ws.getByLabel("Pack in the image").selectOption("none");
+  await ws.getByRole("button", { name: "Make image" }).click();
+  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1);
 });
 
 test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {

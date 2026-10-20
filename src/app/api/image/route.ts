@@ -22,8 +22,8 @@ const Body = z.object({
   creativeId: z.string().uuid().nullable().optional(),
   specId: z.string().max(40).nullable().optional(),
   textMode: z.enum(["overlay", "ai"]).default("overlay"),
-  /** locked = composite the original pack photo (default); reference = let the model redraw it; none = no pack. */
-  packMode: z.enum(["locked", "reference", "none"]).default("locked"),
+  /** locked = composite the real pack photo (default); none = a scene without the product. The AI never draws a pack. */
+  packMode: z.enum(["locked", "none"]).default("locked"),
   packPosition: z.enum(PACK_POSITIONS).default("right"),
   packScale: z.enum(PACK_SCALES).default("medium"),
   /** Which real product photo to place: the pack photo (default) or one of the product's extra photos. */
@@ -64,7 +64,14 @@ export async function POST(req: Request) {
             ? { data: Buffer.from(input.packImage.base64, "base64"), mime: input.packImage.mediaType, name: "pack" }
             : await loadReference(product.packImageUrl);
     // Without a pack photo there is nothing to lock; fall back to describing the pack.
-    const packMode = !reference ? "none" : input.packMode;
+    // Only real product photos are used: no photo on file means no pack image, never an AI-drawn one.
+    if (input.packMode === "locked" && !reference) {
+      return Response.json(
+        { error: `There's no pack photo for ${product.name} yet, so the AI would have to invent one. Add your real pack photo in Tools → Settings → Products (it's placed into images unchanged), or choose “No pack in this image”.`, code: "no-pack-photo" },
+        { status: 400 },
+      );
+    }
+    const packMode = input.packMode;
     const packAssetId =
       input.photoId && product.photoAssetIds.includes(input.photoId)
         ? input.photoId
@@ -80,7 +87,6 @@ export async function POST(req: Request) {
       platform: input.platform,
       creativeType: input.creativeType,
       productName: product.name,
-      hasPackReference: Boolean(reference),
       packMode,
       packPosition: input.packPosition,
       target: { w: spec.w, h: spec.h, label: spec.label, note: spec.note },
@@ -90,7 +96,7 @@ export async function POST(req: Request) {
     const image = await generateImage({
       prompt,
       target: { w: spec.w, h: spec.h },
-      reference,
+      reference: null,
       user,
       label,
       frameIndex: input.frameIndex,

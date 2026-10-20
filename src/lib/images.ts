@@ -171,18 +171,19 @@ export async function loadAsset(id: string) {
 }
 
 /** Changes an existing image from a plain-language instruction, keeping its exact size. */
-export async function editImage(opts: { assetId: string; instruction: string; user: string; creativeId?: string | null; allowPackRedraw?: boolean }) {
+export async function editImage(opts: { assetId: string; instruction: string; user: string; creativeId?: string | null }) {
   const a = await loadAsset(opts.assetId);
   if (!a || !a.mime.startsWith("image/")) throw new UserFacingError("That image no longer exists.");
   const lockedPack = a.sourceAssetIds.length > 0 || a.label.includes("original pack");
-  if (lockedPack && !opts.allowPackRedraw) {
-    throw new UserFacingError("This image has the original pack placed unchanged. An AI edit would redraw the pack, so make a new image instead (or allow it for a draft).");
+  if (lockedPack) {
+    // An AI edit redraws the whole picture, including our real pack, so it isn't allowed.
+    throw new UserFacingError("This image has your real pack in it, and an AI edit would redraw the pack. Make a new image instead (you can change the scene in Edit first).");
   }
   const w = a.width ?? 1080;
   const h = a.height ?? 1080;
-  const label = `${(a.label ? `${a.label} · ` : "").replace(" · original pack", "")}edited${lockedPack ? " · pack redrawn by AI, not for launch" : ""}`;
+  const label = `${a.label ? `${a.label} · ` : ""}edited`;
   const prompt = `Edit this advertising image: ${opts.instruction.trim()}
-Keep everything else the same: the product pack exactly as it is (shape, colours, logo, printed text), the composition and the style. Do not add new words, prices, badges or health claims.`;
+Keep everything else the same: the composition and the style. Do not add any product pack, box, pouch, jar, logo or brand name, and do not add new words, prices, badges or health claims.`;
 
   if (isMock() && !process.env.OPENAI_API_KEY) {
     return storeAsset({

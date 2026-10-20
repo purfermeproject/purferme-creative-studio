@@ -9,8 +9,6 @@ const Body = z.object({
   assetId: z.string().uuid(),
   instruction: z.string().trim().min(3, "Describe the change, e.g. “make the background lighter”.").max(500),
   creativeId: z.string().uuid().nullable().optional(),
-  /** Images with the locked original pack are only redrawn by AI when the user accepts the pack may change. */
-  allowPackRedraw: z.boolean().default(false),
 });
 
 export async function POST(req: Request) {

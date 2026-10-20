@@ -51,10 +51,9 @@ export function ImageMaker({
   const [picked, setPicked] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
   const [textMode, setTextMode] = useState<"overlay" | "ai">("overlay");
-  const [packMode, setPackMode] = useState<"locked" | "reference" | "none">("locked");
+  const [packMode, setPackMode] = useState<"locked" | "none">("locked");
   const [packPosition, setPackPosition] = useState<"right" | "center" | "left">("right");
   const [packScale, setPackScale] = useState<"small" | "medium" | "large">("medium");
-  const [allowRedraw, setAllowRedraw] = useState(false);
   const [photoId, setPhotoId] = useState("");
   const [editing, setEditing] = useState<MadeImage | null>(null);
   const [frame, setFrame] = useState(0);
@@ -133,7 +132,7 @@ export function ImageMaker({
     setWorking(img.id);
     setError("");
     try {
-      const a = await post("/api/image/edit", { assetId: img.id, instruction, creativeId: creativeId ?? null, allowPackRedraw: allowRedraw });
+      const a = await post("/api/image/edit", { assetId: img.id, instruction, creativeId: creativeId ?? null });
       onImages([...images, { id: a.id, url: a.url, label: a.label, frameIndex: img.frameIndex ?? null }]);
       setWordsFor(null);
       setInstruction("");
@@ -212,8 +211,7 @@ export function ImageMaker({
           Pack in the image
         </label>
         <select id={`pack-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packMode} onChange={(e) => setPackMode(e.target.value as typeof packMode)}>
-          <option value="locked">Pack: original photo, placed unchanged</option>
-          <option value="reference">Pack: AI redraws it (may alter text)</option>
+          <option value="locked">Pack: our real pack photo</option>
           <option value="none">No pack in this image</option>
         </select>
         {packMode === "locked" ? (
@@ -267,10 +265,10 @@ export function ImageMaker({
         ) : null}
       </div>
       {packMode === "locked" ? (
-        <p className="hint">The AI paints the scene only; your original pack photo is then placed on top without any change. A transparent PNG cut-out looks best.</p>
-      ) : packMode === "reference" ? (
-        <p className="text-sm text-amber">AI-drawn packs can misspell or alter printed text. Use for mood boards only, never for launch.</p>
-      ) : null}
+        <p className="hint">The AI paints the scene only and never draws a pack; your real pack photo is then placed in without any change.</p>
+      ) : (
+        <p className="hint">Scene only: no pack at all (the AI is told never to draw one).</p>
+      )}
       {specId === CUSTOM && !customValid ? (
         <p className="hint">Width and height must be whole numbers between {MIN_SIDE} and {MAX_SIDE} px.</p>
       ) : specs.find((s) => s.id === specId)?.note ? (
@@ -360,9 +358,11 @@ export function ImageMaker({
                 <button type="button" className="text-accent hover:underline" onClick={() => setPreviewing(img)}>
                   Preview
                 </button>
-                <button type="button" className="text-accent hover:underline" onClick={() => setWordsFor(wordsFor === img.id ? null : img.id)}>
-                  Edit with words
-                </button>
+                {img.label?.includes("original pack") ? null : (
+                  <button type="button" className="text-accent hover:underline" onClick={() => setWordsFor(wordsFor === img.id ? null : img.id)}>
+                    Edit with words
+                  </button>
+                )}
                 <button type="button" className="text-accent hover:underline disabled:opacity-50" disabled={working === img.id} onClick={() => allSizes(img)}>
                   {working === img.id && wordsFor !== img.id ? "Resizing…" : "All sizes"}
                 </button>
@@ -394,16 +394,10 @@ export function ImageMaker({
                     onChange={(e) => setInstruction(e.target.value)}
                     placeholder="e.g. make the background lighter, add steam to the chai"
                   />
-                  {img.label?.includes("original pack") ? (
-                    <label className="flex items-start gap-1.5 text-xs text-amber">
-                      <input type="checkbox" className="mt-0.5" checked={allowRedraw} onChange={(e) => setAllowRedraw(e.target.checked)} />
-                      AI edits redraw the whole picture, including the pack. Allow it for a draft (not for launch)? To keep the pack exact, make a new image instead.
-                    </label>
-                  ) : null}
                   <button
                     type="submit"
                     className="btn-secondary px-3 py-1 text-sm"
-                    disabled={working === img.id || instruction.trim().length < 3 || (Boolean(img.label?.includes("original pack")) && !allowRedraw)}
+                    disabled={working === img.id || instruction.trim().length < 3}
                   >
                     {working === img.id ? "Editing… (up to a minute)" : "Apply change"}
                   </button>
