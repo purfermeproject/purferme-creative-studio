@@ -13,7 +13,7 @@ import { buildDevelopPrompt, buildGenerationPrompt, buildVariationsPrompt } from
 import { ConceptSchema, GenerationResponseSchema, ProposalSchema, ProposalsResponseSchema } from "@/lib/schemas";
 import { DELIVERABLES, OBJECTIVES, PLATFORMS } from "@/lib/types";
 import { findPlacement } from "@/lib/placements";
-import { competitorContext, latestPlaybook } from "@/lib/competitors";
+import { competitorContext, competitorLandscape, latestPlaybook } from "@/lib/competitors";
 
 export const maxDuration = 300;
 
@@ -44,6 +44,8 @@ const Body = z.object({
   competitorId: z.string().uuid().optional(),
   /** Amazon/Flipkart: include the latest "what's working" playbook (default on). */
   usePlaybook: z.boolean().default(true),
+  /** Use everything researched about this product's competitors (default on). */
+  useLandscape: z.boolean().default(true),
   /** Images made from the proposal before developing; attached to the new ad. */
   imageIds: z.array(z.string().uuid()).max(10).optional(),
 });
@@ -106,6 +108,7 @@ export async function POST(req: Request) {
   const deliverable = input.deliverable as Deliverable;
   const competitor = input.competitorId ? await competitorContext(input.competitorId) : null;
   const playbook = input.platform !== "meta" && input.usePlaybook ? await latestPlaybook(input.platform, product.id) : null;
+  const landscape = input.useLandscape ? (await competitorLandscape(product)).landscape : null;
   const common = {
     platform: input.platform,
     creativeType: input.creativeType,
@@ -117,6 +120,7 @@ export async function POST(req: Request) {
     objective,
     competitor,
     playbook,
+    landscape,
   };
   let prompt: string;
   if (input.mode === "proposals") {
@@ -204,6 +208,7 @@ export async function POST(req: Request) {
             sourceAssetIds: !input.image && packAsset ? [packAsset] : [],
             proposal: { title: proposal.title, big_idea: proposal.big_idea },
             competitorId: competitor ? input.competitorId : undefined,
+            landscapeBrands: landscape?.brands,
             generatedAt: new Date().toISOString(),
           };
           if (input.creativeId) {

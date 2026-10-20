@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { can } from "@/lib/roles";
+import { categoryFrom } from "@/lib/landscape";
 import type { CompetitorAnalysis, ListingInsight, MarketplaceResearch } from "@/lib/schemas";
 import type { Role } from "@/lib/types";
 import { deleteCompetitor } from "./actions";
@@ -171,9 +172,6 @@ const FOCUS: [string, string][] = [
   ["reviews", "What customers say"],
 ];
 
-/** "Chocolate Cookies, millet & oats, 240g" → "chocolate cookies, millet & oats" as a search category. */
-const categoryFrom = (name: string) => name.replace(/,?\s*\d+\s*(g|kg|ml|l)\b.*$/i, "").trim().toLowerCase();
-
 const RISK: Record<"ok" | "check" | "risky", [string, string]> = {
   ok: ["chip-green", "fine"],
   check: ["chip-amber", "needs evidence"],
@@ -194,7 +192,7 @@ function List({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function Analysis({ a, mock }: { a: CompetitorAnalysis; mock: boolean }) {
+function Analysis({ a, mock, id, canDevelop }: { a: CompetitorAnalysis; mock: boolean; id: string; canDevelop: boolean }) {
   return (
     <div className="space-y-4" data-testid="competitor-analysis">
       {mock ? (
@@ -242,13 +240,18 @@ function Analysis({ a, mock }: { a: CompetitorAnalysis; mock: boolean }) {
       <div>
         <p className="eyebrow mb-2">Ideas that are clearly ours</p>
         <ul className="grid gap-2 md:grid-cols-3">
-          {a.counter_ideas.map((c) => (
-            <li key={c.title} className="rounded-xl border border-line bg-surface-2 p-3 text-sm">
+          {a.counter_ideas.map((c, i) => (
+            <li key={c.title} className="flex flex-col rounded-xl border border-line bg-surface-2 p-3 text-sm">
               <p className="font-semibold">{c.title}</p>
               <p className="font-serif text-ink">“{c.hook}”</p>
-              <p className="mt-1 text-xs text-ink-soft">
+              <p className="mt-1 flex-1 text-xs text-ink-soft">
                 {c.angle} · {c.why}
               </p>
+              {canDevelop ? (
+                <Link href={`/create?competitor=${id}&idea=${i}`} className="btn-primary mt-2 px-3 py-1 text-xs">
+                  Develop this idea
+                </Link>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -257,7 +260,19 @@ function Analysis({ a, mock }: { a: CompetitorAnalysis; mock: boolean }) {
   );
 }
 
-export function CompetitorsClient({ rows, role, products, playbooks }: { rows: Row[]; role: Role; products: { id: string; name: string }[]; playbooks: Playbook[] }) {
+export function CompetitorsClient({
+  rows,
+  role,
+  products,
+  playbooks,
+  research: saved,
+}: {
+  rows: Row[];
+  role: Role;
+  products: { id: string; name: string }[];
+  playbooks: Playbook[];
+  research: { id: string; category: string; summary: string; gaps: string[]; date: string; mock: boolean }[];
+}) {
   const router = useRouter();
   const [where, setWhere] = useState("web");
   const [productId, setProductId] = useState(products[0]?.id ?? "");
@@ -505,6 +520,27 @@ export function CompetitorsClient({ rows, role, products, playbooks }: { rows: R
       </div>
 
       <section aria-label="Competitor ads" className="min-w-0 space-y-4">
+        <div className="rounded-2xl border border-line bg-surface p-5" data-testid="how-used">
+          <p className="eyebrow">How this research is used</p>
+          <ol className="mt-2 grid gap-3 text-sm sm:grid-cols-2">
+            <li>
+              <strong className="block text-ink">1. Every new idea stands apart</strong>
+              <span className="text-ink-soft">When you create ads for a researched product, proposals avoid these competitors&apos; hooks and lean into the open ground. You can switch it off in the brief.</span>
+            </li>
+            <li>
+              <strong className="block text-ink">2. Their weak spots become your ideas</strong>
+              <span className="text-ink-soft">Press “Develop this idea” on any idea below to turn it into a full ad, using only your approved claims.</span>
+            </li>
+            <li>
+              <strong className="block text-ink">3. Copy that echoes them gets flagged</strong>
+              <span className="text-ink-soft">The Check panel marks any line that sounds like a competitor&apos;s, and an approver must confirm it before it can be approved.</span>
+            </li>
+            <li>
+              <strong className="block text-ink">4. Amazon and Flipkart ads follow what sells</strong>
+              <span className="text-ink-soft">Marketplace playbooks shape titles, keywords and image order in those briefs.</span>
+            </li>
+          </ol>
+        </div>
         {research.summary || research.note ? (
           <div className="rounded-2xl border border-line bg-gradient-to-br from-surface to-pink-soft p-5" data-testid="research-summary">
             <p className="eyebrow">Category research</p>
@@ -525,6 +561,33 @@ export function CompetitorsClient({ rows, role, products, playbooks }: { rows: R
         {playbooks.map((p) => (
           <PlaybookCard key={p.id} p={p} />
         ))}
+        {saved.length && !research.summary ? (
+          <div className="space-y-3" data-testid="saved-research">
+            {saved.slice(0, 2).map((r) => (
+              <div key={r.id} className="rounded-2xl border border-line bg-gradient-to-br from-surface to-pink-soft p-5">
+                <p className="eyebrow">
+                  Category research · {r.category} · {new Date(r.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                </p>
+                {r.mock ? (
+                  <span className="chip-amber mt-1" data-testid="mock-badge">
+                    Sample output (mock mode)
+                  </span>
+                ) : null}
+                <p className="mt-2 text-sm">{r.summary}</p>
+                {r.gaps.length ? (
+                  <div className="mt-3">
+                    <p className="eyebrow mb-1">Nobody owns yet</p>
+                    <ul className="list-disc pl-5 text-sm">
+                      {r.gaps.map((g) => (
+                        <li key={g}>{g}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
         {rows.length === 0 ? (
           <div className="card border-dashed text-center" data-testid="competitors-empty">
             <p className="display text-xl">No competitor ads yet</p>
@@ -606,7 +669,7 @@ export function CompetitorsClient({ rows, role, products, playbooks }: { rows: R
                       <div className="skeleton h-4 w-1/2" />
                     </div>
                   ) : r.analysis ? (
-                    <Analysis a={r.analysis} mock={r.mock} />
+                    <Analysis a={r.analysis} mock={r.mock} id={r.id} canDevelop={canAnalyse} />
                   ) : (
                     <p className="hint">Not analysed yet.</p>
                   )}

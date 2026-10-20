@@ -5,7 +5,10 @@ import type { OpenCreative, ProductCard, RecentCreative } from "@/components/wor
 import { db, schema } from "@/db";
 import { assetInfo } from "@/lib/asset-store";
 import { loadCreative } from "@/lib/creative-store";
-import { listCompetitors, listPlaybooks } from "@/lib/competitors";
+import { listCategoryResearch, listCompetitors, listPlaybooks } from "@/lib/competitors";
+import { buildLandscape, competitorLines, matchesProduct } from "@/lib/landscape";
+import { scan, conceptText } from "@/lib/compliance";
+import type { InitialIdeas, LandscapeSummary } from "@/components/workspace/types";
 import { getAllPlatformRules, getBrand, getProducts, getTerms } from "@/lib/data";
 import { getPlatform } from "@/lib/platform";
 import { phraseList } from "@/lib/prompts";
@@ -62,7 +65,17 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       .limit(6),
   ]);
   const photoLabels = new Map((await assetInfo(products.flatMap((p) => p.photoAssetIds))).map((a) => [a.id, a.label]));
-  const competitorRows = (await listCompetitors()).filter((c) => c.analysis);
+  const allCompetitors = await listCompetitors();
+  const competitorRows = allCompetitors.filter((c) => c.analysis);
+  const categoryRows = await listCategoryResearch();
+  const landscapes: Record<string, LandscapeSummary> = {};
+  const linesByProduct: Record<string, string[]> = {};
+  for (const p of products) {
+    const mine = allCompetitors.filter((c) => matchesProduct(c, p));
+    linesByProduct[p.id] = competitorLines(mine);
+    const l = buildLandscape(mine, categoryRows.find((r) => matchesProduct(r, p)) ?? null);
+    if (l) landscapes[p.id] = { count: l.brands.length, brands: l.brands, hooks: l.hooks.slice(0, 3), open: [...l.gaps, ...l.whiteSpace].slice(0, 4) };
+  }
   const playbookRows = await listPlaybooks();
   const competitorParam = typeof sp.competitor === "string" ? sp.competitor : "";
   const creativeTypes = Object.fromEntries(PLATFORMS.map((p) => [p, rules.find((r) => r.platform === p)?.creativeTypes ?? []])) as Record<Platform, string[]>;
@@ -82,6 +95,30 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
     evidenceCount: p.claimEvidence.filter((e) => e.evidence.trim()).length,
     photos: p.photoAssetIds.map((id) => ({ id, url: `/api/assets/${id}`, label: photoLabels.get(id) ?? "Product photo" })),
   }));
+  // "Develop this idea" on the Competitors page: open its counter-ideas as ready-made proposals.
+  const ideaParam = typeof sp.idea === "string" ? Number(sp.idea) : NaN;
+  const ideaSource = competitorRows.find((c) => c.id === competitorParam);
+  const initialIdeas: InitialIdeas | null =
+    ideaSource?.analysis && Number.isInteger(ideaParam)
+      ? {
+          brand: ideaSource.brand,
+          proposals: [
+            ...ideaSource.analysis.counter_ideas.slice(ideaParam, ideaParam + 1),
+            ...ideaSource.analysis.counter_ideas.filter((_, i) => i !== ideaParam),
+          ].map((c) => ({
+            title: c.title,
+            angle: c.angle,
+            persona: "(best fit for this idea)",
+            big_idea: c.why,
+            hook: c.hook,
+            format: "",
+            hook_mechanism: "",
+            claims: [],
+            why: c.why,
+            scan: scan(conceptText({ title: c.title, hook: c.hook, copy: { body: c.why } }), "meta", null, terms),
+          })),
+        }
+      : null;
   const recent: RecentCreative[] = recentRows.map((r) => ({ ...r.c, productName: r.productName ?? "", updatedAt: r.c.updatedAt.toISOString() }));
 
   return (
@@ -101,6 +138,9 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       recent={recent}
       competitors={competitorRows.map((c) => ({ id: c.id, brand: c.brand, product: c.product, channel: c.channel }))}
       playbooks={playbookRows.map((p) => ({ platform: p.platform, productId: p.productId, category: p.category, date: p.createdAt.toISOString() }))}
+      landscapes={landscapes}
+      competitorLines={linesByProduct}
+      initialIdeas={initialIdeas}
       initialCompetitorId={competitorRows.some((c) => c.id === competitorParam) ? competitorParam : ""}
     />
   );

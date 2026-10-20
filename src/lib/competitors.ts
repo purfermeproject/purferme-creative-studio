@@ -7,6 +7,7 @@ import { mockCompetitorAnalysis, mockDiscovery, mockMarketplace } from "./mocks"
 import { buildCompetitorPrompt, buildDiscoveryPrompt, buildMarketplacePrompt, type CompetitorContext, type DiscoveryFocus, type PlaybookContext } from "./prompts";
 import { CompetitorAnalysisSchema, CompetitorDiscoverySchema, MarketplaceResearchSchema } from "./schemas";
 import type { WebSource } from "./ai";
+import { buildLandscape, competitorLines, matchesProduct, type Landscape } from "./landscape";
 
 export async function listCompetitors() {
   return db.select().from(schema.competitorAds).orderBy(desc(schema.competitorAds.createdAt)).limit(200);
@@ -106,6 +107,7 @@ export async function discoverCompetitors(opts: { category: string; focus: Disco
         notes: [c.positioning, c.price && `Price: ${c.price}`, c.focus_notes, c.why_relevant && `Why relevant: ${c.why_relevant}`].filter(Boolean).join("\n").slice(0, 2000),
         link: sources.find((s) => s.verified)?.url ?? sources[0]?.url ?? "",
         source: "research",
+        productId: product?.id ?? null,
         category: opts.category.slice(0, 150),
         focus: opts.focus,
         sources,
@@ -114,6 +116,14 @@ export async function discoverCompetitors(opts: { category: string; focus: Disco
       .returning({ id: schema.competitorAds.id });
     ids.push(row.id);
   }
+  await db.insert(schema.categoryResearch).values({
+    productId: product?.id ?? null,
+    category: opts.category.slice(0, 150),
+    summary: result.category_summary,
+    gaps: result.gaps.slice(0, 12),
+    model: isMock() ? "mock" : textProvider() === "openai" ? OPENAI_TEXT_MODEL : MODEL,
+    createdBy: opts.user,
+  });
   return {
     ids,
     summary: result.category_summary,
@@ -185,6 +195,7 @@ export async function researchMarketplace(opts: { platform: "amazon" | "flipkart
           notes: [l.rating && `Rating ${l.rating}${l.review_count ? ` (${l.review_count})` : ""}`, l.badges.length && `Badges: ${l.badges.join(", ")}`, l.rank && `Rank: ${l.rank}`].filter(Boolean).join("\n"),
           link: source?.url ?? "",
           source: "research",
+          productId: product?.id ?? null,
           category: opts.category.slice(0, 150),
           focus: opts.platform,
           sources,
@@ -222,4 +233,24 @@ export async function latestPlaybook(platform: "amazon" | "flipkart", productId:
     reviewThemes: p.playbook.review_themes_to_answer,
     adTips: p.playbook.ad_tips,
   };
+}
+
+export async function listCategoryResearch() {
+  return db.select().from(schema.categoryResearch).orderBy(desc(schema.categoryResearch.createdAt)).limit(50);
+}
+
+/** All research for one of our products, condensed. Null when nothing has been researched for it. */
+export async function competitorLandscape(product: { id: string; name: string }): Promise<{ landscape: Landscape | null; count: number }> {
+  const [rows, research] = await Promise.all([listCompetitors(), listCategoryResearch()]);
+  const mine = rows.filter((r) => matchesProduct(r, product));
+  const latest = research.find((r) => matchesProduct(r, product)) ?? null;
+  const landscape = buildLandscape(mine, latest);
+  return { landscape, count: mine.filter((r) => r.analysis).length };
+}
+
+/** Competitor lines (hooks, quoted messaging) per product, for the "sounds like a competitor" check. */
+export async function competitorLinesFor(product: { id: string; name: string } | null): Promise<string[]> {
+  if (!product) return [];
+  const rows = await listCompetitors();
+  return competitorLines(rows.filter((r) => matchesProduct(r, product)));
 }

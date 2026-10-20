@@ -97,6 +97,8 @@ export type GenerationMeta = {
   sourceAssetIds?: string[];
   proposal?: { title: string; big_idea: string };
   competitorId?: string;
+  /** Competitors whose research shaped this ad. */
+  landscapeBrands?: string[];
   generatedAt?: string;
 };
 export type ClaimUsed = { text: string; tier: "green" | "amber" };
@@ -183,6 +185,8 @@ export const competitorAds = pgTable("competitor_ads", {
   link: text("link").notNull().default(""),
   notes: text("notes").notNull().default(""),
   imageAssetId: uuid("image_asset_id"),
+  /** Which of our products it competes with (set by research; manual entries may leave it empty). */
+  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
   /** manual = a team member added it; research = found by web search. */
   source: text("source").notNull().default("manual"),
   /** Category searched and what the search focused on (research only). */
@@ -195,6 +199,18 @@ export const competitorAds = pgTable("competitor_ads", {
   analysis: jsonb("analysis").$type<CompetitorAnalysis>(),
   analysisModel: text("analysis_model").notNull().default(""),
   analysedAt: timestamp("analysed_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Category-level findings from a competitor search, kept so creation can use them later. */
+export const categoryResearch = pgTable("category_research", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+  category: text("category").notNull(),
+  summary: text("summary").notNull().default(""),
+  gaps: text("gaps").array().notNull().default([]),
+  model: text("model").notNull().default(""),
   createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

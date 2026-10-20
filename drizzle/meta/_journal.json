@@ -64,6 +64,13 @@
       "when": 1792500915125,
       "tag": "0008_marketplace_research",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792502995905,
+      "tag": "0009_competitive_landscape",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,8 @@ import { approvalGate, GATED_STATUSES, type GateResult } from "./qa";
 import type { Concept } from "./schemas";
 import type { CreativeStatus, Deliverable, Objective, Platform } from "./types";
 import { validateCreative, type Validation } from "./validation";
+import { listCompetitors } from "./competitors";
+import { competitorLines, matchesProduct } from "./landscape";
 import { changedFields, conceptToSnapshot, shouldCoalesce, snapshotOf, snapshotToConcept } from "./versions";
 
 export class ConflictError extends Error {
@@ -27,12 +29,13 @@ export async function loadCreative(id: string) {
 
 /** Validation context shared by every check, so they agree. */
 export async function validationContext() {
-  const [terms, brand] = await Promise.all([getTerms(), getBrand()]);
-  return { terms, avoidPhrases: phraseList(brand.avoidPhrases) };
+  const [terms, brand, competitors] = await Promise.all([getTerms(), getBrand(), listCompetitors()]);
+  return { terms, avoidPhrases: phraseList(brand.avoidPhrases), competitors };
 }
 
 export function validate(snapshot: CreativeSnapshot, platform: Platform, product: Product | null, ctx: Awaited<ReturnType<typeof validationContext>>): Validation {
-  return validateCreative({ concept: snapshotToConcept(snapshot), platform, product, terms: ctx.terms, avoidPhrases: ctx.avoidPhrases });
+  const lines = product ? competitorLines(ctx.competitors.filter((r) => matchesProduct(r, product))) : [];
+  return validateCreative({ concept: snapshotToConcept(snapshot), platform, product, terms: ctx.terms, avoidPhrases: ctx.avoidPhrases, competitorLines: lines });
 }
 
 export function gateFor(c: Creative, v: Validation, qaChecked = c.qaChecked): GateResult {

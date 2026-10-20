@@ -123,6 +123,8 @@ export function validateCreative(input: {
   product: ProductKnowledge | null;
   terms: Term[];
   avoidPhrases?: string[];
+  /** Competitor hooks and quoted lines (from research); our copy shouldn't echo them. */
+  competitorLines?: string[];
 }): Validation {
   const { concept: c, platform, product } = input;
   const scanResult = scan(conceptText(c), platform, product?.slug ?? null, input.terms);
@@ -167,6 +169,9 @@ export function validateCreative(input: {
       issues.push({ id: `avoid:${phrase}`, level: "brand", title: "Overused phrase", detail: `“${phrase}” is on the brand's avoid list. Say it more specifically.` });
     }
   }
+  for (const hit of closeToCompetitor(c, input.competitorLines ?? [], product?.greenClaims ?? [])) {
+    issues.push({ id: `copy:${hit.theirs}`, level: "review", title: "Sounds like a competitor", detail: `“${hit.ours}” is close to a competitor's line “${hit.theirs}”. Rewrite it in our own words.` });
+  }
   const limit = LIMITS[platform];
   const headlines = [c.copy.headline, ...(c.copy.variants ?? []).map((v) => v.headline)].filter(Boolean) as string[];
   for (const h of headlines) {
@@ -189,4 +194,32 @@ export function validateCreative(input: {
 
   const blocking = issues.filter((i) => i.level === "block").length;
   return { scan: scanResult, claims, issues, blocking, needsHumanReview: issues.some((i) => i.level === "review") };
+}
+
+/** Our visible lines that closely echo a competitor's (same words, mostly). */
+export function closeToCompetitor(c: ValidatableConcept, lines: string[], greenClaims: string[] = []): { ours: string; theirs: string }[] {
+  if (!lines.length) return [];
+  // Words from our own approved claims don't count: saying our claim isn't copying them.
+  const shared = new Set(greenClaims.flatMap((g) => [...tokens(g)]));
+  const own = (s: string) => new Set([...tokens(s)].filter((x) => !shared.has(x)));
+  const ours = [c.hook, c.copy.headline, c.copy.body, ...c.frames.map((f) => f.onscreen), ...(c.copy.variants ?? []).flatMap((v) => [v.headline, v.body])].filter(
+    (x): x is string => Boolean(x && x.trim()),
+  );
+  const out: { ours: string; theirs: string }[] = [];
+  for (const theirs of lines) {
+    const t = own(theirs);
+    if (t.size < 3) continue;
+    const tn = normalizeClaim(theirs);
+    for (const o of ours) {
+      if (greenClaims.some((g) => claimMatches(o, g))) continue;
+      const on = normalizeClaim(o);
+      const ot = own(o);
+      const inter = [...t].filter((x) => ot.has(x)).length;
+      if (on.includes(tn) || (ot.size >= 3 && inter / Math.min(t.size, ot.size) >= 0.75 && inter >= 3)) {
+        out.push({ ours: o, theirs });
+        break;
+      }
+    }
+  }
+  return out;
 }

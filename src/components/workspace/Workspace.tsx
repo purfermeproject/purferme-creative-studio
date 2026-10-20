@@ -23,7 +23,7 @@ import { BriefPanel } from "./BriefPanel";
 import { CopyBlockView, CreativePreview, SceneList } from "./CreativePreview";
 import { EditorForm } from "./EditorForm";
 import { HistoryPanel } from "./HistoryPanel";
-import type { Brief, CompetitorOption, OpenCreative, PlaybookOption, ProductCard, RecentCreative, ScoredProposal } from "./types";
+import type { Brief, CompetitorOption, InitialIdeas, LandscapeSummary, OpenCreative, PlaybookOption, ProductCard, RecentCreative, ScoredProposal } from "./types";
 import { ProposalVisual, sketchRatio } from "./ProposalVisual";
 import type { MadeImage } from "@/components/ImageMaker";
 import { findPlacement } from "@/lib/placements";
@@ -156,6 +156,9 @@ export function Workspace({
   competitors,
   initialCompetitorId,
   playbooks,
+  landscapes,
+  competitorLines,
+  initialIdeas,
 }: {
   initialPlatform: Platform;
   products: ProductCard[];
@@ -173,6 +176,9 @@ export function Workspace({
   competitors: CompetitorOption[];
   initialCompetitorId: string;
   playbooks: PlaybookOption[];
+  landscapes: Record<string, LandscapeSummary>;
+  competitorLines: Record<string, string[]>;
+  initialIdeas: InitialIdeas | null;
 }) {
   const defaultBrief = (platform: Platform): Brief => ({
     productId: products.find((p) => p.name.startsWith("Chocolate") && p.status === "ready")?.id ?? products.find((p) => p.status === "ready")?.id ?? products[0]?.id ?? "",
@@ -190,11 +196,13 @@ export function Workspace({
     competitorId: initialCompetitorId,
     autoImage: true,
     usePlaybook: true,
+    useLandscape: true,
   });
 
   const [brief, setBrief] = useState<Brief>(() => defaultBrief(initialCreative?.platform ?? initialPlatform));
-  const [step, setStep] = useState<1 | 2 | 3>(initialCreative ? 2 : 1);
-  const [proposals, setProposals] = useState<ScoredProposal[] | null>(null);
+  const [step, setStep] = useState<1 | 2 | 3>(initialCreative || initialIdeas ? 2 : 1);
+  const [proposals, setProposals] = useState<ScoredProposal[] | null>(initialIdeas?.proposals ?? null);
+  const [ideasFrom, setIdeasFrom] = useState(initialIdeas?.brand ?? "");
   const [proposalsMock, setProposalsMock] = useState(false);
   const [variations, setVariations] = useState<ScoredConcept[] | null>(null);
   const [progress, setProgress] = useState<Progress>(null);
@@ -302,6 +310,7 @@ export function Workspace({
     image: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
     competitorId: brief.competitorId || undefined,
     usePlaybook: brief.usePlaybook,
+    useLandscape: brief.useLandscape,
     ...extra,
   });
 
@@ -391,6 +400,7 @@ export function Workspace({
       const done = await stream<{ proposals: ScoredProposal[]; mock: boolean }>(requestBody({ mode: "proposals" }), "Writing proposals", 3);
       setProposals(done.proposals);
       setProposalsMock(done.mock);
+      setIdeasFrom("");
       setProposalImages({});
     } catch (e) {
       setError({ text: e instanceof Error ? e.message : "Couldn't write proposals.", retry: propose });
@@ -591,9 +601,16 @@ export function Workspace({
   const validation = useMemo(
     () =>
       snapshot && creative
-        ? validateCreative({ concept: snapshotToConcept(snapshot), platform: creative.platform, product: creativeProduct, terms, avoidPhrases })
+        ? validateCreative({
+            concept: snapshotToConcept(snapshot),
+            platform: creative.platform,
+            product: creativeProduct,
+            terms,
+            avoidPhrases,
+            competitorLines: creative.productId ? (competitorLines[creative.productId] ?? []) : [],
+          })
         : null,
-    [snapshot, creative, creativeProduct, terms, avoidPhrases],
+    [snapshot, creative, creativeProduct, terms, avoidPhrases, competitorLines],
   );
 
   const show = (n: 1 | 2 | 3) => (step === n ? "" : "hidden lg:block");
@@ -647,6 +664,7 @@ export function Workspace({
             ready={briefReady}
             competitors={competitors}
             playbooks={playbooks}
+            landscape={landscapes[brief.productId] ?? null}
           />
         </aside>
 
@@ -841,6 +859,12 @@ export function Workspace({
                 <div>
                   <p className="eyebrow">Step 2</p>
                   <h2 className="display text-2xl">Pick a direction to develop</h2>
+                  {ideasFrom ? (
+                    <p className="mt-2 rounded-xl bg-gold-soft p-3 text-sm" data-testid="ideas-from">
+                      These are the ideas from your research on <strong>{ideasFrom}</strong>, built to stand apart from them. Check the brief on the left (product, platform, type of ad), then
+                      develop one. It will use only your approved claims.
+                    </p>
+                  ) : null}
                   <p className="hint mt-1">Each one is a different idea. Developing turns it into a full {deliverableLabel.toLowerCase()} and saves it as a draft.</p>
                 </div>
                 {proposals.map((p, i) => (

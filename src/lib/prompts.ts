@@ -1,5 +1,6 @@
 import type { Deliverable, Objective, Platform } from "./types";
 import { OBJECTIVES, PLATFORM_LABELS } from "./types";
+import type { Landscape } from "./landscape";
 
 type BrandLike = {
   brandContext: string;
@@ -48,7 +49,23 @@ export type GenerationInput = {
   competitor?: CompetitorContext | null;
   /** What's working on Amazon/Flipkart for this category (from marketplace research). */
   playbook?: PlaybookContext | null;
+  /** Everything researched about this product's competitors. */
+  landscape?: Landscape | null;
 };
+
+/** All competitor research as direction: avoid what's taken, lean into what's open. */
+export function landscapeBlock(l: Landscape): string {
+  const lines = [
+    `COMPETITIVE LANDSCAPE (${l.brands.length} competitor${l.brands.length === 1 ? "" : "s"} researched; context only: never name, show, copy or compare with them):`,
+    l.summary ? `- The category today: ${l.summary}` : "",
+    l.hooks.length ? `- Hooks already used by competitors (do not reuse or echo them): ${l.hooks.map((h) => `"${h}"`).join("; ")}` : "",
+    l.angles.length ? `- Angles they already own (only take one if we can say it more specifically): ${l.angles.join("; ")}` : "",
+    l.riskyClaims.length ? `- Claims they make that we must never follow: ${l.riskyClaims.join("; ")}` : "",
+    l.whiteSpace.length || l.gaps.length ? `- Open ground to lean into: ${[...l.gaps, ...l.whiteSpace].slice(0, 12).join("; ")}` : "",
+    "- At least two of the ideas should build on the open ground; none may sound like a competitor's line.",
+  ];
+  return lines.filter(Boolean).join("\n");
+}
 
 export type PlaybookContext = {
   platform: "amazon" | "flipkart";
@@ -200,7 +217,7 @@ NOTES: ${notes || "(none)"}
 ${knowledge ? `${knowledge}\n` : ""}${product.story?.trim() ? `PRODUCT STORY (real details: use them for specific, sensory, believable copy):\n${product.story.trim()}\n` : ""}
 PLATFORM: ${PLATFORM_LABELS[input.platform]}. CREATIVE TYPE: ${input.creativeType}.${
     input.placement ? `\nPLACEMENT: ${input.placement.label}. ${input.placement.guidance || "Design natively for this placement's format, length and safe areas."}` : ""
-  }${input.competitor ? `\n${competitorBlock(input.competitor)}` : ""}${input.playbook ? `\n${playbookBlock(input.playbook)}` : ""}${objective ? `\nCAMPAIGN OBJECTIVE: ${objective.label}. ${OBJECTIVE_GUIDANCE[objective.id]}` : ""}
+  }${input.competitor ? `\n${competitorBlock(input.competitor)}` : ""}${input.playbook ? `\n${playbookBlock(input.playbook)}` : ""}${input.landscape ? `\n${landscapeBlock(input.landscape)}` : ""}${objective ? `\nCAMPAIGN OBJECTIVE: ${objective.label}. ${OBJECTIVE_GUIDANCE[objective.id]}` : ""}
 ${rule.rules}
 
 DIRECTION: angle = ${angle}; persona = ${persona}; language = ${input.language}

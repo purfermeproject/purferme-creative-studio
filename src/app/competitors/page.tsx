@@ -1,12 +1,12 @@
 import { currentUser, roleOf } from "@/auth";
-import { listCompetitors, listPlaybooks } from "@/lib/competitors";
+import { listCategoryResearch, listCompetitors, listPlaybooks } from "@/lib/competitors";
 import { getProducts } from "@/lib/data";
 import { CompetitorsClient } from "./CompetitorsClient";
 
 export const metadata = { title: "Competitors · Puŕ Fermé Creative Studio" };
 
 export default async function CompetitorsPage() {
-  const [rows, user, products, playbooks] = await Promise.all([listCompetitors(), currentUser(), getProducts(), listPlaybooks()]);
+  const [rows, user, products, playbooks, research] = await Promise.all([listCompetitors(), currentUser(), getProducts(), listPlaybooks(), listCategoryResearch()]);
   const role = user ? await roleOf(user) : "viewer";
   return (
     <div className="space-y-6">
@@ -25,6 +25,7 @@ export default async function CompetitorsPage() {
           const p = playbooks.find((x) => x.platform === pl);
           return p ? [{ id: p.id, platform: pl, category: p.category, summary: p.summary, playbook: p.playbook, sources: p.sources, mock: p.model === "mock", date: p.createdAt.toISOString() }] : [];
         })}
+        research={research.map((r) => ({ id: r.id, category: r.category, summary: r.summary, gaps: r.gaps, date: r.createdAt.toISOString(), mock: r.model === "mock" }))}
         products={products.filter((p) => p.status !== "blocked").map((p) => ({ id: p.id, name: p.name }))}
         rows={rows.map((r) => ({
           id: r.id,

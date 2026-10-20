@@ -5,7 +5,7 @@ import { PLACEMENTS } from "@/lib/placements";
 import { AUTO } from "@/lib/prompts";
 import { DELIVERABLES, OBJECTIVES, PLATFORMS, type Deliverable, type Objective, type Platform } from "@/lib/types";
 import Link from "next/link";
-import type { Brief, CompetitorOption, PlaybookOption, ProductCard } from "./types";
+import type { Brief, CompetitorOption, LandscapeSummary, PlaybookOption, ProductCard } from "./types";
 
 const PLATFORM_NAMES: Record<Platform, { title: string; sub: string }> = {
   meta: { title: "Instagram & Facebook", sub: "Meta ads" },
@@ -73,6 +73,7 @@ export function BriefPanel({
   ready,
   competitors,
   playbooks,
+  landscape,
 }: {
   brief: Brief;
   set: (patch: Partial<Brief>) => void;
@@ -89,6 +90,7 @@ export function BriefPanel({
   ready: boolean;
   competitors: CompetitorOption[];
   playbooks: PlaybookOption[];
+  landscape: LandscapeSummary | null;
 }) {
   const product = products.find((p) => p.id === brief.productId);
   const blocked = product && product.status !== "ready";
@@ -256,26 +258,50 @@ export function BriefPanel({
           options={[{ value: AUTO, label: "Let AI pick a varied mix" }, ...plain(angles)]}
           placeholder="e.g. Monsoon chai-time snack"
         />
-        <div>
-          <label htmlFor="competitor" className="label">
-            Stand apart from a competitor <span className="font-normal text-ink-soft">(optional)</span>
-          </label>
-          {competitors.length ? (
-            <select id="competitor" className="input" value={brief.competitorId} onChange={(e) => set({ competitorId: e.target.value })}>
-              <option value="">No competitor</option>
-              {competitors.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.brand}
-                  {c.product ? ` · ${c.product}` : ""}
-                  {c.channel ? ` (${c.channel})` : ""}
-                </option>
-              ))}
-            </select>
+        <div className="space-y-2 rounded-xl border border-line p-3" data-testid="competitive-context">
+          <p className="text-sm font-semibold">Competitive context</p>
+          {landscape ? (
+            <>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-1 size-4 accent-(--purple)" checked={brief.useLandscape} onChange={(e) => set({ useLandscape: e.target.checked })} />
+                <span>
+                  Stand apart from the {landscape.count} competitor{landscape.count === 1 ? "" : "s"} we researched
+                  <span className="block text-xs text-ink-soft">{landscape.brands.slice(0, 4).join(", ")}{landscape.brands.length > 4 ? "…" : ""}</span>
+                </span>
+              </label>
+              {brief.useLandscape ? (
+                <div className="space-y-1 text-xs text-ink-soft" data-testid="landscape-preview">
+                  {landscape.hooks.length ? <p>Avoids their hooks: {landscape.hooks.map((h) => `“${h.replace(/^[“"]+|[”"]+$/g, "")}”`).join(", ")}</p> : null}
+                  {landscape.open.length ? <p>Leans into: {landscape.open.join(" · ")}</p> : null}
+                </div>
+              ) : null}
+            </>
           ) : (
-            <p className="hint text-xs">
-              No analysed competitor ads yet. <Link href="/competitors" className="font-semibold text-purple underline">Add one</Link>
+            <p className="hint text-xs" data-testid="landscape-missing">
+              No competitor research for this product yet.{" "}
+              <Link href="/competitors" className="font-semibold text-purple underline">
+                Find competitors
+              </Link>{" "}
+              and every idea will be built to stand apart from them.
             </p>
           )}
+          {competitors.length ? (
+            <div>
+              <label htmlFor="competitor" className="text-xs font-semibold text-ink">
+                Focus on one competitor <span className="font-normal text-ink-soft">(optional)</span>
+              </label>
+              <select id="competitor" className="input mt-1 py-1.5 text-sm" value={brief.competitorId} onChange={(e) => set({ competitorId: e.target.value })}>
+                <option value="">No single focus</option>
+                {competitors.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.brand}
+                    {c.product ? ` · ${c.product}` : ""}
+                    {c.channel ? ` (${c.channel})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
         </div>
         <ChoiceOrCustom id="language" label="Language" value={brief.language} onChange={(v) => set({ language: v })} options={plain(languages)} placeholder="e.g. Punjabi, Kannada" />
         <details className="group rounded-xl border border-line">

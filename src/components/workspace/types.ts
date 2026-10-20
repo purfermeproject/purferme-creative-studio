@@ -44,7 +44,14 @@ export type Brief = {
   autoImage: boolean;
   /** Amazon/Flipkart: use the latest "what's working" research. */
   usePlaybook: boolean;
+  /** Use everything researched about this product's competitors. */
+  useLandscape: boolean;
 };
+
+/** What the brief shows about a product's competitor research. */
+export type LandscapeSummary = { count: number; brands: string[]; hooks: string[]; open: string[] };
+/** Competitor ideas opened from the Competitors page ("Develop this idea"). */
+export type InitialIdeas = { brand: string; proposals: ScoredProposal[] };
 
 export type PlaybookOption = { platform: "amazon" | "flipkart"; productId: string | null; category: string; date: string };
 

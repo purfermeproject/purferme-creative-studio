@@ -100,7 +100,7 @@ export const CompetitorAnalysisSchema = z.object({
   hook_mechanism: z.string(),
   angle: z.string(),
   audience: z.string().describe("Who it seems aimed at"),
-  format: z.string(),
+  format: z.string().describe("Ad format or where the message appears, e.g. Instagram reel, Amazon listing title, product page copy"),
   offer: z.string().describe("Price, discount or offer; empty if none"),
   claims_made: z.array(
     z.object({

@@ -527,8 +527,45 @@ test("Competitors: found automatically for a product category, broken down, and 
   await expect(page.getByTestId("competitor").first()).toContainText("found by web research");
   await expect(page.getByTestId("competitor").first().getByTestId("competitor-claims")).toContainText("we can't say this");
 
+  // How it's used: every brief for this product stands apart from them…
+  await expect(page.getByTestId("how-used")).toContainText("Every new idea stands apart");
+  await page.goto("/create");
+  await fillBrief(page, { product: "Chocolate Cookies, millet & oats, 240g" });
+  const context = page.getByTestId("competitive-context");
+  await expect(context).toContainText("Stand apart from the 3 competitors we researched");
+  await expect(context.getByTestId("landscape-preview")).toContainText("The healthy cookie your family deserves");
+  await fillBrief(page, { product: "Peanut Butter Unsweetened 500g" });
+  await expect(page.getByTestId("landscape-missing")).toBeVisible();
+  await fillBrief(page, { product: "Chocolate Cookies, millet & oats, 240g" });
+  const withLandscape = page.waitForRequest((r) => r.url().endsWith("/api/generate") && (r.postData() ?? "").includes('"useLandscape":true'));
+  await page.getByRole("button", { name: "Propose 3 concepts" }).click();
+  await withLandscape;
+  await expect(page.getByTestId("proposal-2")).toBeVisible({ timeout: 60_000 });
+
+  // …their weak spots become ideas we can develop in one click…
+  await page.goto("/competitors");
+  await page.getByTestId("competitor").first().getByRole("link", { name: "Develop this idea" }).nth(1).click();
+  await expect(page.getByTestId("ideas-from")).toContainText("Sample Brand");
+  await expect(page.getByTestId("proposal-0")).toContainText("4:30 slump");
+  await page.getByLabel("Make the first image automatically").uncheck();
+  await page.getByTestId("proposal-0").getByRole("button", { name: /^Develop as/ }).click();
+  await expect(page.getByTestId("workspace-creative")).toBeVisible({ timeout: 60_000 });
+
+  // …and copy that echoes a competitor needs an approver.
+  const insp = inspector(page);
+  await insp.getByRole("tab", { name: "Edit" }).click();
+  await insp.getByLabel("Hook (first 2 seconds)").fill("The cookie your family deserves, honestly");
+  await waitSaved(page);
+  await insp.getByRole("tab", { name: "Check" }).click();
+  await expect(insp.getByTestId("issues-review")).toContainText("Sounds like a competitor");
+
+  await page.goto("/competitors");
+  const find2 = page.getByRole("form", { name: "Find competitors" });
+  await find2.getByLabel("Our product").selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
+  await find2.getByText("3", { exact: true }).click();
+  await expect(page.getByTestId("saved-research")).toContainText("Nobody owns yet");
   // Searching again skips brands already on the list.
-  await find.getByRole("button", { name: "Find competitors" }).click();
+  await find2.getByRole("button", { name: "Find competitors" }).click();
   await expect(page.getByTestId("research-summary")).toContainText("No new competitors found", { timeout: 60_000 });
   await expect(page.getByTestId("competitor")).toHaveCount(3);
 
@@ -546,7 +583,7 @@ test("Competitors: found automatically for a product category, broken down, and 
 
   await page.getByTestId("competitor").last().getByRole("link", { name: "Use in a brief" }).click();
   await page.locator("form[aria-label=Brief][data-ready]").waitFor();
-  await expect(page.getByLabel(/Stand apart from a competitor/)).not.toHaveValue("");
+  await expect(page.getByLabel(/Focus on one competitor/)).not.toHaveValue("");
   const sent = page.waitForRequest((r) => r.url().endsWith("/api/generate") && (r.postData() ?? "").includes('"competitorId"'));
   await page.getByLabel("Make the first image automatically").uncheck();
   await page.getByRole("button", { name: "Propose 3 concepts" }).click();
