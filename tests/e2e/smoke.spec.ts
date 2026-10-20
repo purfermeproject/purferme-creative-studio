@@ -628,6 +628,36 @@ test("Amazon: see what's working (top listings + playbook) and use it in Amazon 
   await fillBrief(page, { platform: "Instagram & Facebook" });
 });
 
+test("Research: one run finds competitors per platform and proposes ideas for each, ready to develop", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/research");
+  const form = page.getByRole("form", { name: "Research a product" });
+  await form.getByLabel("Product").selectOption({ label: "Ragi & Cocoa Peanut Butter with jaggery 500g" });
+  await expect(page.getByTestId("research-empty")).toBeVisible();
+  await expect(page.getByTestId("research-known")).toContainText("Known so far: 0 competitors");
+  await form.getByText("3", { exact: true }).click();
+  await form.getByRole("button", { name: "Research and propose ideas" }).click();
+  const steps = page.getByTestId("research-steps");
+  await expect(steps.locator("li")).toHaveCount(7);
+  await expect(steps.locator('li[data-status="done"]')).toHaveCount(7, { timeout: 120_000 });
+  for (const pl of ["meta", "amazon", "flipkart"]) await expect(page.getByTestId(`ideas-${pl}`).getByTestId("research-idea")).toHaveCount(3);
+  await expect(page.getByTestId("ideas-meta").getByTestId("research-idea").first()).toContainText("Adapts:");
+  await expect(page.getByTestId("ideas-meta").getByTestId("research-idea").nth(1)).toContainText("Open ground:");
+  await expect(page.getByTestId("research-known")).toContainText("Known so far: 9 competitors");
+
+  // Develop an Amazon idea: Create opens with the product, platform and the ideas ready.
+  await page.getByTestId("ideas-amazon").getByRole("link", { name: "Develop" }).nth(1).click();
+  await expect(page.getByTestId("ideas-from")).toContainText("Amazon");
+  await expect(page.getByLabel("Type of ad", { exact: true })).not.toHaveValue("9:16 UGC-style video (15–30s)");
+  await expect(page.getByTestId("proposal-0").getByTestId("based-on")).toBeVisible();
+  await page.getByLabel("Make the first image automatically").uncheck();
+  await page.getByTestId("proposal-0").getByRole("button", { name: /^Develop as/ }).click();
+  const ws = page.getByTestId("workspace-creative");
+  await expect(ws).toBeVisible({ timeout: 60_000 });
+  await expect(ws).toContainText("Amazon");
+  await expect(ws).toContainText("Ragi & Cocoa Peanut Butter");
+});
+
 test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {
   await signIn(page);
   await page.goto("/admin#roles");

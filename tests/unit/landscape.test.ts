@@ -61,3 +61,21 @@ describe("sounds like a competitor", () => {
     expect(closeToCompetitor({ ...base, hook: "3pm called. It wants chai." }, lines, choc.greenClaims)).toHaveLength(0);
   });
 });
+
+describe("platform-wise research", () => {
+  it("knows where a competitor was seen", async () => {
+    const { seenOn } = await import("@/lib/landscape");
+    expect(seenOn({ channel: "Amazon", listing: null }, "amazon")).toBe(true);
+    expect(seenOn({ channel: "Website, Instagram", listing: null }, "meta")).toBe(true);
+    expect(seenOn({ channel: "Website", listing: { platform: "flipkart" } }, "flipkart")).toBe(true);
+    expect(seenOn({ channel: "Website", listing: null }, "amazon")).toBe(false);
+  });
+
+  it("asks for a mix of adapted proven patterns and open ground", () => {
+    const l = buildLandscape([{ brand: "A", analysis: analysis({ what_works: ["Pack visible in the first second"], white_space: ["QR"] }) }], null)!;
+    const block = landscapeBlock(l);
+    expect(block).toContain("What works for them (adapt the craft: structure, pacing, proof device; never their words or claims): Pack visible in the first second");
+    expect(block).toContain("at least one adapts a proven pattern above");
+    expect(block).toContain("Say which in based_on");
+  });
+});

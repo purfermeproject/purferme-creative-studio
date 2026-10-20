@@ -7,7 +7,7 @@ import { mockCompetitorAnalysis, mockDiscovery, mockMarketplace } from "./mocks"
 import { buildCompetitorPrompt, buildDiscoveryPrompt, buildMarketplacePrompt, type CompetitorContext, type DiscoveryFocus, type PlaybookContext } from "./prompts";
 import { CompetitorAnalysisSchema, CompetitorDiscoverySchema, MarketplaceResearchSchema } from "./schemas";
 import type { WebSource } from "./ai";
-import { buildLandscape, competitorLines, matchesProduct, type Landscape } from "./landscape";
+import { buildLandscape, competitorLines, matchesProduct, seenOn, type Landscape } from "./landscape";
 
 export async function listCompetitors() {
   return db.select().from(schema.competitorAds).orderBy(desc(schema.competitorAds.createdAt)).limit(200);
@@ -89,8 +89,22 @@ export async function discoverCompetitors(opts: { category: string; focus: Disco
     mock: () => mockDiscovery(opts.category, opts.count),
   });
   const seen = new Set(searched.map((s) => urlKey(s.url)).filter(Boolean));
-  const already = new Set(tracked.map((b) => b.trim().toLowerCase()));
-  const fresh = result.competitors.filter((c) => c.brand.trim() && !OWN_BRAND.test(c.brand) && !already.has(c.brand.trim().toLowerCase())).slice(0, opts.count);
+  const byBrand = new Map(existing.map((e) => [e.brand.trim().toLowerCase(), e]));
+  const found = result.competitors.filter((c) => c.brand.trim() && !OWN_BRAND.test(c.brand));
+  const fresh = found.filter((c) => !byBrand.has(c.brand.trim().toLowerCase())).slice(0, opts.count);
+  // Brands we already track that also compete with this product: link them to it too.
+  let linked = 0;
+  if (product) {
+    for (const c of found) {
+      const prev = byBrand.get(c.brand.trim().toLowerCase());
+      if (prev && !prev.productIds.includes(product.id)) {
+        // Older rows are matched by category only; keep those matches when adding an explicit link.
+        const current = prev.productIds.length || prev.productId ? prev.productIds : products.filter((p) => matchesProduct(prev, p)).map((p) => p.id);
+        await linkProduct(prev.id, current, product.id);
+        linked++;
+      }
+    }
+  }
   const ids: string[] = [];
   for (const c of fresh) {
     const sources = c.sources
@@ -108,6 +122,7 @@ export async function discoverCompetitors(opts: { category: string; focus: Disco
         link: sources.find((s) => s.verified)?.url ?? sources[0]?.url ?? "",
         source: "research",
         productId: product?.id ?? null,
+        productIds: product ? [product.id] : [],
         category: opts.category.slice(0, 150),
         focus: opts.focus,
         sources,
@@ -128,7 +143,8 @@ export async function discoverCompetitors(opts: { category: string; focus: Disco
     ids,
     summary: result.category_summary,
     gaps: result.gaps,
-    skipped: result.competitors.length - fresh.length,
+    skipped: result.competitors.length - fresh.length - linked,
+    linked,
     mock: isMock(),
   };
 }
@@ -181,7 +197,14 @@ export async function researchMarketplace(opts: { platform: "amazon" | "flipkart
       // Already tracked: refresh its listing and add the new source; re-analyse with the listing text.
       await db
         .update(schema.competitorAds)
-        .set({ listing, adText: prev.adText ? `${prev.adText}\n${adText}`.slice(0, 5000) : adText, sources: [...prev.sources.filter((s) => s.url !== source?.url), ...sources].slice(0, 10) })
+        .set({
+          listing,
+          adText: prev.adText ? `${prev.adText}\n${adText}`.slice(0, 5000) : adText,
+          sources: [...prev.sources.filter((s) => s.url !== source?.url), ...sources].slice(0, 10),
+          ...(product && !prev.productIds.includes(product.id)
+            ? { productIds: [...(prev.productIds.length || prev.productId ? prev.productIds : products.filter((p) => matchesProduct(prev, p)).map((p) => p.id)), product.id] }
+            : {}),
+        })
         .where(eq(schema.competitorAds.id, prev.id));
       ids.push(prev.id);
     } else {
@@ -196,6 +219,7 @@ export async function researchMarketplace(opts: { platform: "amazon" | "flipkart
           link: source?.url ?? "",
           source: "research",
           productId: product?.id ?? null,
+          productIds: product ? [product.id] : [],
           category: opts.category.slice(0, 150),
           focus: opts.platform,
           sources,
@@ -240,9 +264,10 @@ export async function listCategoryResearch() {
 }
 
 /** All research for one of our products, condensed. Null when nothing has been researched for it. */
-export async function competitorLandscape(product: { id: string; name: string }): Promise<{ landscape: Landscape | null; count: number }> {
+export async function competitorLandscape(product: { id: string; name: string }, platform?: "meta" | "amazon" | "flipkart"): Promise<{ landscape: Landscape | null; count: number }> {
   const [rows, research] = await Promise.all([listCompetitors(), listCategoryResearch()]);
-  const mine = rows.filter((r) => matchesProduct(r, product));
+  // Competitors seen on this platform come first, so their patterns lead.
+  const mine = rows.filter((r) => matchesProduct(r, product)).sort((a, b) => (platform ? Number(seenOn(b, platform)) - Number(seenOn(a, platform)) : 0));
   const latest = research.find((r) => matchesProduct(r, product)) ?? null;
   const landscape = buildLandscape(mine, latest);
   return { landscape, count: mine.filter((r) => r.analysis).length };
@@ -253,4 +278,8 @@ export async function competitorLinesFor(product: { id: string; name: string } |
   if (!product) return [];
   const rows = await listCompetitors();
   return competitorLines(rows.filter((r) => matchesProduct(r, product)));
+}
+
+async function linkProduct(id: string, current: string[], productId: string) {
+  await db.update(schema.competitorAds).set({ productIds: [...new Set([...current, productId])] }).where(eq(schema.competitorAds.id, id));
 }

@@ -6,11 +6,18 @@ export const categoryFrom = (name: string) => name.replace(/,?\s*\d+\s*(g|kg|ml|
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
 
 /** Research made for this product, or (older entries) for its category. */
-export function matchesProduct(row: { productId: string | null; category: string }, product: { id: string; name: string }): boolean {
-  if (row.productId) return row.productId === product.id;
+export function matchesProduct(row: { productId: string | null; productIds?: string[]; category: string }, product: { id: string; name: string }): boolean {
+  if (row.productIds?.length || row.productId) return Boolean(row.productIds?.includes(product.id) || row.productId === product.id);
   const cat = norm(row.category);
   const mine = norm(categoryFrom(product.name));
   return Boolean(cat) && (cat === mine || mine.includes(cat) || cat.includes(mine));
+}
+
+/** True when a competitor was seen on this platform (its listing, or where it sells/advertises). */
+export function seenOn(row: { channel: string; listing?: { platform: string } | null }, platform: "meta" | "amazon" | "flipkart"): boolean {
+  if (row.listing?.platform === platform) return true;
+  const ch = row.channel.toLowerCase();
+  return platform === "meta" ? /instagram|facebook|meta|reel/.test(ch) : ch.includes(platform);
 }
 
 export type Landscape = {
@@ -18,6 +25,8 @@ export type Landscape = {
   hooks: string[];
   angles: string[];
   riskyClaims: string[];
+  /** Craft that works for competitors (structure, pacing, proof), to adapt in our own words. */
+  whatWorks: string[];
   whiteSpace: string[];
   gaps: string[];
   summary: string;
@@ -52,6 +61,7 @@ export function buildLandscape(
     hooks: interleave(a.map((x) => [x.hook]), 10),
     angles: interleave(a.map((x) => [x.angle]), 10),
     riskyClaims: interleave(a.map((x) => x.claims_made.filter((c) => c.risk === "risky").map((c) => c.text)), 10),
+    whatWorks: interleave(a.map((x) => x.what_works), 10),
     whiteSpace: interleave(a.map((x) => x.white_space), 10),
     gaps: research?.gaps.slice(0, 8) ?? [],
     summary: research?.summary ?? "",

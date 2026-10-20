@@ -8,7 +8,8 @@ import { loadCreative } from "@/lib/creative-store";
 import { listCategoryResearch, listCompetitors, listPlaybooks } from "@/lib/competitors";
 import { buildLandscape, competitorLines, matchesProduct } from "@/lib/landscape";
 import { scan, conceptText } from "@/lib/compliance";
-import type { InitialIdeas, LandscapeSummary } from "@/components/workspace/types";
+import type { InitialBrief, InitialIdeas, LandscapeSummary } from "@/components/workspace/types";
+import { PLATFORM_FULL_LABELS } from "@/lib/types";
 import { getAllPlatformRules, getBrand, getProducts, getTerms } from "@/lib/data";
 import { getPlatform } from "@/lib/platform";
 import { phraseList } from "@/lib/prompts";
@@ -98,8 +99,21 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
   // "Develop this idea" on the Competitors page: open its counter-ideas as ready-made proposals.
   const ideaParam = typeof sp.idea === "string" ? Number(sp.idea) : NaN;
   const ideaSource = competitorRows.find((c) => c.id === competitorParam);
-  const initialIdeas: InitialIdeas | null =
-    ideaSource?.analysis && Number.isInteger(ideaParam)
+  // "Develop" on the Research page: ideas proposed for a product on one platform.
+  const ideaSetId = typeof sp.ideas === "string" && /^[0-9a-f-]{36}$/i.test(sp.ideas) ? sp.ideas : "";
+  const [ideaSet] = ideaSetId ? await db.select().from(schema.ideaSets).where(eq(schema.ideaSets.id, ideaSetId)) : [];
+  const pick = Number.isInteger(Number(sp.i)) ? Number(sp.i) : 0;
+  const setProduct = ideaSet ? products.find((p) => p.id === ideaSet.productId) : undefined;
+  const initialBrief: InitialBrief | null =
+    ideaSet && setProduct ? { productId: setProduct.id, platform: ideaSet.platform, creativeType: ideaSet.creativeType, placement: ideaSet.placement } : null;
+  const initialIdeas: InitialIdeas | null = ideaSet && setProduct
+    ? {
+        brand: setProduct.name,
+        mock: ideaSet.mock,
+        note: `Ideas from researching ${setProduct.name}'s competitors on ${PLATFORM_FULL_LABELS[ideaSet.platform]}. Each says whether it adapts a proven pattern or takes open ground. Develop one; it uses only your approved claims.`,
+        proposals: [...ideaSet.proposals.slice(pick, pick + 1), ...ideaSet.proposals.filter((_, i) => i !== pick)],
+      }
+    : ideaSource?.analysis && Number.isInteger(ideaParam)
       ? {
           brand: ideaSource.brand,
           proposals: [
@@ -141,6 +155,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       landscapes={landscapes}
       competitorLines={linesByProduct}
       initialIdeas={initialIdeas}
+      initialBrief={initialBrief}
       initialCompetitorId={competitorRows.some((c) => c.id === competitorParam) ? competitorParam : ""}
     />
   );

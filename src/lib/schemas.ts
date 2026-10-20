@@ -50,6 +50,10 @@ export const ProposalSchema = z.object({
   hook_mechanism: z.string(),
   claims: z.array(z.object({ text: z.string(), tier: z.enum(["green", "amber"]) })).describe("Claims the idea leans on"),
   why: z.string().describe("Why it serves the objective on this platform, one sentence"),
+  based_on: z
+    .string()
+    .optional()
+    .describe("Which proven competitor pattern it adapts, or which open ground it takes, in a few words; omit if neither"),
 });
 export const ProposalsResponseSchema = z.object({ proposals: z.array(ProposalSchema) });
 export type Proposal = z.infer<typeof ProposalSchema>;

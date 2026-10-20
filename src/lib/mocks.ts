@@ -103,7 +103,7 @@ export function mockProposals(input: GenerationInput, greenClaims: string[]): Pr
     { title: "Tiffin trade", angle: "Tiffin and lunchbox", persona: "College student", hook: "Nobody trades for these. I checked.", mech: "mini-story with a twist" },
     { title: "Crunch test", angle: "Taste first", persona: "Couple sharing breakfast", hook: "Listen.", mech: "ASMR / crunch close-up demo" },
   ];
-  return rows.slice(0, input.n).map((r) => ({
+  return rows.slice(0, input.n).map((r, i) => ({
     title: r.title,
     angle: r.angle,
     persona: r.persona,
@@ -113,6 +113,7 @@ export function mockProposals(input: GenerationInput, greenClaims: string[]): Pr
     hook_mechanism: r.mech,
     claims: [{ text: claim, tier: "green" as const }],
     why: "Sample text from mock mode; switch mock mode off for real proposals.",
+    based_on: input.landscape ? (i % 2 === 0 ? "Adapts: pack visible in the first second" : "Open ground: ingredient % transparency") : undefined,
   }));
 }
 

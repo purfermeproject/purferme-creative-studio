@@ -1,0 +1,2 @@
+ALTER TABLE "competitor_ads" ADD COLUMN "product_ids" uuid[] DEFAULT '{}' NOT NULL;--> statement-breakpoint
+UPDATE "competitor_ads" SET "product_ids" = ARRAY["product_id"] WHERE "product_id" IS NOT NULL;

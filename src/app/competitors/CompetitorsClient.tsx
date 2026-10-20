@@ -324,8 +324,8 @@ export function CompetitorsClient({
       return;
     }
     const note = data.ids.length
-      ? `Found ${data.ids.length} new competitor${data.ids.length > 1 ? "s" : ""}${data.skipped ? ` (${data.skipped} already on your list or not a competitor)` : ""}.`
-      : "No new competitors found: everything it found is already on your list. Try a wider category or another focus.";
+      ? `Found ${data.ids.length} new competitor${data.ids.length > 1 ? "s" : ""}${data.linked ? ` and linked ${data.linked} you already track to this product` : ""}${data.skipped ? ` (${data.skipped} already on your list)` : ""}.`
+      : `No new competitors found: everything it found is already on your list${data.linked ? ` (${data.linked} now linked to this product)` : ""}. Try a wider category or another focus.`;
     setResearch({ status: "", error: "", summary: data.summary, gaps: data.gaps, note: data.mock ? `${note} Mock mode: sample brands, no web search ran.` : note });
     router.refresh();
     for (let i = 0; i < data.ids.length; i++) {

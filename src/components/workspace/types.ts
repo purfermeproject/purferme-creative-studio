@@ -51,7 +51,9 @@ export type Brief = {
 /** What the brief shows about a product's competitor research. */
 export type LandscapeSummary = { count: number; brands: string[]; hooks: string[]; open: string[] };
 /** Competitor ideas opened from the Competitors page ("Develop this idea"). */
-export type InitialIdeas = { brand: string; proposals: ScoredProposal[] };
+export type InitialIdeas = { brand: string; proposals: ScoredProposal[]; note?: string; mock?: boolean };
+/** Brief settings that come with ideas from a research run. */
+export type InitialBrief = Partial<Pick<Brief, "productId" | "platform" | "creativeType" | "placement">>;
 
 export type PlaybookOption = { platform: "amazon" | "flipkart"; productId: string | null; category: string; date: string };
 

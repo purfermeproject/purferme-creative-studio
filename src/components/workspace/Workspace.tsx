@@ -23,7 +23,7 @@ import { BriefPanel } from "./BriefPanel";
 import { CopyBlockView, CreativePreview, SceneList } from "./CreativePreview";
 import { EditorForm } from "./EditorForm";
 import { HistoryPanel } from "./HistoryPanel";
-import type { Brief, CompetitorOption, InitialIdeas, LandscapeSummary, OpenCreative, PlaybookOption, ProductCard, RecentCreative, ScoredProposal } from "./types";
+import type { Brief, CompetitorOption, InitialBrief, InitialIdeas, LandscapeSummary, OpenCreative, PlaybookOption, ProductCard, RecentCreative, ScoredProposal } from "./types";
 import { ProposalVisual, sketchRatio } from "./ProposalVisual";
 import type { MadeImage } from "@/components/ImageMaker";
 import { findPlacement } from "@/lib/placements";
@@ -97,6 +97,11 @@ function ProposalCard({
       <h3 className="display text-xl">{p.title}</h3>
       <p className="font-serif text-lg leading-snug text-ink">“{p.hook}”</p>
       <p className="text-sm text-ink-soft">{p.big_idea}</p>
+      {p.based_on ? (
+        <p className="text-xs font-semibold text-caramel-ink" data-testid="based-on">
+          {p.based_on}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-1.5">
         <span className="chip">{p.persona}</span>
         <span className="chip">{p.angle}</span>
@@ -159,6 +164,7 @@ export function Workspace({
   landscapes,
   competitorLines,
   initialIdeas,
+  initialBrief,
 }: {
   initialPlatform: Platform;
   products: ProductCard[];
@@ -179,6 +185,7 @@ export function Workspace({
   landscapes: Record<string, LandscapeSummary>;
   competitorLines: Record<string, string[]>;
   initialIdeas: InitialIdeas | null;
+  initialBrief: InitialBrief | null;
 }) {
   const defaultBrief = (platform: Platform): Brief => ({
     productId: products.find((p) => p.name.startsWith("Chocolate") && p.status === "ready")?.id ?? products.find((p) => p.status === "ready")?.id ?? products[0]?.id ?? "",
@@ -199,11 +206,12 @@ export function Workspace({
     useLandscape: true,
   });
 
-  const [brief, setBrief] = useState<Brief>(() => defaultBrief(initialCreative?.platform ?? initialPlatform));
+  const [brief, setBrief] = useState<Brief>(() => ({ ...defaultBrief(initialCreative?.platform ?? initialBrief?.platform ?? initialPlatform), ...(initialBrief ?? {}) }));
   const [step, setStep] = useState<1 | 2 | 3>(initialCreative || initialIdeas ? 2 : 1);
   const [proposals, setProposals] = useState<ScoredProposal[] | null>(initialIdeas?.proposals ?? null);
   const [ideasFrom, setIdeasFrom] = useState(initialIdeas?.brand ?? "");
-  const [proposalsMock, setProposalsMock] = useState(false);
+  const [proposalsMock, setProposalsMock] = useState(Boolean(initialIdeas?.mock));
+  const [ideasNote, setIdeasNote] = useState(initialIdeas?.note ?? "");
   const [variations, setVariations] = useState<ScoredConcept[] | null>(null);
   const [progress, setProgress] = useState<Progress>(null);
   const [error, setError] = useState<{ text: string; retry?: () => void } | null>(null);
@@ -238,7 +246,7 @@ export function Workspace({
     } catch {
       // Storage unavailable: start from defaults.
     }
-    const restored = initialCreative ? null : saved;
+    const restored = initialCreative || initialBrief ? null : saved;
     const frame = requestAnimationFrame(() => {
       setBriefReady(true);
       if (!restored) return;
@@ -401,6 +409,7 @@ export function Workspace({
       setProposals(done.proposals);
       setProposalsMock(done.mock);
       setIdeasFrom("");
+      setIdeasNote("");
       setProposalImages({});
     } catch (e) {
       setError({ text: e instanceof Error ? e.message : "Couldn't write proposals.", retry: propose });
@@ -859,7 +868,11 @@ export function Workspace({
                 <div>
                   <p className="eyebrow">Step 2</p>
                   <h2 className="display text-2xl">Pick a direction to develop</h2>
-                  {ideasFrom ? (
+                  {ideasNote ? (
+                    <p className="mt-2 rounded-xl bg-gold-soft p-3 text-sm" data-testid="ideas-from">
+                      {ideasNote}
+                    </p>
+                  ) : ideasFrom ? (
                     <p className="mt-2 rounded-xl bg-gold-soft p-3 text-sm" data-testid="ideas-from">
                       These are the ideas from your research on <strong>{ideasFrom}</strong>, built to stand apart from them. Check the brief on the left (product, platform, type of ad), then
                       develop one. It will use only your approved claims.

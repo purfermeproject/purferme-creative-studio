@@ -16,7 +16,7 @@ import type { ScanResult } from "@/lib/compliance";
 import type { VerdictThresholds } from "@/lib/verdicts";
 import { DEFAULT_AVOID_PHRASES, DEFAULT_EXAMPLE_ADS } from "@/lib/creative-defaults";
 import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brand-kit";
-import type { CompetitorAnalysis, ListingInsight, MarketplaceResearch } from "@/lib/schemas";
+import type { CompetitorAnalysis, ListingInsight, MarketplaceResearch, Proposal } from "@/lib/schemas";
 
 export type ClaimEvidence = { claim: string; evidence: string; source?: string };
 export type ProductUrl = { label: string; url: string };
@@ -185,8 +185,10 @@ export const competitorAds = pgTable("competitor_ads", {
   link: text("link").notNull().default(""),
   notes: text("notes").notNull().default(""),
   imageAssetId: uuid("image_asset_id"),
-  /** Which of our products it competes with (set by research; manual entries may leave it empty). */
+  /** The product it was first researched for (kept for older rows; see productIds). */
   productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+  /** Every one of our products it competes with (a brand can compete with several). */
+  productIds: uuid("product_ids").array().notNull().default([]),
   /** manual = a team member added it; research = found by web search. */
   source: text("source").notNull().default("manual"),
   /** Category searched and what the search focused on (research only). */
@@ -199,6 +201,19 @@ export const competitorAds = pgTable("competitor_ads", {
   analysis: jsonb("analysis").$type<CompetitorAnalysis>(),
   analysisModel: text("analysis_model").notNull().default(""),
   analysedAt: timestamp("analysed_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Ideas proposed for one product on one platform by a research run, kept so any can be developed later. */
+export const ideaSets = pgTable("idea_sets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  productId: uuid("product_id").references(() => products.id, { onDelete: "cascade" }),
+  platform: text("platform").$type<Platform>().notNull(),
+  creativeType: text("creative_type").notNull(),
+  placement: text("placement").notNull().default(""),
+  proposals: jsonb("proposals").$type<(Proposal & { scan: ScanResult })[]>().notNull(),
+  mock: boolean("mock").notNull().default(false),
   createdBy: text("created_by").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

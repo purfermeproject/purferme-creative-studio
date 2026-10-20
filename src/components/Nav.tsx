@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 const MAIN = [
   { href: "/create", label: "Create" },
+  { href: "/research", label: "Research" },
   { href: "/library", label: "Library" },
   { href: "/competitors", label: "Competitors" },
   { href: "/results", label: "Results" },

@@ -108,7 +108,7 @@ export async function POST(req: Request) {
   const deliverable = input.deliverable as Deliverable;
   const competitor = input.competitorId ? await competitorContext(input.competitorId) : null;
   const playbook = input.platform !== "meta" && input.usePlaybook ? await latestPlaybook(input.platform, product.id) : null;
-  const landscape = input.useLandscape ? (await competitorLandscape(product)).landscape : null;
+  const landscape = input.useLandscape ? (await competitorLandscape(product, input.platform)).landscape : null;
   const common = {
     platform: input.platform,
     creativeType: input.creativeType,

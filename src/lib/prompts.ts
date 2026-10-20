@@ -61,8 +61,9 @@ export function landscapeBlock(l: Landscape): string {
     l.hooks.length ? `- Hooks already used by competitors (do not reuse or echo them): ${l.hooks.map((h) => `"${h}"`).join("; ")}` : "",
     l.angles.length ? `- Angles they already own (only take one if we can say it more specifically): ${l.angles.join("; ")}` : "",
     l.riskyClaims.length ? `- Claims they make that we must never follow: ${l.riskyClaims.join("; ")}` : "",
+    l.whatWorks.length ? `- What works for them (adapt the craft: structure, pacing, proof device; never their words or claims): ${l.whatWorks.join("; ")}` : "",
     l.whiteSpace.length || l.gaps.length ? `- Open ground to lean into: ${[...l.gaps, ...l.whiteSpace].slice(0, 12).join("; ")}` : "",
-    "- At least two of the ideas should build on the open ground; none may sound like a competitor's line.",
+    "- Mix two kinds of ideas: at least one adapts a proven pattern above (in our voice, with our claims) and at least one takes open ground. Say which in based_on. None may sound like a competitor's line.",
   ];
   return lines.filter(Boolean).join("\n");
 }

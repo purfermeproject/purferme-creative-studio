@@ -71,6 +71,20 @@
       "when": 1792502995905,
       "tag": "0009_competitive_landscape",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792503654799,
+      "tag": "0010_idea_sets",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792504106238,
+      "tag": "0011_competitor_products",
+      "breakpoints": true
     }
   ]
 }
