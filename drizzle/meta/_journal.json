@@ -113,6 +113,20 @@
       "when": 1792570781733,
       "tag": "0015_persuasion_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792576951800,
+      "tag": "0016_purple_panel",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792576960427,
+      "tag": "0017_nappy_rattler",
+      "breakpoints": true
     }
   ]
 }

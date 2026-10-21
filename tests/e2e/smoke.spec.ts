@@ -49,8 +49,15 @@ async function develop(page: Page, o: BriefOpts = {}) {
   return ws;
 }
 
+/** Opens "More options" in the image panel (text, pack and photo choices live there). */
+async function moreOptions(ws: Locator) {
+  const d = ws.getByTestId("more-options").first();
+  if ((await d.getAttribute("open")) === null) await d.locator("summary").click();
+}
+
 /** Make an image without the automatic hook text, so image counts stay exact (the auto text has its own test). */
 async function makeImage(ws: Locator, text: "overlay" | "auto" = "overlay") {
+  await moreOptions(ws);
   await ws.getByLabel("Text on image").first().selectOption(text);
   await ws.getByRole("button", { name: "Make image" }).click();
 }
@@ -75,6 +82,7 @@ test("workflow: brief → 3 proposals → develop → saved draft with version 1
   await signIn(page);
   await expect(page.getByTestId("empty-state")).toBeVisible();
   await page.goto("/create");
+  await expect(page.getByTestId("flow-now")).toContainText("Fill in the brief");
   await fillBrief(page, { objective: "Awareness", type: "9:16 UGC-style video (15–30s)" });
   await page.getByTestId("shopper-mindset").locator("summary").click();
   await expect(page.getByTestId("shopper-mindset")).toContainText("Scrolling, not shopping");
@@ -84,6 +92,8 @@ test("workflow: brief → 3 proposals → develop → saved draft with version 1
   await expect(page.getByTestId("proposal-2")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("proposal-0").getByTestId("mock-badge")).toBeVisible();
   await expect(page.getByTestId("proposal-1").getByTestId("lever")).toHaveText("Lever: Transparency and trust");
+  await expect(page.getByTestId("flow").locator("[aria-current=step]")).toContainText("Ideas");
+  await expect(page.getByTestId("flow-now")).toContainText("Pick the idea");
   await page.getByTestId("proposal-1").getByRole("button", { name: "Develop as ad concept" }).click();
   const ws = page.getByTestId("workspace-creative");
   await expect(ws).toBeVisible({ timeout: 60_000 });
@@ -417,9 +427,16 @@ test("Check a finished design: reads the text, flags claims and size", async ({ 
 test("By default a new image gets the hook, CTA and logo added straight away", async ({ page }) => {
   await signIn(page);
   const ws = await develop(page);
+  await expect(page.getByTestId("flow").locator("[aria-current=step]")).toContainText("Images");
   await makeImage(ws, "auto");
   const gallery = ws.getByTestId("image-gallery");
   await expect(gallery.locator("img")).toHaveCount(2, { timeout: 60_000 });
+  // Every image says how it was made, step by step.
+  const trail = ws.getByTestId("image-trail").first();
+  await trail.locator("summary").click();
+  await expect(trail).toContainText("Placing your real pack on the brand panel");
+  await expect(ws.getByTestId("image-trail").nth(1)).toContainText("Added the hook, button and logo");
+  await expect(page.getByTestId("flow").locator("[aria-current=step]")).toContainText("Check & approve");
   await expect(ws.getByTestId("image-dims").nth(1)).toContainText("with text");
   await expect(page.getByTestId("creative-preview").locator("img")).toHaveAttribute("src", /.+/);
 });
@@ -428,6 +445,7 @@ test("Make all sizes: each size the platform needs is made for its own shape", a
   await signIn(page);
   const ws = await develop(page, { type: "Static image ad (4:5)" });
   await expect(ws.getByTestId("needed-sizes")).toContainText("Feed 4:5 (1080×1350) · Reels / Stories 9:16 (1080×1920) · Feed / carousel card 1:1 (1080×1080)");
+  await moreOptions(ws);
   await ws.getByLabel("Text on image").first().selectOption("overlay");
   await ws.getByRole("button", { name: "Make all 3 sizes Instagram & Facebook needs" }).click();
   await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(3, { timeout: 90_000 });
@@ -440,6 +458,7 @@ test("Make all sizes: each size the platform needs is made for its own shape", a
 test("Make all scenes builds a storyboard and the handoff pack ZIP has everything", async ({ page }) => {
   await signIn(page);
   const ws = await develop(page, { type: "9:16 UGC-style video (15–30s)" });
+  await moreOptions(ws);
   await ws.getByLabel("Text on image").first().selectOption("overlay");
   await ws.getByRole("button", { name: /Make all \d+ scenes/ }).click();
   const board = ws.getByTestId("storyboard");
@@ -460,6 +479,7 @@ test("Edit with words, All sizes and Compare", async ({ page }) => {
   await signIn(page);
   const ws = await develop(page, { type: "Static image ad (4:5)", placement: "Instagram Feed post" });
   // AI edits are only for scene-only images; images with our real pack can't be redrawn.
+  await moreOptions(ws);
   await ws.getByLabel("Pack in the image").selectOption("none");
   await makeImage(ws);
   const gallery = ws.getByTestId("image-gallery");
@@ -514,12 +534,14 @@ test("Original pack is placed unchanged, and images with it can't be AI-edited",
   await expect(card.getByText("Pack image uploaded.")).toBeVisible();
 
   const ws = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  await moreOptions(ws);
   await expect(ws.getByLabel("Pack in the image")).toHaveValue("layout");
   await makeImage(ws);
   await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack · brand panel");
   // A designed layout is never cropped into other sizes (that would cut the panel); Make all sizes lays each one out.
   await expect(ws.getByRole("button", { name: "All sizes" })).toHaveCount(0);
   await expect(ws.getByRole("button", { name: "Edit with words" })).toHaveCount(0);
+  await moreOptions(ws);
   await expect(ws.getByLabel("Pack in the image").locator("option")).toHaveText(["Pack: real pack on a brand panel (recommended)", "Pack: real pack inside the scene (AI blends it; check it)", "No pack in this image"]);
   // The server refuses too.
   const assetUrl = await ws.getByTestId("image-gallery").locator("img").first().getAttribute("src");
@@ -605,6 +627,7 @@ test("Extra product photos can be placed instead of the pack", async ({ page }) 
   await expect(photos.locator("img")).toHaveCount(1);
 
   const ws = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  await moreOptions(ws);
   await ws.getByLabel("Which product photo").selectOption({ label: "Photo: Cookies out of the pack" });
   await makeImage(ws);
   await expect(ws.getByTestId("image-dims").first()).toContainText("original pack");
@@ -783,6 +806,7 @@ test("No pack photo, no pack: the app asks for the real photo instead of letting
   await makeImage(ws);
   await expect(ws.getByRole("alert")).toContainText("no pack photo for");
   await expect(ws.getByTestId("image-gallery")).toHaveCount(0);
+  await moreOptions(ws);
   await ws.getByLabel("Pack in the image").selectOption("none");
   await makeImage(ws);
   await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1);

@@ -9,6 +9,7 @@ import { applyPlatform } from "@/components/PlatformSwitch";
 import type { BrandKit } from "@/lib/brand-kit";
 import type { Term } from "@/lib/compliance";
 import { conceptToText, type ScoredConcept } from "@/lib/concepts";
+import { requestImageWithStages } from "@/lib/image-client";
 import { readNdjson } from "@/lib/ndjson";
 import { PLACEMENTS } from "@/lib/placements";
 import { AUTO } from "@/lib/prompts";
@@ -25,6 +26,7 @@ import { EditorForm } from "./EditorForm";
 import { HistoryPanel } from "./HistoryPanel";
 import { matchesProduct } from "@/lib/landscape";
 import type { Brief, CompetitorOption, InitialBrief, InitialIdeas, LandscapeSummary, OpenCreative, PlaybookOption, ProductCard, RecentCreative, ScoredProposal } from "./types";
+import { FlowBar, flowStep } from "./FlowBar";
 import { ProposalVisual, sketchRatio } from "./ProposalVisual";
 import type { MadeImage } from "@/components/ImageMaker";
 import { findPlacement } from "@/lib/placements";
@@ -337,14 +339,12 @@ export function Workspace({
 
   // Images made for proposals (before developing), keyed by proposal title.
   const [proposalImages, setProposalImages] = useState<Record<string, { image: MadeImage | null; withText?: MadeImage | null; busy: boolean; error: string }>>({});
-  const [firstImage, setFirstImage] = useState<{ busy: boolean; error: string }>({ busy: false, error: "" });
+  const [firstImage, setFirstImage] = useState<{ busy: boolean; error: string; stage?: string }>({ busy: false, error: "" });
 
   const placementSpec = (platform: Platform, placement: string) => findPlacement(platform, placement)?.specId ?? null;
 
-  async function requestImage(body: Record<string, unknown>): Promise<MadeImage> {
-    const res = await fetch("/api/image", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error ?? "Couldn't make the image.");
+  async function requestImage(body: Record<string, unknown>, onStage: (text: string) => void = () => {}): Promise<MadeImage> {
+    const data = await requestImageWithStages(body, onStage);
     return { id: data.id, url: data.url, label: data.label, frameIndex: 0 };
   }
 
@@ -422,8 +422,9 @@ export function Workspace({
         specId: placementSpec(c.platform, c.placement),
         packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
         packMode: "layout",
-      });
+      }, (stage) => setFirstImage({ busy: true, error: "", stage }));
       setCreative((cur) => (cur && cur.id === c.id ? { ...cur, images: [...cur.images, image] } : cur));
+      setFirstImage({ busy: true, error: "", stage: "Adding the hook, button and logo" });
       const withText = await withHook(image, snapshotToConcept(c.snapshot), c.id);
       if (withText) setCreative((cur) => (cur && cur.id === c.id ? { ...cur, images: [...cur.images, withText] } : cur));
       setFirstImage({ busy: false, error: "" });
@@ -669,9 +670,23 @@ export function Workspace({
     { n: 3, label: "Refine & approve", disabled: !creative },
   ];
   const objectiveLabel = OBJECTIVES.find((o) => o.id === creative?.objective)?.label;
+  const flow = progress?.label.startsWith("Developing") ? 2 : flowStep({ hasIdeas: Boolean(proposals?.length), hasCreative: Boolean(creative), hasImages: Boolean(creative?.images.length), status: creative?.status });
+  const approved = Boolean(creative && ["Approved", "In production", "Live", "Winner"].includes(creative.status));
+  const now = progress
+    ? `${progress.label}…`
+    : firstImage.busy
+      ? `${firstImage.stage ?? "Making the first image"}…`
+      : [
+          "Fill in the brief on the left, then press Propose 3 concepts.",
+          "Pick the idea you like best and press Develop.",
+          "",
+          "Make images for this ad below: Make image, or make every size the platform needs.",
+          approved ? "Approved: download the handoff pack and upload it to the platform." : "Check the panel on the right: fix anything red, then send it for approval.",
+        ][flow];
 
   return (
     <div className="space-y-4">
+      <FlowBar step={flow} now={now} done={approved} />
       <nav aria-label="Workflow steps" className="lg:hidden">
         <ol className="grid grid-cols-3 gap-1 rounded-xl border border-line bg-surface p-1">
           {steps.map((s) => (
@@ -792,7 +807,7 @@ export function Workspace({
 
               {firstImage.busy ? (
                 <p className="rounded-xl bg-gold-soft p-3 text-sm" role="status" data-testid="first-image-busy">
-                  Making the first image with your real pack… (up to a minute). You can start editing meanwhile.
+                  {firstImage.stage ? `⏳ ${firstImage.stage}…` : "Making the first image with your real pack…"} (up to a minute). You can start editing meanwhile.
                 </p>
               ) : firstImage.error ? (
                 <p className="rounded-xl border border-red/30 bg-red-bg p-3 text-sm text-red" role="alert">

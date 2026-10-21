@@ -71,8 +71,15 @@ export async function generateImage(opts: {
   fallbackPrompt?: string;
   /** Designed layout: a photo with no pack, then our real pack standing on a brand panel (the model never sees the pack). */
   layoutPack?: { data: Buffer; position: PackPosition; panel: string; accent: string; assetId?: string | null; liftBackdrop?: boolean } | null;
+  /** Called at each stage, so the team (and the server log) can see what is happening. */
+  onStage?: (text: string) => void;
 }) {
+  const stage = (text: string) => {
+    console.info(`[image] ${opts.label}: ${text}`);
+    opts.onStage?.(text);
+  };
   const layout = async (scene: Buffer) => {
+    stage("Placing your real pack on the brand panel (unchanged, only scaled)");
     try {
       return (await layoutAd(scene, opts.layoutPack!.data, { ...opts.target, position: opts.layoutPack!.position, panel: opts.layoutPack!.panel, accent: opts.layoutPack!.accent, liftBackdrop: opts.layoutPack!.liftBackdrop })).data;
     } catch (e) {
@@ -93,6 +100,7 @@ export async function generateImage(opts: {
     mime = "image/svg+xml";
     data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label, { drawPack: !opts.lockedPack && !opts.layoutPack })).toString("base64");
     model = "mock";
+    stage("Sample mode: using a placeholder photo instead of AI");
     if (opts.layoutPack) {
       const scene = await sharp(Buffer.from(data, "base64")).resize(opts.target.w, opts.target.h).png().toBuffer();
       mime = "image/jpeg";
@@ -174,19 +182,30 @@ export async function generateImage(opts: {
         return { image: placed.data, box: placed.box };
       };
 
+      stage(
+        opts.layoutPack
+          ? "AI is making the photo (it never sees or draws your pack)"
+          : opts.lockedPack
+            ? "AI is painting the scene around your real pack"
+            : "AI is making the photo",
+      );
       let made = await once(opts.prompt, opts.fallbackPrompt);
       if (opts.layoutPack) {
         // The photo must not contain any packaging of its own; redo once if the model drew some anyway.
+        stage("Checking the photo for any packaging the AI drew");
         const invented = await findInventedPacks(made.image, null, opts.user);
         if (invented.length) {
+          stage(`Found ${invented.join("; ")}: making the photo again`);
           made = await once(`${opts.prompt}\n\nIMPORTANT: a previous attempt wrongly showed ${invented.join("; ")}. Show NO jar, box, pouch, packet, bottle or label anywhere; hands may only hold food, a spoon, toast or a cup.`, undefined);
           if ((await findInventedPacks(made.image, null, opts.user)).length) warning = "The AI may have drawn packaging in the photo. Check the image, then make another or use Edit with words to remove it.";
         }
         made = { image: await layout(made.image), box: null };
       } else if (opts.lockedPack) {
         // The model sometimes invents a second pack (e.g. in someone's hand). Check, and redo once if so.
+        stage("Checking for any extra pack the AI drew");
         let invented = await findInventedPacks(made.image, made.box, opts.user);
         if (invented.length) {
+          stage(`Found ${invented.join("; ")}: making it again without showing the AI your pack`);
           const fix = `\n\nIMPORTANT: a previous attempt wrongly showed ${invented.join("; ")}. Show NO other jar, box, pouch, packet, bottle or label anywhere, and nobody holds any container; hands may only hold food, a spoon, toast or a cup.`;
           // Second try without showing the model our pack at all, so it has nothing to copy.
           made = await once(opts.prompt + fix, opts.fallbackPrompt ? opts.fallbackPrompt + fix : undefined, !opts.fallbackPrompt);
@@ -215,6 +234,7 @@ export async function generateImage(opts: {
     }
   }
 
+  stage("Saving the image");
   const stored = await storeAsset({
     data: Buffer.from(data, "base64"),
     mime,

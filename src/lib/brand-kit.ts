@@ -9,7 +9,7 @@ export type BrandKit = {
 
 export const DEFAULT_BRAND_KIT: BrandKit = {
   logoUrl: null,
-  colors: { primary: "#6b3f2a", accent: "#c8862a", text: "#ffffff", band: "#2b1d14" },
+  colors: { primary: "#2d1b54", accent: "#c8862a", text: "#ffffff", band: "#2d1b54" },
   headingFont: { name: "Bricolage Grotesque", url: null },
   bodyFont: { name: "Literata", url: null },
 };

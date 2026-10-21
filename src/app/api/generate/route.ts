@@ -163,6 +163,8 @@ export async function POST(req: Request) {
       };
       const meta = { user, kind: input.mode, platform: input.platform, productId: product.id };
       const mock = isMock();
+      const what = { generate: "writing ad concepts", proposals: "writing 3 idea proposals", develop: "writing the full ad from the chosen idea", variations: "writing variations", regenerate: "rewriting the ad" }[input.mode];
+      console.info(`[generate] ${user}: ${what} for ${product.name} on ${input.platform}${mock ? " (sample mode)" : ""}`);
       try {
         if (input.mode === "proposals") {
           const result = await structuredCall({

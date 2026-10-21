@@ -1,0 +1,1 @@
+ALTER TABLE "brand_settings" ALTER COLUMN "kit" SET DEFAULT '{"logoUrl":null,"colors":{"primary":"#2d1b54","accent":"#c8862a","text":"#ffffff","band":"#2d1b54"},"headingFont":{"name":"Bricolage Grotesque","url":null},"bodyFont":{"name":"Literata","url":null}}'::jsonb;

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { BrandKit } from "@/lib/brand-kit";
 import { defaultSpecFor, IMAGE_SPECS, MAX_SIDE, MIN_SIDE, neededSpecsFor } from "@/lib/image-specs";
 import { findPlacement } from "@/lib/placements";
+import { requestImageWithStages } from "@/lib/image-client";
 import { OverlayEditor, addTextAutomatically, defaultOverlay, packLayoutOf } from "./OverlayEditor";
 import { PlacementPreview } from "./PlacementPreview";
 import type { Concept } from "@/lib/schemas";
@@ -71,6 +72,9 @@ export function ImageMaker({
   const [note, setNote] = useState("");
 
   const [progress, setProgress] = useState("");
+  // What the server is doing right now (one line per stage), and how each image was made.
+  const [stages, setStages] = useState<string[]>([]);
+  const [trail, setTrail] = useState<Record<string, string[]>>({});
 
   // The editable part of the image prompt. null = use the app's own direction for each scene.
   const [promptOpen, setPromptOpen] = useState(false);
@@ -119,15 +123,14 @@ export function ImageMaker({
     }
   }
 
-  async function requestImage(frameIndex: number, spec?: string): Promise<MadeImage & { usedPackPhoto: boolean; warning: string }> {
-    const res = await fetch("/api/image", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(imageBody(frameIndex, spec)),
+  async function requestImage(frameIndex: number, spec?: string): Promise<MadeImage & { usedPackPhoto: boolean; warning: string; steps: string[] }> {
+    const steps: string[] = [];
+    setStages([]);
+    const data = await requestImageWithStages(imageBody(frameIndex, spec), (text) => {
+      steps.push(text);
+      setStages([...steps]);
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Couldn't make the image. Try again.");
-    return { id: data.id, url: data.url, label: data.label, frameIndex, usedPackPhoto: data.usedPackPhoto || packMode === "none", warning: data.warning || "" };
+    return { id: data.id, url: data.url, label: data.label, frameIndex, usedPackPhoto: Boolean(data.usedPackPhoto) || packMode === "none", warning: data.warning || "", steps };
   }
 
   /** frames × sizes: each size is made for its own shape (pack placed and text laid out to fit), not cropped. */
@@ -150,9 +153,11 @@ export function ImageMaker({
         if (img.warning) warnings.push(img.warning);
         acc = [...acc, { id: img.id, url: img.url, label: img.label, frameIndex: img.frameIndex }];
         onImages(acc);
+        setTrail((t) => ({ ...t, [img.id]: img.steps }));
         if (textMode === "auto") {
           // The finished ad carries its hook: add the scene's on-screen line, CTA and logo straight away.
           if (jobs.length === 1) setProgress("Adding the hook and logo…");
+          setStages([...img.steps, "Adding the hook, button and logo (your brand fonts and colours)"]);
           try {
             const t = await addTextAutomatically({
               imageUrl: img.url,
@@ -164,6 +169,7 @@ export function ImageMaker({
             });
             acc = [...acc, { ...t, frameIndex: frames[i] }];
             onImages(acc);
+            setTrail((tr) => ({ ...tr, [t.id]: [...img.steps, "Added the hook, button and logo on top"] }));
           } catch {
             warnings.push("Couldn't add the text automatically; use Add text on the image.");
           }
@@ -176,6 +182,7 @@ export function ImageMaker({
     } finally {
       setBusy(false);
       setProgress("");
+      setStages([]);
     }
   }
 
@@ -268,61 +275,6 @@ export function ImageMaker({
             px
           </span>
         ) : null}
-        <label htmlFor={`text-${concept.title}`} className="sr-only">
-          Text on image
-        </label>
-        <select id={`text-${concept.title}`} className="input w-auto py-1.5 text-sm" value={textMode} onChange={(e) => setTextMode(e.target.value as "overlay" | "ai")}>
-          <option value="auto">Text: add the hook and logo automatically</option>
-          <option value="overlay">Text: I&apos;ll add it after</option>
-          <option value="ai">Text: AI draws it in the image</option>
-        </select>
-        <label htmlFor={`pack-${concept.title}`} className="sr-only">
-          Pack in the image
-        </label>
-        <select id={`pack-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packMode} onChange={(e) => setPackMode(e.target.value as typeof packMode)}>
-          <option value="layout">Pack: real pack on a brand panel (recommended)</option>
-          <option value="locked">Pack: real pack inside the scene (AI blends it; check it)</option>
-          <option value="none">No pack in this image</option>
-        </select>
-        {packMode !== "none" ? (
-          <>
-            {photos.length ? (
-              <>
-                <label htmlFor={`photo-${concept.title}`} className="sr-only">
-                  Which product photo
-                </label>
-                <select id={`photo-${concept.title}`} className="input w-auto py-1.5 text-sm" value={photoId} onChange={(e) => setPhotoId(e.target.value)}>
-                  <option value="">Photo: pack</option>
-                  {photos.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      Photo: {p.label}
-                    </option>
-                  ))}
-                </select>
-              </>
-            ) : null}
-            <label htmlFor={`packpos-${concept.title}`} className="sr-only">
-              Pack position
-            </label>
-            <select id={`packpos-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packPosition} onChange={(e) => setPackPosition(e.target.value as typeof packPosition)}>
-              <option value="right">Pack on the right</option>
-              <option value="center">Pack in the centre</option>
-              <option value="left">Pack on the left</option>
-            </select>
-            {packMode === "locked" ? (
-              <>
-                <label htmlFor={`packsize-${concept.title}`} className="sr-only">
-                  Pack size
-                </label>
-                <select id={`packsize-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packScale} onChange={(e) => setPackScale(e.target.value as typeof packScale)}>
-                  <option value="small">Small pack</option>
-                  <option value="medium">Medium pack</option>
-                  <option value="large">Large pack</option>
-                </select>
-              </>
-            ) : null}
-          </>
-        ) : null}
         <button type="button" className="btn-secondary" onClick={() => make([frame])} disabled={busy || (specId === CUSTOM && !customValid)}>
           {busy ? progress || "Making image… (up to a minute)" : images.length ? "Make another image" : "Make image"}
         </button>
@@ -349,6 +301,77 @@ export function ImageMaker({
           </button>
         ) : null}
       </div>
+      <details className="rounded-lg border border-line" data-testid="more-options">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
+          More options <span className="font-normal text-ink-soft">· {packMode === "layout" ? "real pack on a brand panel" : packMode === "locked" ? "real pack inside the scene" : "no pack"} · {textMode === "auto" ? "hook added automatically" : textMode === "overlay" ? "add text yourself" : "AI draws the text"}</span>
+        </summary>
+        <div className="space-y-2 border-t border-line p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor={`text-${concept.title}`} className="sr-only">
+              Text on image
+            </label>
+            <select id={`text-${concept.title}`} className="input w-auto py-1.5 text-sm" value={textMode} onChange={(e) => setTextMode(e.target.value as "overlay" | "ai")}>
+              <option value="auto">Text: add the hook and logo automatically</option>
+              <option value="overlay">Text: I&apos;ll add it after</option>
+              <option value="ai">Text: AI draws it in the image</option>
+            </select>
+            <label htmlFor={`pack-${concept.title}`} className="sr-only">
+              Pack in the image
+            </label>
+            <select id={`pack-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packMode} onChange={(e) => setPackMode(e.target.value as typeof packMode)}>
+              <option value="layout">Pack: real pack on a brand panel (recommended)</option>
+              <option value="locked">Pack: real pack inside the scene (AI blends it; check it)</option>
+              <option value="none">No pack in this image</option>
+            </select>
+            {packMode !== "none" ? (
+              <>
+                {photos.length ? (
+                  <>
+                    <label htmlFor={`photo-${concept.title}`} className="sr-only">
+                      Which product photo
+                    </label>
+                    <select id={`photo-${concept.title}`} className="input w-auto py-1.5 text-sm" value={photoId} onChange={(e) => setPhotoId(e.target.value)}>
+                      <option value="">Photo: pack</option>
+                      {photos.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          Photo: {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : null}
+                <label htmlFor={`packpos-${concept.title}`} className="sr-only">
+                  Pack position
+                </label>
+                <select id={`packpos-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packPosition} onChange={(e) => setPackPosition(e.target.value as typeof packPosition)}>
+                  <option value="right">Pack on the right</option>
+                  <option value="center">Pack in the centre</option>
+                  <option value="left">Pack on the left</option>
+                </select>
+                {packMode === "locked" ? (
+                  <>
+                    <label htmlFor={`packsize-${concept.title}`} className="sr-only">
+                      Pack size
+                    </label>
+                    <select id={`packsize-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packScale} onChange={(e) => setPackScale(e.target.value as typeof packScale)}>
+                      <option value="small">Small pack</option>
+                      <option value="medium">Medium pack</option>
+                      <option value="large">Large pack</option>
+                    </select>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+          {packMode === "layout" ? (
+            <p className="hint">The AI makes the photo only and never sees or draws a pack. Your real pack then stands on a brand-colour panel, unchanged, with the hook on top: it can&apos;t float, be copied or come out the wrong size.</p>
+          ) : packMode === "locked" ? (
+            <p className="hint">The AI paints the scene around your real pack. It can look natural, but check every image: it sometimes floats, is copied or is the wrong scale.</p>
+          ) : (
+            <p className="hint">Scene only: no pack at all (the AI is told never to draw one).</p>
+          )}
+        </div>
+      </details>
       <div className="rounded-lg border border-line" data-testid="prompt-editor">
         <button
           type="button"
@@ -394,13 +417,6 @@ export function ImageMaker({
           </div>
         ) : null}
       </div>
-      {packMode === "layout" ? (
-        <p className="hint">The AI makes the photo only and never sees or draws a pack. Your real pack then stands on a brand-colour panel, unchanged, with the hook on top: it can&apos;t float, be copied or come out the wrong size.</p>
-      ) : packMode === "locked" ? (
-        <p className="hint">The AI paints the scene around your real pack. It can look natural, but check every image: it sometimes floats, is copied or is the wrong scale.</p>
-      ) : (
-        <p className="hint">Scene only: no pack at all (the AI is told never to draw one).</p>
-      )}
       {specId === CUSTOM && !customValid ? (
         <p className="hint">Width and height must be whole numbers between {MIN_SIDE} and {MAX_SIDE} px.</p>
       ) : specs.find((s) => s.id === specId)?.note ? (
@@ -413,6 +429,16 @@ export function ImageMaker({
         <p role="alert" className="text-sm text-red">
           {error}
         </p>
+      ) : null}
+      {busy && stages.length ? (
+        <ol className="space-y-1 rounded-xl bg-surface-2 p-3 text-sm" aria-label="What is happening now" data-testid="image-stages">
+          {stages.map((st, k) => (
+            <li key={k} className={k === stages.length - 1 ? "font-semibold text-ink" : "text-ink-soft"}>
+              {k === stages.length - 1 ? "⏳ " : "✓ "}
+              {st}
+            </li>
+          ))}
+        </ol>
       ) : null}
       {note ? <p className="hint">{note}</p> : null}
       {picked.length >= 2 ? (
@@ -486,6 +512,16 @@ export function ImageMaker({
                 {dims[img.id] ?? ""}
                 {img.label ? ` · ${img.label}` : ""}
               </p>
+              {trail[img.id]?.length ? (
+                <details className="text-xs text-ink-soft" data-testid="image-trail">
+                  <summary className="cursor-pointer">How this was made</summary>
+                  <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                    {trail[img.id].map((st, k) => (
+                      <li key={k}>{st}</li>
+                    ))}
+                  </ol>
+                </details>
+              ) : null}
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold">
                 <button type="button" className="text-accent hover:underline" onClick={() => setEditing(img)}>
                   Add text &amp; logo

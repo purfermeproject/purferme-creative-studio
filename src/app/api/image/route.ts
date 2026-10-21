@@ -33,6 +33,8 @@ const Body = z.object({
   photoId: z.string().uuid().nullable().optional(),
   /** The team's edited direction (what the picture shows and how it's shot). The rules are always added. */
   direction: z.string().trim().max(4000).optional(),
+  /** Stream each stage as it happens (NDJSON), ending with the result. */
+  stream: z.boolean().default(false),
   /** Return the prompt that would be sent, without making an image (free). */
   preview: z.boolean().default(false),
   custom: z
@@ -111,30 +113,49 @@ export async function POST(req: Request) {
     const fallbackPrompt = buildImagePrompt(promptInput);
     const withPack = packMode !== "none";
     const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${withPack ? " · original pack" : ""}${packMode === "layout" ? " · brand panel" : ""}`;
-    const image = await generateImage({
-      prompt,
-      target: { w: spec.w, h: spec.h },
-      reference: null,
-      fallbackPrompt,
-      user,
-      label,
-      frameIndex: input.frameIndex,
-      lockedPack:
-        packMode === "locked" && reference
-          ? { data: reference.data, position: input.packPosition, scale: input.packScale, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
-          : null,
-      layoutPack:
-        packMode === "layout" && reference
-          ? { data: reference.data, position: input.packPosition, panel: brand0.kit.colors.primary, accent: brand0.kit.colors.accent, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
-          : null,
+    const run = async (onStage?: (text: string) => void) => {
+      onStage?.(packMode === "layout" ? "Writing the photo brief from the ad (scene, style, where the panel goes)" : "Writing the image brief from the ad");
+      const image = await generateImage({
+        onStage,
+        prompt,
+        target: { w: spec.w, h: spec.h },
+        reference: null,
+        fallbackPrompt,
+        user,
+        label,
+        frameIndex: input.frameIndex,
+        lockedPack:
+          packMode === "locked" && reference
+            ? { data: reference.data, position: input.packPosition, scale: input.packScale, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
+            : null,
+        layoutPack:
+          packMode === "layout" && reference
+            ? { data: reference.data, position: input.packPosition, panel: brand0.kit.colors.primary, accent: brand0.kit.colors.accent, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
+            : null,
+      });
+      if (input.creativeId) {
+        await db
+          .update(schema.creatives)
+          .set({ imageIds: sql`array_append(${schema.creatives.imageIds}, ${image.id}::uuid)`, updatedAt: new Date() })
+          .where(eq(schema.creatives.id, input.creativeId));
+      }
+      return { ...image, label: withPack ? `${spec.label} · original pack${packMode === "layout" ? " · brand panel" : ""}` : spec.label, usedPackPhoto: Boolean(reference), packMode };
+    };
+    if (!input.stream) return Response.json(await run());
+    // Streamed: one line per stage, then the result, so the page can show what is happening right now.
+    const enc = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (msg: unknown) => controller.enqueue(enc.encode(`${JSON.stringify(msg)}\n`));
+        try {
+          send({ type: "done", ...(await run((text) => send({ type: "stage", text }))) });
+        } catch (e) {
+          send({ type: "error", message: errorMessage(e) });
+        }
+        controller.close();
+      },
     });
-    if (input.creativeId) {
-      await db
-        .update(schema.creatives)
-        .set({ imageIds: sql`array_append(${schema.creatives.imageIds}, ${image.id}::uuid)`, updatedAt: new Date() })
-        .where(eq(schema.creatives.id, input.creativeId));
-    }
-    return Response.json({ ...image, label: withPack ? `${spec.label} · original pack${packMode === "layout" ? " · brand panel" : ""}` : spec.label, usedPackPhoto: Boolean(reference), packMode });
+    return new Response(stream, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" } });
   } catch (e) {
     return Response.json({ error: errorMessage(e) }, { status: 500 });
   }

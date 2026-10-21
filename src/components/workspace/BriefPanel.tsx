@@ -362,7 +362,7 @@ export function BriefPanel({
         </details>
       </Step>
 
-      <div className="sticky bottom-0 -mx-1 space-y-2 bg-gradient-to-t from-bg via-bg to-transparent px-1 pt-3 pb-1">
+      <div className="sticky bottom-0 -mx-1 space-y-2 border-t border-line bg-bg px-1 pt-3 pb-1 shadow-[0_-8px_16px_-8px_rgba(45,27,84,0.15)]">
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-1 size-4 accent-(--purple)" checked={brief.autoImage} onChange={(e) => set({ autoImage: e.target.checked })} />
           <span>
