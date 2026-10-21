@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { BrandKit } from "@/lib/brand-kit";
-import { defaultSpecFor, IMAGE_SPECS, MAX_SIDE, MIN_SIDE } from "@/lib/image-specs";
+import { defaultSpecFor, IMAGE_SPECS, MAX_SIDE, MIN_SIDE, neededSpecsFor } from "@/lib/image-specs";
 import { findPlacement } from "@/lib/placements";
 import { OverlayEditor, addTextAutomatically, defaultOverlay } from "./OverlayEditor";
 import { PlacementPreview } from "./PlacementPreview";
@@ -79,7 +79,8 @@ export function ImageMaker({
   const [rules, setRules] = useState("");
   const [promptBusy, setPromptBusy] = useState(false);
 
-  const imageBody = (frameIndex: number) => ({
+  const needed = neededSpecsFor(platform, creativeType);
+  const imageBody = (frameIndex: number, spec?: string) => ({
     platform,
     productId,
     creativeType,
@@ -87,13 +88,13 @@ export function ImageMaker({
     frameIndex,
     creativeId: creativeId ?? null,
     packImage: packImage ?? null,
-    specId: specId === CUSTOM ? null : specId,
+    specId: spec ?? (specId === CUSTOM ? null : specId),
     textMode: textMode === "ai" ? "ai" : "overlay",
     packMode,
     packPosition,
     packScale,
     photoId: packMode === "locked" && photoId ? photoId : null,
-    custom: specId === CUSTOM ? { w: customW, h: customH } : null,
+    custom: !spec && specId === CUSTOM ? { w: customW, h: customH } : null,
     direction: direction ?? undefined,
   });
 
@@ -118,18 +119,19 @@ export function ImageMaker({
     }
   }
 
-  async function requestImage(frameIndex: number): Promise<MadeImage & { usedPackPhoto: boolean; warning: string }> {
+  async function requestImage(frameIndex: number, spec?: string): Promise<MadeImage & { usedPackPhoto: boolean; warning: string }> {
     const res = await fetch("/api/image", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(imageBody(frameIndex)),
+      body: JSON.stringify(imageBody(frameIndex, spec)),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Couldn't make the image. Try again.");
     return { id: data.id, url: data.url, label: data.label, frameIndex, usedPackPhoto: data.usedPackPhoto || packMode === "none", warning: data.warning || "" };
   }
 
-  async function make(frames: number[]) {
+  /** frames × sizes: each size is made for its own shape (pack placed and text laid out to fit), not cropped. */
+  async function make(frames: number[], sizes: (string | undefined)[] = [undefined]) {
     setBusy(true);
     setError("");
     setNote("");
@@ -137,16 +139,20 @@ export function ImageMaker({
     let usedPack = true;
     const warnings: string[] = [];
     try {
-      for (let i = 0; i < frames.length; i++) {
-        if (frames.length > 1) setProgress(`Scene ${i + 1} of ${frames.length}…`);
-        const img = await requestImage(frames[i]);
+      const jobs = frames.flatMap((f) => sizes.map((size) => ({ f, size })));
+      for (let j = 0; j < jobs.length; j++) {
+        const { f, size } = jobs[j];
+        const i = frames.indexOf(f);
+        const sizeLabel = size ? specs.find((x) => x.id === size)?.label : "";
+        if (jobs.length > 1) setProgress(`${sizeLabel || `Scene ${i + 1}`} (${j + 1} of ${jobs.length})…`);
+        const img = await requestImage(frames[i], size);
         usedPack &&= img.usedPackPhoto;
         if (img.warning) warnings.push(img.warning);
         acc = [...acc, { id: img.id, url: img.url, label: img.label, frameIndex: img.frameIndex }];
         onImages(acc);
         if (textMode === "auto") {
           // The finished ad carries its hook: add the scene's on-screen line, CTA and logo straight away.
-          if (frames.length === 1) setProgress("Adding the hook and logo…");
+          if (jobs.length === 1) setProgress("Adding the hook and logo…");
           try {
             const t = await addTextAutomatically({
               imageUrl: img.url,
@@ -315,6 +321,17 @@ export function ImageMaker({
         <button type="button" className="btn-secondary" onClick={() => make([frame])} disabled={busy || (specId === CUSTOM && !customValid)}>
           {busy ? progress || "Making image… (up to a minute)" : images.length ? "Make another image" : "Make image"}
         </button>
+        {needed.length > 1 ? (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => make([frame], needed.map((s) => s.id))}
+            disabled={busy}
+            title={`Makes ${needed.map((s) => `${s.label} (${s.w}×${s.h})`).join(", ")}, each composed for its own shape`}
+          >
+            Make all {needed.length} sizes {platform === "meta" ? "Instagram & Facebook" : platform === "amazon" ? "Amazon" : "Flipkart"} needs
+          </button>
+        ) : null}
         {concept.frames.length > 1 ? (
           <button
             type="button"
@@ -382,6 +399,9 @@ export function ImageMaker({
       ) : specs.find((s) => s.id === specId)?.note ? (
         <p className="hint">{specs.find((s) => s.id === specId)?.note}</p>
       ) : null}
+      <p className="hint" data-testid="needed-sizes">
+        This ad runs at: {needed.map((s) => `${s.label} (${s.w}×${s.h})`).join(" · ")}.
+      </p>
       {error ? (
         <p role="alert" className="text-sm text-red">
           {error}

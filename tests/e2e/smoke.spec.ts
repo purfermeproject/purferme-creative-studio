@@ -424,6 +424,19 @@ test("By default a new image gets the hook, CTA and logo added straight away", a
   await expect(page.getByTestId("creative-preview").locator("img")).toHaveAttribute("src", /.+/);
 });
 
+test("Make all sizes: each size the platform needs is made for its own shape", async ({ page }) => {
+  await signIn(page);
+  const ws = await develop(page, { type: "Static image ad (4:5)" });
+  await expect(ws.getByTestId("needed-sizes")).toContainText("Feed 4:5 (1080×1350) · Reels / Stories 9:16 (1080×1920) · Feed / carousel card 1:1 (1080×1080)");
+  await ws.getByLabel("Text on image").first().selectOption("overlay");
+  await ws.getByRole("button", { name: "Make all 3 sizes Instagram & Facebook needs" }).click();
+  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(3, { timeout: 90_000 });
+  const dims = ws.getByTestId("image-dims");
+  await expect(dims.nth(0)).toContainText("1080×1350");
+  await expect(dims.nth(1)).toContainText("1080×1920");
+  await expect(dims.nth(2)).toContainText("1080×1080");
+});
+
 test("Make all scenes builds a storyboard and the handoff pack ZIP has everything", async ({ page }) => {
   await signIn(page);
   const ws = await develop(page, { type: "9:16 UGC-style video (15–30s)" });

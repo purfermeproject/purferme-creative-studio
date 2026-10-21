@@ -77,3 +77,15 @@ describe("checkSize", () => {
     expect(c.issues[0]).toMatch(/Not a standard Amazon shape/);
   });
 });
+
+describe("sizes each platform needs", () => {
+  it("covers Meta's feed, Reels/Stories and square placements, and the marketplace basics", async () => {
+    const { neededSpecsFor } = await import("@/lib/image-specs");
+    const size = (p: "meta" | "amazon" | "flipkart", t: string) => neededSpecsFor(p, t).map((s) => `${s.w}x${s.h}`);
+    expect(size("meta", "Static image ad (4:5)")).toEqual(["1080x1350", "1080x1920", "1080x1080"]);
+    expect(size("meta", "9:16 UGC-style video (15–30s)")).toEqual(["1080x1920", "1080x1350"]);
+    expect(size("amazon", "Listing image stack (7 images)")).toEqual(["2000x2000"]);
+    expect(size("amazon", "Sponsored Brands video (16:9, muted)")).toEqual(["1920x1080"]);
+    expect(size("flipkart", "Listing images")).toEqual(["2000x2000", "1080x1080"]);
+  });
+});

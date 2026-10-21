@@ -7,7 +7,7 @@ import { UserFacingError, isMock } from "./ai";
 import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
-import { compositePack as composite, PackPhotoError, paintAroundInputs, preparePack, type PackBox, type PackPosition, type PackScale } from "./pack-composite";
+import { compositePack as composite, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
 import { findInventedPacks } from "./pack-detect";
 
 /** Composite, turning an unusable pack photo into a message the team can act on. */
@@ -163,13 +163,12 @@ export async function generateImage(opts: {
       let made = await once(opts.prompt, opts.fallbackPrompt);
       if (opts.lockedPack) {
         // The model sometimes invents a second pack (e.g. in someone's hand). Check, and redo once if so.
-        const ours = (b: PackBox | null) => (b ? { x: b.left / opts.target.w, y: b.top / opts.target.h, w: b.width / opts.target.w, h: b.height / opts.target.h } : null);
-        let invented = await findInventedPacks(made.image, ours(made.box), opts.user);
+        let invented = await findInventedPacks(made.image, made.box, opts.user);
         if (invented.length) {
           const fix = `\n\nIMPORTANT: a previous attempt wrongly showed ${invented.join("; ")}. Show NO other jar, box, pouch, packet, bottle or label anywhere, and nobody holds any container; hands may only hold food, a spoon, toast or a cup.`;
           // Second try without showing the model our pack at all, so it has nothing to copy.
           made = await once(opts.prompt + fix, opts.fallbackPrompt ? opts.fallbackPrompt + fix : undefined, !opts.fallbackPrompt);
-          invented = await findInventedPacks(made.image, ours(made.box), opts.user);
+          invented = await findInventedPacks(made.image, made.box, opts.user);
           if (invented.length) warning = `The AI may have added packaging that isn't ours (${invented.join("; ")}). Check the image, then make another or use Edit with words to remove it.`;
         }
       }

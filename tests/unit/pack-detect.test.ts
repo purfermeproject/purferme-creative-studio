@@ -33,3 +33,14 @@ describe("telling our pack from a copy the AI drew", () => {
     expect(sameBox({ x: 0.62, y: 0.38, w: 0.18, h: 0.42 }, ours)).toBe(false);
   });
 });
+
+describe("blanking out our real pack before looking for invented ones", () => {
+  it("covers exactly our pack with flat grey and leaves the rest untouched", async () => {
+    const { blankOutPack } = await import("@/lib/pack-detect");
+    const img = await sharp({ create: { width: 200, height: 200, channels: 3, background: "#d9c7a8" } }).png().toBuffer();
+    const out = await blankOutPack(img, { left: 120, top: 80, width: 50, height: 90 });
+    const px = async (x: number, y: number) => [...(await sharp(out).extract({ left: x, top: y, width: 1, height: 1 }).removeAlpha().raw().toBuffer())];
+    expect(await px(140, 120)).toEqual([128, 128, 128]);
+    expect(await px(110, 120)).toEqual([0xd9, 0xc7, 0xa8]);
+  });
+});

@@ -49,6 +49,29 @@ export function defaultSpecFor(platform: Platform, creativeType: string): ImageS
   return pick("fk-listing");
 }
 
+/**
+ * Every size an ad of this type needs to run well on the platform, made one by one so
+ * each is composed for its own shape (not cropped from another).
+ */
+export function neededSpecsFor(platform: Platform, creativeType: string): ImageSpec[] {
+  const t = creativeType.toLowerCase();
+  const pick = (...ids: string[]) => ids.map((id) => IMAGE_SPECS[platform].find((s) => s.id === id)!);
+  if (platform === "meta") {
+    // Feed (4:5), Stories/Reels (9:16) and square placements (1:1) cover Advantage+ placements.
+    if (t.includes("video") || t.includes("reel") || t.includes("9:16")) return pick("meta-916", "meta-45");
+    return pick("meta-45", "meta-916", "meta-11");
+  }
+  if (platform === "amazon") {
+    if (t.includes("a+")) return pick("amz-aplus", "amz-aplus-banner");
+    if (t.includes("video") || t.includes("16:9")) return pick("amz-sbv");
+    if (t.includes("headline") || t.includes("custom image") || t.includes("sponsored brand")) return pick("amz-sb", "amz-listing");
+    return pick("amz-listing");
+  }
+  if (t.includes("banner")) return pick("fk-banner-wide", "fk-banner-sq");
+  if (t.includes("video") || t.includes("16:9")) return pick("fk-video");
+  return pick("fk-listing", "fk-banner-sq");
+}
+
 export type GenSize = "1024x1536" | "1536x1024" | "1024x1024";
 
 /** Closest shape the image model can produce for a target aspect ratio. */

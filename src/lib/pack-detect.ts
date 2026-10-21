@@ -67,16 +67,8 @@ export async function cropToBox(image: Buffer, box: Box): Promise<Buffer> {
 
 const ExtraPacksSchema = z.object({
   packs: z
-    .array(
-      z.object({
-        what: z.string().describe("e.g. 'kraft paper jar in a man's hand', 'snack packet on the table'"),
-        left: z.number(),
-        top: z.number(),
-        right: z.number(),
-        bottom: z.number(),
-      }),
-    )
-    .describe("Every packaged product or labelled container visible (jar, box, pouch, packet, bottle, tub), each as fractions of the image (0–1)"),
+    .array(z.object({ what: z.string().describe("e.g. 'second cookie box behind the grey block', 'jar in a man's hand'") }))
+    .describe("Every packaged product or labelled container still visible, however partly"),
 });
 
 /** True when two boxes are the same object: each covers most of the other. A copy partly behind ours is not the same. */
@@ -91,29 +83,34 @@ function overlap(a: Box, b: Box): number {
   return a.w * a.h > 0 ? (w * h) / (a.w * a.h) : 0;
 }
 
+/** The image with our real pack covered by a flat grey block, so anything pack-like left over was invented. */
+export async function blankOutPack(image: Buffer, ours: { left: number; top: number; width: number; height: number }): Promise<Buffer> {
+  const block = await sharp({ create: { width: ours.width, height: ours.height, channels: 3, background: "#808080" } }).png().toBuffer();
+  return sharp(image).composite([{ input: block, left: ours.left, top: ours.top }]).png().toBuffer();
+}
+
 /**
- * Packaging the image model invented: any labelled container that isn't our real pack
- * (which sits at `ours`, as fractions of the image). Empty in mock mode, without a key, or on error,
- * so a failed check never blocks an image.
+ * Packaging the image model invented. Our real pack (at `ours`, in pixels) is blanked out first, so a copy
+ * peeking out behind it, a second box beside it or a jar in someone's hand is all that can be found.
+ * Empty in mock mode, without a key, or on error, so a failed check never blocks an image.
  */
-export async function findInventedPacks(image: Buffer, ours: Box | null, user: string): Promise<string[]> {
+export async function findInventedPacks(image: Buffer, ours: { left: number; top: number; width: number; height: number } | null, user: string): Promise<string[]> {
   if (isMock() || (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY)) return [];
-  const small = await sharp(image).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
   try {
+    const masked = ours ? await blankOutPack(image, ours) : image;
+    const small = await sharp(masked).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88 }).toBuffer();
     const r = await structuredCall({
       schema: ExtraPacksSchema,
-      prompt: `List every packaged product or labelled container in this advertising image: jars, boxes, pouches, packets, bottles, tubs or wrappers, including ones held in hands or in the background. Ignore plain cups, mugs, plates, bowls, glasses and cutlery.
-Give each one's rectangle as fractions of the image size (left/right of the width, top/bottom of the height). Return an empty list if there are none.`,
+      prompt: `This is an advertising image.${ours ? " One area is covered by a flat grey block on purpose: ignore the grey block itself." : ""}
+List every packaged product or labelled container you can still see: boxes, cartons, jars, pouches, packets, bottles, tubs or wrappers, including any edge or corner of a box peeking out from behind${ours ? " or beside the grey block" : " another object"}, ones held in hands, and ones in the background. Look closely at the edges around the grey block.
+Ignore plain cups, mugs, plates, bowls, glasses, cutlery, laptops and books. Return an empty list if there are none.`,
       image: { mediaType: "image/jpeg", base64: small.toString("base64") },
-      maxTokens: 1500,
+      maxTokens: 1200,
       effort: "low",
       meta: { user, kind: "pack-check" },
       mock: () => ({ packs: [] }),
     });
-    return r.packs
-      .map((p) => ({ what: p.what, box: cleanBox({ x: p.left, y: p.top, w: p.right - p.left, h: p.bottom - p.top }) }))
-      .filter((p) => p.box && !(ours && sameBox(p.box, ours)))
-      .map((p) => p.what);
+    return r.packs.map((p) => p.what).filter(Boolean);
   } catch (e) {
     console.error("pack check failed", e);
     return [];
