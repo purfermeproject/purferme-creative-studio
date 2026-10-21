@@ -574,6 +574,8 @@ test("Competitors: found automatically for a product category, broken down, and 
   await expect(context.getByTestId("landscape-preview")).toContainText("The healthy cookie your family deserves");
   await fillBrief(page, { product: "Peanut Butter Unsweetened 500g" });
   await expect(page.getByTestId("landscape-missing")).toBeVisible();
+  // The focus list only offers competitors of the selected product.
+  await expect(page.getByLabel(/Focus on one competitor/)).toHaveCount(0);
   await fillBrief(page, { product: "Chocolate Cookies, millet & oats, 240g" });
   const withLandscape = page.waitForRequest((r) => r.url().endsWith("/api/generate") && (r.postData() ?? "").includes('"useLandscape":true'));
   await page.getByRole("button", { name: "Propose 3 concepts" }).click();
@@ -610,6 +612,7 @@ test("Competitors: found automatically for a product category, broken down, and 
   // Adding one by hand still works.
   await page.getByText("Add one yourself").click();
   const form = page.getByRole("form", { name: "Add a competitor ad" });
+  await form.getByLabel("Our product it competes with").selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
   await form.getByLabel("Brand").fill("Crunchy Co");
   await form.getByLabel("Link").fill("ftp://nope");
   await form.getByRole("button", { name: "Save and analyse" }).click();

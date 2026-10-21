@@ -14,9 +14,11 @@ export async function listCompetitors() {
 }
 
 /** The analysed competitor ad as prompt context, or null. */
-export async function competitorContext(id: string): Promise<CompetitorContext | null> {
+export async function competitorContext(id: string, product?: { id: string; name: string }): Promise<CompetitorContext | null> {
   const [c] = await db.select().from(schema.competitorAds).where(eq(schema.competitorAds.id, id));
   if (!c?.analysis) return null;
+  // A competitor of another product is ignored rather than steering this brief.
+  if (product && !matchesProduct(c, product)) return null;
   return {
     brand: c.brand,
     summary: c.analysis.summary,

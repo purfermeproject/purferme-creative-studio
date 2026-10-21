@@ -79,3 +79,12 @@ describe("platform-wise research", () => {
     expect(block).toContain("Say which in based_on");
   });
 });
+
+describe("competitors per product", () => {
+  it("matches linked products, category for older research, and unlinked hand-added entries everywhere", () => {
+    const bar = { id: "bar", name: "PuŕGrain Millet Bar, 10g protein" };
+    expect(matchesProduct({ productId: null, productIds: ["choc"], category: "chocolate cookies" }, bar)).toBe(false);
+    expect(matchesProduct({ productId: null, productIds: [], category: "chocolate cookies, millet & oats" }, bar)).toBe(false);
+    expect(matchesProduct({ productId: null, productIds: [], category: "" }, bar)).toBe(true);
+  });
+});

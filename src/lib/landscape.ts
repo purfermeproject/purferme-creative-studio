@@ -8,6 +8,8 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
 /** Research made for this product, or (older entries) for its category. */
 export function matchesProduct(row: { productId: string | null; productIds?: string[]; category: string }, product: { id: string; name: string }): boolean {
   if (row.productIds?.length || row.productId) return Boolean(row.productIds?.includes(product.id) || row.productId === product.id);
+  // Added by hand without a product or category: it applies to every product.
+  if (!row.category.trim()) return true;
   const cat = norm(row.category);
   const mine = norm(categoryFrom(product.name));
   return Boolean(cat) && (cat === mine || mine.includes(cat) || cat.includes(mine));

@@ -150,7 +150,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       user={user ?? ""}
       initialCreative={initialCreative}
       recent={recent}
-      competitors={competitorRows.map((c) => ({ id: c.id, brand: c.brand, product: c.product, channel: c.channel }))}
+      competitors={competitorRows.map((c) => ({ id: c.id, brand: c.brand, product: c.product, channel: c.channel, productId: c.productId, productIds: c.productIds, category: c.category }))}
       playbooks={playbookRows.map((p) => ({ platform: p.platform, productId: p.productId, category: p.category, date: p.createdAt.toISOString() }))}
       landscapes={landscapes}
       competitorLines={linesByProduct}

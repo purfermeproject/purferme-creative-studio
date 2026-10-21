@@ -93,7 +93,7 @@ export function CreativePreview({
               <p className="text-ink-soft">{productName}</p>
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{priceText || "Price on listing"}</span>
-                <span className="rounded-full bg-gold px-3 py-1 text-xs font-semibold text-purple">{s.copy.cta || "Shop now"}</span>
+                <span className="rounded-full bg-gold px-3 py-1 text-xs font-semibold text-[#2d1b54]">{s.copy.cta || "Shop now"}</span>
               </div>
             </>
           )}

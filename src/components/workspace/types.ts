@@ -21,7 +21,7 @@ export type ProductCard = {
   photos: { id: string; url: string; label: string }[];
 };
 
-export type CompetitorOption = { id: string; brand: string; product: string; channel: string };
+export type CompetitorOption = { id: string; brand: string; product: string; channel: string; productId: string | null; productIds: string[]; category: string };
 
 export type PackUpload = { mediaType: "image/png" | "image/jpeg" | "image/webp"; base64: string; name: string };
 

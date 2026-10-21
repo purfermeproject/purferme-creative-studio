@@ -455,6 +455,19 @@ export function CompetitorsClient({
         >
           <h2 className="display text-xl">Add a competitor ad</h2>
           <div>
+            <label htmlFor="c-for" className="label">
+              Our product it competes with
+            </label>
+            <select id="c-for" name="productId" className="input" defaultValue={products[0]?.id ?? ""}>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+              <option value="">All our products</option>
+            </select>
+          </div>
+          <div>
             <label htmlFor="c-brand" className="label">
               Brand
             </label>

@@ -5,6 +5,7 @@ import { PLACEMENTS } from "@/lib/placements";
 import { AUTO } from "@/lib/prompts";
 import { DELIVERABLES, OBJECTIVES, PLATFORMS, type Deliverable, type Objective, type Platform } from "@/lib/types";
 import Link from "next/link";
+import { matchesProduct } from "@/lib/landscape";
 import type { Brief, CompetitorOption, LandscapeSummary, PlaybookOption, ProductCard } from "./types";
 
 const PLATFORM_NAMES: Record<Platform, { title: string; sub: string }> = {
@@ -97,6 +98,8 @@ export function BriefPanel({
   const placements = PLACEMENTS[brief.platform];
   const plain = (xs: string[]) => xs.map((x) => ({ value: x, label: x }));
   const types = creativeTypes[brief.platform];
+  // Only competitors researched for the selected product.
+  const forProduct = product ? competitors.filter((c) => matchesProduct(c, product)) : [];
   // Same choice as the server: research for this product if there is some, else category-only research.
   const market = brief.platform === "meta" ? null : brief.platform;
   const forPlatform = playbooks.filter((p) => p.platform === market);
@@ -285,18 +288,17 @@ export function BriefPanel({
               and every idea will be built to stand apart from them.
             </p>
           )}
-          {competitors.length ? (
+          {forProduct.length ? (
             <div>
               <label htmlFor="competitor" className="text-xs font-semibold text-ink">
                 Focus on one competitor <span className="font-normal text-ink-soft">(optional)</span>
               </label>
               <select id="competitor" className="input mt-1 py-1.5 text-sm" value={brief.competitorId} onChange={(e) => set({ competitorId: e.target.value })}>
                 <option value="">No single focus</option>
-                {competitors.map((c) => (
+                {forProduct.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.brand}
-                    {c.product ? ` · ${c.product}` : ""}
-                    {c.channel ? ` (${c.channel})` : ""}
+                    {c.channel ? ` · ${c.channel.split(",")[0].trim()}` : ""}
                   </option>
                 ))}
               </select>

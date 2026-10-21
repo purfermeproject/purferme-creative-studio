@@ -17,6 +17,8 @@ const Fields = z.object({
     .default("")
     .refine((v) => !v || /^https?:\/\//i.test(v), "The link must start with http:// or https://."),
   notes: z.string().trim().max(2000).default(""),
+  /** Which of our products it competes with ("" = all of them). */
+  productId: z.union([z.string().uuid(), z.literal("")]).default(""),
 });
 
 /** Saves a competitor ad (text and/or screenshot). Analysis is a separate call. */
@@ -42,7 +44,11 @@ export async function POST(req: Request) {
       if (!mime) return Response.json({ error: "Use a PNG, JPG, WebP or GIF screenshot." }, { status: 400 });
       imageAssetId = (await storeAsset({ data: Buffer.from(await file.arrayBuffer()), mime, kind: "competitor", label: `Competitor: ${parsed.data.brand}`, user })).id;
     }
-    const [row] = await db.insert(schema.competitorAds).values({ ...parsed.data, imageAssetId, createdBy: user }).returning({ id: schema.competitorAds.id });
+    const { productId, ...fields } = parsed.data;
+    const [row] = await db
+      .insert(schema.competitorAds)
+      .values({ ...fields, imageAssetId, productId: productId || null, productIds: productId ? [productId] : [], createdBy: user })
+      .returning({ id: schema.competitorAds.id });
     return Response.json({ id: row.id });
   } catch (e) {
     return Response.json({ error: errorMessage(e) }, { status: 500 });

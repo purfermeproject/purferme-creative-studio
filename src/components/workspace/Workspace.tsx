@@ -23,6 +23,7 @@ import { BriefPanel } from "./BriefPanel";
 import { CopyBlockView, CreativePreview, SceneList } from "./CreativePreview";
 import { EditorForm } from "./EditorForm";
 import { HistoryPanel } from "./HistoryPanel";
+import { matchesProduct } from "@/lib/landscape";
 import type { Brief, CompetitorOption, InitialBrief, InitialIdeas, LandscapeSummary, OpenCreative, PlaybookOption, ProductCard, RecentCreative, ScoredProposal } from "./types";
 import { ProposalVisual, sketchRatio } from "./ProposalVisual";
 import type { MadeImage } from "@/components/ImageMaker";
@@ -283,6 +284,12 @@ export function Workspace({
   function setBriefPatch(patch: Partial<Brief>) {
     setBrief((b) => {
       const next = { ...b, ...patch };
+      // A competitor focus only makes sense for the product it was researched for.
+      if (patch.productId && patch.productId !== b.productId && next.competitorId) {
+        const p = products.find((x) => x.id === patch.productId);
+        const c = competitors.find((x) => x.id === next.competitorId);
+        if (!p || !c || !matchesProduct(c, p)) next.competitorId = "";
+      }
       if (patch.platform && patch.platform !== b.platform) {
         applyPlatform(patch.platform);
         next.creativeType = creativeTypes[patch.platform][0] ?? "";
@@ -916,7 +923,7 @@ export function Workspace({
                     ["Check and approve", "Claims are checked against the product library; uncertain ones go to a person."],
                   ].map(([t, d], i) => (
                     <li key={t} className="flex gap-3">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-gold font-serif text-sm font-semibold text-purple">{i + 1}</span>
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-gold font-serif text-sm font-semibold text-[#2d1b54]">{i + 1}</span>
                       <span className="text-sm">
                         <strong className="block text-ink">{t}</strong>
                         <span className="text-ink-soft">{d}</span>
