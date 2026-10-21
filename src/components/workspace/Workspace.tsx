@@ -29,6 +29,7 @@ import { ProposalVisual, sketchRatio } from "./ProposalVisual";
 import type { MadeImage } from "@/components/ImageMaker";
 import { findPlacement } from "@/lib/placements";
 import type { Concept } from "@/lib/schemas";
+import { addTextAutomatically, defaultOverlay } from "@/components/OverlayEditor";
 import { useAutosave, type SaveState } from "./useAutosave";
 import { ValidationPanel } from "./ValidationPanel";
 
@@ -335,7 +336,7 @@ export function Workspace({
   });
 
   // Images made for proposals (before developing), keyed by proposal title.
-  const [proposalImages, setProposalImages] = useState<Record<string, { image: MadeImage | null; busy: boolean; error: string }>>({});
+  const [proposalImages, setProposalImages] = useState<Record<string, { image: MadeImage | null; withText?: MadeImage | null; busy: boolean; error: string }>>({});
   const [firstImage, setFirstImage] = useState<{ busy: boolean; error: string }>({ busy: false, error: "" });
 
   const placementSpec = (platform: Platform, placement: string) => findPlacement(platform, placement)?.specId ?? null;
@@ -345,6 +346,28 @@ export function Workspace({
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error ?? "Couldn't make the image.");
     return { id: data.id, url: data.url, label: data.label, frameIndex: 0 };
+  }
+
+  /** The same image with the hook, CTA and logo on it (the pack sits at the bottom, so the text goes on top). Null if it can't be drawn. */
+  async function withHook(image: MadeImage, concept: Pick<Concept, "hook" | "frames" | "copy">, creativeId: string | null): Promise<MadeImage | null> {
+    const onscreen = concept.frames[0]?.onscreen;
+    try {
+      const t = await addTextAutomatically({
+        imageUrl: image.url,
+        kit,
+        options: defaultOverlay(
+          kit,
+          { headline: onscreen || concept.hook, sub: concept.copy.headline && concept.copy.headline !== (onscreen || concept.hook) ? concept.copy.headline : "", cta: concept.copy.cta || "Shop now" },
+          true,
+        ),
+        label: image.label ?? "Image",
+        creativeId,
+        frameIndex: 0,
+      });
+      return { ...t, frameIndex: 0 };
+    } catch {
+      return null;
+    }
   }
 
   const proposalConcept = (p: Proposal): Concept => ({
@@ -377,7 +400,8 @@ export function Workspace({
         packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
         packMode: "locked",
       });
-      setProposalImages((m) => ({ ...m, [p.title]: { image, busy: false, error: "" } }));
+      const withText = await withHook(image, proposalConcept(p), null);
+      setProposalImages((m) => ({ ...m, [p.title]: { image, withText, busy: false, error: "" } }));
     } catch (e) {
       setProposalImages((m) => ({ ...m, [p.title]: { image: null, busy: false, error: e instanceof Error ? e.message : "Couldn't make the image." } }));
     }
@@ -400,6 +424,8 @@ export function Workspace({
         packMode: "locked",
       });
       setCreative((cur) => (cur && cur.id === c.id ? { ...cur, images: [...cur.images, image] } : cur));
+      const withText = await withHook(image, snapshotToConcept(c.snapshot), c.id);
+      if (withText) setCreative((cur) => (cur && cur.id === c.id ? { ...cur, images: [...cur.images, withText] } : cur));
       setFirstImage({ busy: false, error: "" });
     } catch (e) {
       setFirstImage({ busy: false, error: e instanceof Error ? e.message : "Couldn't make the first image." });
@@ -446,9 +472,11 @@ export function Workspace({
     setLastProposal(p);
     const prod = product!;
     const carried = proposalImages[p.title]?.image;
+    const carriedText = proposalImages[p.title]?.withText;
+    const carriedAll = [carried, carriedText].filter((x): x is MadeImage => Boolean(x));
     try {
       const done = await stream<{ creative: { id: string; revision: number; status: CreativeStatus }; concept: ReturnType<typeof snapshotToConcept>; mock: boolean }>(
-        requestBody({ mode: "develop", proposal: p, imageIds: carried ? [carried.id] : undefined }),
+        requestBody({ mode: "develop", proposal: p, imageIds: carriedAll.length ? carriedAll.map((i) => i.id) : undefined }),
         `Developing “${p.title}”`,
         1,
       );
@@ -464,7 +492,7 @@ export function Workspace({
         status: done.creative.status,
         revision: done.creative.revision,
         snapshot: conceptToSnapshot(done.concept),
-        images: carried ? [carried] : [],
+        images: carriedAll,
         qaChecked: [],
         claimsReviewedBy: "",
         approvedBy: "",
@@ -864,7 +892,7 @@ export function Workspace({
                           hook={p.hook}
                           packUrl={product?.packImageUrl ?? null}
                           ratio={sketchRatio(brief.platform, brief.placement, brief.creativeType)}
-                          image={proposalImages[p.title]?.image ?? null}
+                          image={proposalImages[p.title]?.withText ?? proposalImages[p.title]?.image ?? null}
                           busy={Boolean(proposalImages[p.title]?.busy)}
                           error={proposalImages[p.title]?.error ?? ""}
                           canMake={canGenerate && !working}
@@ -899,7 +927,7 @@ export function Workspace({
                           hook={p.hook}
                           packUrl={product?.packImageUrl ?? null}
                           ratio={sketchRatio(brief.platform, brief.placement, brief.creativeType)}
-                          image={proposalImages[p.title]?.image ?? null}
+                          image={proposalImages[p.title]?.withText ?? proposalImages[p.title]?.image ?? null}
                           busy={Boolean(proposalImages[p.title]?.busy)}
                           error={proposalImages[p.title]?.error ?? ""}
                           canMake={canGenerate && !working}

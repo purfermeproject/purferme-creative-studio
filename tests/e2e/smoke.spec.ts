@@ -513,7 +513,7 @@ test("Original pack is placed unchanged, and images with it can't be AI-edited",
   expect((await res.json()).error).toContain("real pack");
 });
 
-test("Proposals show the real pack; a proposal image carries into the ad; the first image can be automatic", async ({ page }) => {
+test("Proposals show the real pack; a proposal image (with its hook) carries into the ad; the first image can be automatic, with its hook", async ({ page }) => {
   await signIn(page);
   await page.goto("/create");
   await fillBrief(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
@@ -525,15 +525,17 @@ test("Proposals show the real pack; a proposal image carries into the ad; the fi
   await expect(first.getByTestId("proposal-image")).toBeVisible({ timeout: 60_000 });
   await first.getByRole("button", { name: /^Develop as/ }).click();
   const ws = page.getByTestId("workspace-creative");
-  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1, { timeout: 60_000 });
+  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(2, { timeout: 60_000 });
   await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack");
+  await expect(ws.getByTestId("image-dims").nth(1)).toContainText("with text");
   await expect(page.getByTestId("creative-preview").locator("img")).toHaveCount(1);
   await page.reload();
-  await expect(page.getByTestId("workspace-creative").getByTestId("image-gallery").locator("img")).toHaveCount(1);
+  await expect(page.getByTestId("workspace-creative").getByTestId("image-gallery").locator("img")).toHaveCount(2);
 
   const auto = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", autoImage: true });
-  await expect(auto.getByTestId("image-gallery").locator("img")).toHaveCount(1, { timeout: 60_000 });
+  await expect(auto.getByTestId("image-gallery").locator("img")).toHaveCount(2, { timeout: 60_000 });
   await expect(auto.getByTestId("image-dims").first()).toContainText("original pack");
+  await expect(auto.getByTestId("image-dims").nth(1)).toContainText("with text");
 });
 
 test("A pack photo on a plain backdrop is cut out automatically on upload, with the original kept", async ({ page }) => {
