@@ -78,6 +78,19 @@ test("unauthenticated visitors are sent to login, and unknown emails are refused
   await expect(page.getByText("isn't on the team list")).toBeVisible();
 });
 
+test("Tools menu opens visibly (not clipped by the scrolling nav strip) on desktop and phone", async ({ page }) => {
+  await signIn(page);
+  for (const size of [{ width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(size);
+    await page.getByRole("button", { name: /Tools/ }).click();
+    const menu = page.getByTestId("tools-menu");
+    await expect(menu).toBeInViewport({ ratio: 0.9 });
+    await menu.getByRole("link", { name: /Claim checker/ }).click();
+    await expect(page).toHaveURL(/\/check/);
+    await page.goto("/create");
+  }
+});
+
 test("workflow: brief → 3 proposals → develop → saved draft with version 1, clearly marked as mock", async ({ page }) => {
   await signIn(page);
   await expect(page.getByTestId("empty-state")).toBeVisible();

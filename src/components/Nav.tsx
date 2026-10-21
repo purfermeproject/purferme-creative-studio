@@ -25,7 +25,11 @@ const isActive = (pathname: string, href: string) =>
 export function Nav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  // Where the menu opens. It is fixed to the window: the nav strip scrolls sideways on phones,
+  // and a menu inside it would be clipped (it opened invisibly).
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
   const toolActive = TOOLS.some((t) => isActive(pathname, t.href));
 
   useEffect(() => {
@@ -36,11 +40,16 @@ export function Nav() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
+    const close = () => setOpen(false);
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close);
     };
   }, [open]);
 
@@ -60,11 +69,22 @@ export function Nav() {
         );
       })}
       <div ref={ref} className="relative">
-        <button type="button" aria-expanded={open} aria-haspopup="true" onClick={() => setOpen((o) => !o)} className={linkCls(toolActive)}>
+        <button
+          ref={button}
+          type="button"
+          aria-expanded={open}
+          aria-haspopup="true"
+          onClick={() => {
+            const r = button.current?.getBoundingClientRect();
+            if (r) setAt({ top: r.bottom + 4, left: Math.max(8, Math.min(r.left, window.innerWidth - 264)) });
+            setOpen((o) => !o);
+          }}
+          className={linkCls(toolActive)}
+        >
           Tools <span aria-hidden>▾</span>
         </button>
-        {open ? (
-          <ul className="absolute right-0 z-20 mt-1 w-64 rounded-xl border border-line bg-surface p-1 shadow-lg sm:left-0">
+        {open && at ? (
+          <ul className="fixed z-50 w-64 rounded-xl border border-line bg-surface p-1 shadow-lg" style={{ top: at.top, left: at.left }} data-testid="tools-menu">
             {TOOLS.map((t) => (
               <li key={t.href}>
                 <Link
