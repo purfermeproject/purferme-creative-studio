@@ -29,10 +29,53 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/** Default text options for an image: hook as the headline, at the top when the pack sits at the bottom. */
+export function defaultOverlay(kit: BrandKit, d: { headline: string; sub: string; cta: string }, packAtBottom: boolean): OverlayOptions {
+  return {
+    layout: packAtBottom ? "top" : "band",
+    headline: d.headline,
+    sub: d.sub,
+    cta: d.cta || "Shop now",
+    showCta: true,
+    logoCorner: kit.logoUrl ? (packAtBottom ? "bottom-left" : "top-left") : "none",
+    textScale: 1,
+    bandOpacity: 0.85,
+  };
+}
+
+/** Adds the hook, CTA and logo to an image without opening the editor, and saves it as a "with text" version. */
+export async function addTextAutomatically(opts: {
+  imageUrl: string;
+  kit: BrandKit;
+  options: OverlayOptions;
+  label: string;
+  creativeId?: string | null;
+  frameIndex?: number | null;
+}): Promise<{ id: string; url: string; label: string }> {
+  const [base, logo] = await Promise.all([loadImage(opts.imageUrl), opts.kit.logoUrl ? loadImage(opts.kit.logoUrl).catch(() => null) : Promise.resolve(null)]);
+  await Promise.all([loadBrandFont(opts.kit.headingFont), loadBrandFont(opts.kit.bodyFont)]);
+  const c = document.createElement("canvas");
+  c.width = base.naturalWidth;
+  c.height = base.naturalHeight;
+  const ctx = c.getContext("2d");
+  if (!ctx) throw new Error("Couldn't draw the text.");
+  drawOverlay(ctx, base, logo, opts.kit, opts.options, c.width, c.height);
+  const blob = await new Promise<Blob | null>((r) => c.toBlob(r, "image/jpeg", 0.92));
+  if (!blob) throw new Error("Couldn't export the image.");
+  const label = `${opts.label} · with text`;
+  const a = await uploadAsset(
+    blob,
+    { kind: "overlay", label, ...(opts.creativeId ? { creativeId: opts.creativeId } : {}), ...(opts.frameIndex != null ? { frameIndex: String(opts.frameIndex) } : {}) },
+    "overlay.jpg",
+  );
+  return { id: a.id, url: a.url, label };
+}
+
 export function OverlayEditor({
   imageUrl,
   kit,
   defaults,
+  packAtBottom = false,
   creativeId,
   frameIndex,
   baseLabel,
@@ -42,6 +85,7 @@ export function OverlayEditor({
   imageUrl: string;
   kit: BrandKit;
   defaults: { headline: string; sub: string; cta: string };
+  packAtBottom?: boolean;
   creativeId?: string | null;
   frameIndex?: number | null;
   baseLabel?: string;
@@ -54,16 +98,7 @@ export function OverlayEditor({
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [o, setO] = useState<OverlayOptions>({
-    layout: "band",
-    headline: defaults.headline,
-    sub: defaults.sub,
-    cta: defaults.cta || "Shop now",
-    showCta: true,
-    logoCorner: kit.logoUrl ? "top-left" : "none",
-    textScale: 1,
-    bandOpacity: 0.85,
-  });
+  const [o, setO] = useState<OverlayOptions>(() => defaultOverlay(kit, defaults, packAtBottom));
 
   useEffect(() => {
     let alive = true;

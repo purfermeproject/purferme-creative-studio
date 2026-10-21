@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { BrandKit } from "@/lib/brand-kit";
 import { defaultSpecFor, IMAGE_SPECS, MAX_SIDE, MIN_SIDE } from "@/lib/image-specs";
 import { findPlacement } from "@/lib/placements";
-import { OverlayEditor } from "./OverlayEditor";
+import { OverlayEditor, addTextAutomatically, defaultOverlay } from "./OverlayEditor";
 import { PlacementPreview } from "./PlacementPreview";
 import type { Concept } from "@/lib/schemas";
 import type { Platform } from "@/lib/types";
@@ -50,7 +50,7 @@ export function ImageMaker({
   const [working, setWorking] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
-  const [textMode, setTextMode] = useState<"overlay" | "ai">("overlay");
+  const [textMode, setTextMode] = useState<"auto" | "overlay" | "ai">("auto");
   const [packMode, setPackMode] = useState<"locked" | "none">("locked");
   const [packPosition, setPackPosition] = useState<"right" | "center" | "left">("right");
   const [packScale, setPackScale] = useState<"small" | "medium" | "large">("medium");
@@ -88,7 +88,7 @@ export function ImageMaker({
     creativeId: creativeId ?? null,
     packImage: packImage ?? null,
     specId: specId === CUSTOM ? null : specId,
-    textMode,
+    textMode: textMode === "ai" ? "ai" : "overlay",
     packMode,
     packPosition,
     packScale,
@@ -118,7 +118,7 @@ export function ImageMaker({
     }
   }
 
-  async function requestImage(frameIndex: number): Promise<MadeImage & { usedPackPhoto: boolean }> {
+  async function requestImage(frameIndex: number): Promise<MadeImage & { usedPackPhoto: boolean; warning: string }> {
     const res = await fetch("/api/image", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -126,7 +126,7 @@ export function ImageMaker({
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Couldn't make the image. Try again.");
-    return { id: data.id, url: data.url, label: data.label, frameIndex, usedPackPhoto: data.usedPackPhoto || packMode === "none" };
+    return { id: data.id, url: data.url, label: data.label, frameIndex, usedPackPhoto: data.usedPackPhoto || packMode === "none", warning: data.warning || "" };
   }
 
   async function make(frames: number[]) {
@@ -135,21 +135,52 @@ export function ImageMaker({
     setNote("");
     let acc = [...images];
     let usedPack = true;
+    const warnings: string[] = [];
     try {
       for (let i = 0; i < frames.length; i++) {
         if (frames.length > 1) setProgress(`Scene ${i + 1} of ${frames.length}…`);
         const img = await requestImage(frames[i]);
         usedPack &&= img.usedPackPhoto;
+        if (img.warning) warnings.push(img.warning);
         acc = [...acc, { id: img.id, url: img.url, label: img.label, frameIndex: img.frameIndex }];
         onImages(acc);
+        if (textMode === "auto") {
+          // The finished ad carries its hook: add the scene's on-screen line, CTA and logo straight away.
+          if (frames.length === 1) setProgress("Adding the hook and logo…");
+          try {
+            const t = await addTextAutomatically({
+              imageUrl: img.url,
+              kit,
+              options: defaultOverlay(kit, textDefaults(frames[i]), packMode === "locked"),
+              label: img.label ?? "Image",
+              creativeId,
+              frameIndex: frames[i],
+            });
+            acc = [...acc, { ...t, frameIndex: frames[i] }];
+            onImages(acc);
+          } catch {
+            warnings.push("Couldn't add the text automatically; use Add text on the image.");
+          }
+        }
       }
-      if (!usedPack) setNote("No pack photo on file, so the pack was left out. Add one in Tools → Settings → Products to place the real pack in images.");
+      if (!usedPack) warnings.push("No pack photo on file, so the pack was left out. Add one in Tools → Settings → Products to place the real pack in images.");
+      if (warnings.length) setNote(warnings.join(" "));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't make the image. Try again.");
     } finally {
       setBusy(false);
       setProgress("");
     }
+  }
+
+  /** The words for a scene's image: its on-screen line (the hook on scene 1), headline as the sub-line, and the CTA. */
+  function textDefaults(frameIndex: number) {
+    const onscreen = concept.frames[frameIndex]?.onscreen;
+    return {
+      headline: onscreen || (frameIndex === 0 ? concept.hook : "") || concept.copy.headline || concept.hook,
+      sub: concept.copy.headline && concept.copy.headline !== onscreen ? concept.copy.headline : "",
+      cta: concept.copy.cta || "Shop now",
+    };
   }
 
   async function post(url: string, body: unknown) {
@@ -235,7 +266,8 @@ export function ImageMaker({
           Text on image
         </label>
         <select id={`text-${concept.title}`} className="input w-auto py-1.5 text-sm" value={textMode} onChange={(e) => setTextMode(e.target.value as "overlay" | "ai")}>
-          <option value="overlay">Text: add crisp brand text after</option>
+          <option value="auto">Text: add the hook and logo automatically</option>
+          <option value="overlay">Text: I&apos;ll add it after</option>
           <option value="ai">Text: AI draws it in the image</option>
         </select>
         <label htmlFor={`pack-${concept.title}`} className="sr-only">
@@ -504,11 +536,8 @@ export function ImageMaker({
           creativeId={creativeId}
           frameIndex={editing.frameIndex ?? null}
           baseLabel={editing.label}
-          defaults={{
-            headline: concept.frames[editing.frameIndex ?? 0]?.onscreen || concept.copy.headline || concept.hook,
-            sub: concept.copy.headline && concept.copy.headline !== concept.frames[editing.frameIndex ?? 0]?.onscreen ? concept.copy.headline : "",
-            cta: concept.copy.cta || "Shop now",
-          }}
+          defaults={textDefaults(editing.frameIndex ?? 0)}
+          packAtBottom={Boolean(editing.label?.includes("original pack"))}
           onSaved={(img) => onImages([...images, { ...img, frameIndex: editing.frameIndex ?? null }])}
           onClose={() => setEditing(null)}
         />

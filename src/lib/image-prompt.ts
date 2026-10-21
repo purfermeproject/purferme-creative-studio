@@ -6,12 +6,24 @@ import { PLATFORM_LABELS, type Platform } from "./types";
 const PACK_WORDS = "pack(?:et)?s?|pouch(?:es)?|box(?:es)?|jars?|wrappers?|cartons?|packaging|tins?|tubs?";
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Scene text with every mention of the pack replaced, so the model leaves the spot empty instead of drawing one. */
+const HANDLING =
+  "(?:hold|holds|holding|pick(?:s|ing)?\\s+up|read|reads|reading|flip|flips|flipping|turn|turns|turning|open|opens|opening|show|shows|showing|grab|grabs|grabbing|lift|lifts|lifting|shake|shakes|shaking|scan|scans|scanning|point(?:s|ing)?\\s+(?:at|to)|examin(?:e|es|ing)|inspect(?:s|ing)?)";
+
+/**
+ * Scene text with every mention of the pack replaced, so the model leaves the spot empty instead of drawing one.
+ * Someone "holding/reading/flipping the pack" would make the model paint a second, invented pack in their
+ * hands, so those actions become a glance at the pack standing on the surface.
+ */
 export function withoutPack(text: string, productName: string, replacement = "[empty spot: the real pack is added later]"): string {
   const name = escapeRe(productName.trim());
+  const pack = `(?:the\\s+|a\\s+|an\\s+|our\\s+|his\\s+|her\\s+|their\\s+)?(?:${name}\\s*)?(?:${PACK_WORDS})`;
+  const glance = replacement.startsWith("[empty") ? "glances toward the empty spot on the table (hands empty of any jar, box or packet)" : "glances at our pack standing on the table (nobody holds it)";
+  const part = "(?:the\\s+)?(?:label|back|front|ingredients?(?:\\s+list)?|nutrition(?:\\s+panel)?)\\s+(?:on|of)\\s+";
   return text
+    .replace(new RegExp(`\\b${HANDLING}\\s+(?:up\\s+)?(?:${part})?${pack}\\b(?:\\s+up\\b)?`, "gi"), "\u0000")
     .replace(new RegExp(`\\b(?:the\\s+)?(?:${name}\\s*)?(?:${PACK_WORDS})\\b`, "gi"), replacement)
-    .replace(new RegExp(name, "gi"), "the product");
+    .replace(new RegExp(name, "gi"), "the product")
+    .replaceAll("\u0000", glance);
 }
 
 export type ImageSize = `${number}x${number}`;
@@ -102,15 +114,18 @@ export function buildImagePromptParts(opts: ImagePromptOpts): { direction: strin
         ? "Main listing image: keep the pack and make everything else plain pure white, with only a very soft natural shadow under the pack; no props, no text."
         : "Main listing image: a plain pure white background only, no objects, no props, no text (the pack is added afterwards)."
       : "",
+    inScene && !isMainListing
+      ? "Compose it as an ad, not a candid photo: our pack is the hero and the eye lands on it first. The action happens right beside it and leads to it (a hand spreading the product on toast, a spoon dipping into a small bowl of it, a piece broken over a cup). People are secondary: they sit beside or behind the pack, never overlapped or cut by it, and look toward the food or the pack."
+      : "",
     inScene
       ? "Apart from our real pack, nobody holds, carries or shows any packaged product (no pouches, boxes, wrappers, jars or snack packets) and there are no other brand names or logos."
       : "Nobody holds, carries or shows any packaged product: no pouches, boxes, wrappers, jars or snack packets anywhere, and no brand names or logos. Never invent packaging: only the brand's real pack photo is ever used.",
-    "No close-ups of the product itself (cookies, spread, bars): if food appears, keep it small and natural in the scene, so it can't be mistaken for the real product shot.",
+    "Food from the product (the spread on a spoon or toast, a broken cookie, a bar) may be shown close and appetising, but true to the real product: its real colour and texture, no exaggerated styling, nothing it doesn't contain.",
     isMainListing
       ? "No added text other than what is printed on the pack."
       : opts.textMode === "ai" && text
         ? `On-image text, rendered exactly, large and legible on a phone: "${text}". No other words except what is printed on the pack.`
-        : "Do not render any added words, letters, numbers, prices, badges or logos anywhere (only what is physically printed on the pack). Leave a calm, uncluttered area across the lower third for a headline that will be added afterwards.",
+        : `Do not render any added words, letters, numbers, prices, badges or logos anywhere (only what is physically printed on the pack). Leave a calm, uncluttered area across the ${locked ? "top quarter" : "lower third"} for a headline that will be added afterwards.`,
     platform === "amazon" || c.needs_real_person
       ? "No people's faces; if hands are needed, show only hands."
       : "If a person appears, keep them natural and incidental; no doctors, experts or before/after framing.",

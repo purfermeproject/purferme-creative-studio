@@ -7,7 +7,8 @@ import { UserFacingError, isMock } from "./ai";
 import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
-import { compositePack as composite, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
+import { compositePack as composite, PackPhotoError, paintAroundInputs, preparePack, type PackBox, type PackPosition, type PackScale } from "./pack-composite";
+import { findInventedPacks } from "./pack-detect";
 
 /** Composite, turning an unusable pack photo into a message the team can act on. */
 async function compositePack(...args: Parameters<typeof composite>) {
@@ -75,6 +76,7 @@ export async function generateImage(opts: {
   let model = IMAGE_MODEL;
   let inputTokens = 0;
   let outputTokens = 0;
+  let warning = "";
 
   // With an OpenAI key, images are always real, even while text generation is in mock mode.
   if (isMock() && !process.env.OPENAI_API_KEY) {
@@ -102,61 +104,73 @@ export async function generateImage(opts: {
           size,
           n: 1,
         });
-      let res;
-      let paintedAround = false;
+      const once = async (prompt: string, fallbackPrompt: string | undefined) => {
+        let res;
+        let paintedAround = false;
+        if (opts.lockedPack) {
+          // Best: give the model a canvas with our real pack already in place (protected by a mask)
+          // and let it paint the scene around it, so scale, perspective, light and shadow fit.
+          try {
+            const prepared = await preparePack(opts.lockedPack.data, opts.lockedPack.liftBackdrop);
+            const [gw, gh] = size.split("x").map(Number);
+            const inputs = await paintAroundInputs(prepared.source, opts.target, { w: gw, h: gh }, opts.lockedPack.position, opts.lockedPack.scale);
+            res = await openai.images.edit({
+              model: IMAGE_MODEL,
+              prompt,
+              image: [await toFile(inputs.canvas, "canvas.png", { type: "image/png" })],
+              mask: await toFile(inputs.mask, "mask.png", { type: "image/png" }),
+              size,
+              n: 1,
+            });
+            paintedAround = true;
+          } catch (e) {
+            if (e instanceof PackPhotoError) throw new UserFacingError(e.message);
+            if (!(e instanceof OpenAI.BadRequestError || e instanceof OpenAI.UnprocessableEntityError)) throw e;
+            console.warn("Painting around the pack failed; falling back to compositing:", e.message);
+            res = await openai.images.generate({ model: IMAGE_MODEL, prompt: fallbackPrompt ?? prompt, size, n: 1 });
+          }
+        } else if (ref) {
+          try {
+            res = await edit(IMAGE_MODEL.startsWith("gpt-image-1"));
+          } catch (e) {
+            if (e instanceof OpenAI.BadRequestError && /input_fidelity/i.test(e.message)) res = await edit(false);
+            else throw e;
+          }
+        } else {
+          res = await openai.images.generate({ model: IMAGE_MODEL, prompt, size, n: 1 });
+        }
+        const b64 = res.data?.[0]?.b64_json;
+        if (!b64) throw new UserFacingError("The image service returned no image. Try again.");
+        inputTokens += res.usage?.input_tokens ?? 0;
+        outputTokens += res.usage?.output_tokens ?? 0;
+        const fitted = await fitToSize(Buffer.from(b64, "base64"), opts.target.w, opts.target.h);
+        if (!opts.lockedPack) return { image: fitted, box: null };
+        // Always put our original pack pixels back on top, so the pack is exactly the photo even if the model drifted.
+        // When the model painted around it, the scene already has a real shadow, so we don't add ours.
+        const placed = await compositePack(fitted, opts.lockedPack.data, {
+          ...opts.target,
+          position: opts.lockedPack.position,
+          scale: opts.lockedPack.scale,
+          liftBackdrop: opts.lockedPack.liftBackdrop,
+          shadow: !paintedAround,
+        });
+        return { image: placed.data, box: placed.box };
+      };
+
+      let made = await once(opts.prompt, opts.fallbackPrompt);
       if (opts.lockedPack) {
-        // Best: give the model a canvas with our real pack already in place (protected by a mask)
-        // and let it paint the scene around it, so scale, perspective, light and shadow fit.
-        try {
-          const prepared = await preparePack(opts.lockedPack.data, opts.lockedPack.liftBackdrop);
-          const [gw, gh] = size.split("x").map(Number);
-          const inputs = await paintAroundInputs(prepared.source, opts.target, { w: gw, h: gh }, opts.lockedPack.position, opts.lockedPack.scale);
-          res = await openai.images.edit({
-            model: IMAGE_MODEL,
-            prompt: opts.prompt,
-            image: [await toFile(inputs.canvas, "canvas.png", { type: "image/png" })],
-            mask: await toFile(inputs.mask, "mask.png", { type: "image/png" }),
-            size,
-            n: 1,
-          });
-          paintedAround = true;
-        } catch (e) {
-          if (e instanceof PackPhotoError) throw new UserFacingError(e.message);
-          if (!(e instanceof OpenAI.BadRequestError || e instanceof OpenAI.UnprocessableEntityError)) throw e;
-          console.warn("Painting around the pack failed; falling back to compositing:", e.message);
-          res = await openai.images.generate({ model: IMAGE_MODEL, prompt: opts.fallbackPrompt ?? opts.prompt, size, n: 1 });
+        // The model sometimes invents a second pack (e.g. in someone's hand). Check, and redo once if so.
+        const ours = (b: PackBox | null) => (b ? { x: b.left / opts.target.w, y: b.top / opts.target.h, w: b.width / opts.target.w, h: b.height / opts.target.h } : null);
+        let invented = await findInventedPacks(made.image, ours(made.box), opts.user);
+        if (invented.length) {
+          const fix = `\n\nIMPORTANT: a previous attempt wrongly showed ${invented.join("; ")}. Show NO other jar, box, pouch, packet, bottle or label anywhere, and nobody holds any container; hands may only hold food, a spoon, toast or a cup.`;
+          made = await once(opts.prompt + fix, opts.fallbackPrompt ? opts.fallbackPrompt + fix : undefined);
+          invented = await findInventedPacks(made.image, ours(made.box), opts.user);
+          if (invented.length) warning = `The AI may have added packaging that isn't ours (${invented.join("; ")}). Check the image, then make another or use Edit with words to remove it.`;
         }
-      } else if (ref) {
-        try {
-          res = await edit(IMAGE_MODEL.startsWith("gpt-image-1"));
-        } catch (e) {
-          if (e instanceof OpenAI.BadRequestError && /input_fidelity/i.test(e.message)) res = await edit(false);
-          else throw e;
-        }
-      } else {
-        res = await openai.images.generate({ model: IMAGE_MODEL, prompt: opts.prompt, size, n: 1 });
       }
-      const b64 = res.data?.[0]?.b64_json;
-      if (!b64) throw new UserFacingError("The image service returned no image. Try again.");
       mime = "image/jpeg";
-      const fitted = await fitToSize(Buffer.from(b64, "base64"), opts.target.w, opts.target.h);
-      data = (
-        opts.lockedPack
-          ? // Always put our original pack pixels back on top, so the pack is exactly the photo even if the model drifted.
-            // When the model painted around it, the scene already has a real shadow, so we don't add ours.
-            (
-              await compositePack(fitted, opts.lockedPack.data, {
-                ...opts.target,
-                position: opts.lockedPack.position,
-                scale: opts.lockedPack.scale,
-                liftBackdrop: opts.lockedPack.liftBackdrop,
-                shadow: !paintedAround,
-              })
-            ).data
-          : fitted
-      ).toString("base64");
-      inputTokens = res.usage?.input_tokens ?? 0;
-      outputTokens = res.usage?.output_tokens ?? 0;
+      data = made.image.toString("base64");
     } catch (e) {
       if (e instanceof UserFacingError) throw e;
       if (e instanceof OpenAI.AuthenticationError) throw new UserFacingError("OpenAI rejected the key. Check OPENAI_API_KEY in .env.local.");
@@ -196,7 +210,7 @@ export async function generateImage(opts: {
     inputTokens,
     outputTokens,
   });
-  return { id: stored.id, url: stored.url, w: opts.target.w, h: opts.target.h };
+  return { id: stored.id, url: stored.url, w: opts.target.w, h: opts.target.h, warning };
 }
 
 /** Loads a stored image asset. */

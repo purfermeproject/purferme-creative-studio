@@ -87,3 +87,22 @@ describe("editable direction, fixed rules", () => {
     expect(prompt).toContain("Never invent packaging");
   });
 });
+
+describe("people never handle a pack the model would have to invent", () => {
+  it("turns holding or reading the pack into a glance at our pack on the table", async () => {
+    const { withoutPack } = await import("@/lib/image-prompt");
+    const inScene = withoutPack("The man reads the label on the Peanut Butter jar while she holds the jar up", "Peanut Butter", "[our real pack, already in the image]");
+    expect(inScene).toBe("The man glances at our pack standing on the table (nobody holds it) while she glances at our pack standing on the table (nobody holds it)");
+    const empty = withoutPack("He flips the pack", "Peanut Butter");
+    expect(empty).toContain("hands empty of any jar, box or packet");
+    expect(empty).not.toMatch(/flips/);
+  });
+
+  it("makes our real pack the hero, allows appetising food, and keeps the headline area clear of the pack", () => {
+    const p = buildImagePrompt({ concept, platform: "meta", creativeType: "Feed image", productName: "Chocolate Cookies", frameIndex: 0, packInScene: true });
+    expect(p).toContain("our pack is the hero");
+    expect(p).toContain("close and appetising, but true to the real product");
+    expect(p).toContain("across the top quarter for a headline");
+    expect(p).not.toContain("No close-ups of the product");
+  });
+});

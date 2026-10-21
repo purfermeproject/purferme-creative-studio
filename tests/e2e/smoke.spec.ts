@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 async function signIn(page: Page, email = "e2e@example.com") {
   await page.goto("/login");
@@ -47,6 +47,12 @@ async function develop(page: Page, o: BriefOpts = {}) {
   await expect(ws).toBeVisible({ timeout: 60_000 });
   await expect(page).toHaveURL(/\/create\?creative=/);
   return ws;
+}
+
+/** Make an image without the automatic hook text, so image counts stay exact (the auto text has its own test). */
+async function makeImage(ws: Locator, text: "overlay" | "auto" = "overlay") {
+  await ws.getByLabel("Text on image").first().selectOption(text);
+  await ws.getByRole("button", { name: "Make image" }).click();
 }
 
 const inspector = (page: Page) => page.getByRole("complementary", { name: "Check and edit" });
@@ -289,7 +295,7 @@ test("Claim checker highlights terms instantly and runs a deep check", async ({ 
 test("Make image: images attach to the draft at the exact platform size", async ({ page }) => {
   await signIn(page);
   const ws = await develop(page, { type: "9:16 UGC-style video (15–30s)" });
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   const img = ws.getByTestId("image-gallery").locator("img");
   await expect(img).toHaveCount(1);
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
@@ -339,7 +345,7 @@ test("Brand kit + Add text & logo saves a full-size image with crisp text", asyn
   await expect(kit.getByText("Brand kit saved.")).toBeVisible();
 
   const ws = await develop(page, { type: "Static image ad (4:5)", placement: "Instagram Feed post" });
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350");
   await ws.getByRole("button", { name: "Add text & logo" }).first().click();
   const editor = page.getByTestId("overlay-editor");
@@ -357,7 +363,7 @@ test("Brand kit + Add text & logo saves a full-size image with crisp text", asyn
 test("Preview shows the image in platform mock-ups with safe zones", async ({ page }) => {
   await signIn(page);
   const ws = await develop(page);
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   await ws.getByRole("button", { name: "Preview" }).first().click();
   const pv = page.getByTestId("placement-preview");
   await expect(pv.getByText("Covered by UI · keep text out")).toBeVisible();
@@ -386,7 +392,7 @@ test("Product truth: barcode is checked, verified numbers are saved, and the qui
   await expect(page.getByTestId("truth-bar").getByLabel("Net quantity")).toHaveValue("6 bars × 40 g");
 
   const ws = await develop(page, { platform: "Amazon" });
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   await ws.getByRole("button", { name: "Preview" }).first().click();
   const pv = page.getByTestId("placement-preview");
   await pv.getByRole("button", { name: "Quick-commerce tile" }).click();
@@ -408,9 +414,20 @@ test("Check a finished design: reads the text, flags claims and size", async ({ 
   await expect(page.getByTestId("highlighted").locator("mark").first()).toBeVisible();
 });
 
+test("By default a new image gets the hook, CTA and logo added straight away", async ({ page }) => {
+  await signIn(page);
+  const ws = await develop(page);
+  await makeImage(ws, "auto");
+  const gallery = ws.getByTestId("image-gallery");
+  await expect(gallery.locator("img")).toHaveCount(2, { timeout: 60_000 });
+  await expect(ws.getByTestId("image-dims").nth(1)).toContainText("with text");
+  await expect(page.getByTestId("creative-preview").locator("img")).toHaveAttribute("src", /.+/);
+});
+
 test("Make all scenes builds a storyboard and the handoff pack ZIP has everything", async ({ page }) => {
   await signIn(page);
   const ws = await develop(page, { type: "9:16 UGC-style video (15–30s)" });
+  await ws.getByLabel("Text on image").first().selectOption("overlay");
   await ws.getByRole("button", { name: /Make all \d+ scenes/ }).click();
   const board = ws.getByTestId("storyboard");
   await expect(board.locator("img")).toHaveCount(4, { timeout: 60_000 });
@@ -431,7 +448,7 @@ test("Edit with words, All sizes and Compare", async ({ page }) => {
   const ws = await develop(page, { type: "Static image ad (4:5)", placement: "Instagram Feed post" });
   // AI edits are only for scene-only images; images with our real pack can't be redrawn.
   await ws.getByLabel("Pack in the image").selectOption("none");
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   const gallery = ws.getByTestId("image-gallery");
   await expect(gallery.locator("img")).toHaveCount(1);
 
@@ -461,7 +478,7 @@ test("Where it runs: Instagram placement shapes the ad, image size and is saved"
   await expect(page.getByLabel("Where it runs", { exact: true })).toHaveValue("Instagram Reels");
   const ws = await develop(page, { type: "Carousel (3–5 cards)", placement: "Instagram Carousel" });
   await expect(ws).toContainText("Instagram Carousel");
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1080");
   const csv = await (await page.request.get("/api/library/export?platform=meta")).text();
   expect(csv.split("\r\n")[0]).toContain("placement");
@@ -485,7 +502,7 @@ test("Original pack is placed unchanged, and images with it can't be AI-edited",
 
   const ws = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
   await expect(ws.getByLabel("Pack in the image")).toHaveValue("locked");
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack");
   await expect(ws.getByRole("button", { name: "Edit with words" })).toHaveCount(0);
   await expect(ws.getByLabel("Pack in the image").locator("option")).toHaveText(["Pack: our real pack photo", "No pack in this image"]);
@@ -572,7 +589,7 @@ test("Extra product photos can be placed instead of the pack", async ({ page }) 
 
   const ws = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
   await ws.getByLabel("Which product photo").selectOption({ label: "Photo: Cookies out of the pack" });
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   await expect(ws.getByTestId("image-dims").first()).toContainText("original pack");
 });
 
@@ -746,11 +763,11 @@ test("Research: one run finds competitors per platform and proposes ideas for ea
 test("No pack photo, no pack: the app asks for the real photo instead of letting the AI invent one", async ({ page }) => {
   await signIn(page);
   const ws = await develop(page, { product: "PuŕGrain Millet Bar, 10g protein" });
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   await expect(ws.getByRole("alert")).toContainText("no pack photo for");
   await expect(ws.getByTestId("image-gallery")).toHaveCount(0);
   await ws.getByLabel("Pack in the image").selectOption("none");
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1);
 });
 
@@ -772,7 +789,7 @@ test("Image prompts: the brand image style is used, and the team can see and edi
   await direction.fill("A commuter on a Mumbai local at 8am, window light, holding a steel tumbler of chai");
   await editor.getByRole("button", { name: "Use this for the next images" }).click();
   await expect(editor.getByRole("button", { name: /Prompt/ })).toContainText("edited");
-  await ws.getByRole("button", { name: "Make image" }).click();
+  await makeImage(ws);
   await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1);
   await editor.getByRole("button", { name: "Reset to the app's version" }).click();
   await expect(direction).toHaveValue(/Places: Mumbai local trains/);

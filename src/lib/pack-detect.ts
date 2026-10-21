@@ -64,3 +64,53 @@ export async function cropToBox(image: Buffer, box: Box): Promise<Buffer> {
   const height = Math.max(1, Math.min(H - top, Math.round(box.h * H)));
   return img.extract({ left, top, width, height }).png().toBuffer();
 }
+
+const ExtraPacksSchema = z.object({
+  packs: z
+    .array(
+      z.object({
+        what: z.string().describe("e.g. 'kraft paper jar in a man's hand', 'snack packet on the table'"),
+        left: z.number(),
+        top: z.number(),
+        right: z.number(),
+        bottom: z.number(),
+      }),
+    )
+    .describe("Every packaged product or labelled container visible (jar, box, pouch, packet, bottle, tub), each as fractions of the image (0–1)"),
+});
+
+/** Share of box a covered by box b (0–1). */
+function overlap(a: Box, b: Box): number {
+  const w = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const h = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  return a.w * a.h > 0 ? (w * h) / (a.w * a.h) : 0;
+}
+
+/**
+ * Packaging the image model invented: any labelled container that isn't our real pack
+ * (which sits at `ours`, as fractions of the image). Empty in mock mode, without a key, or on error,
+ * so a failed check never blocks an image.
+ */
+export async function findInventedPacks(image: Buffer, ours: Box | null, user: string): Promise<string[]> {
+  if (isMock() || (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY)) return [];
+  const small = await sharp(image).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+  try {
+    const r = await structuredCall({
+      schema: ExtraPacksSchema,
+      prompt: `List every packaged product or labelled container in this advertising image: jars, boxes, pouches, packets, bottles, tubs or wrappers, including ones held in hands or in the background. Ignore plain cups, mugs, plates, bowls, glasses and cutlery.
+Give each one's rectangle as fractions of the image size (left/right of the width, top/bottom of the height). Return an empty list if there are none.`,
+      image: { mediaType: "image/jpeg", base64: small.toString("base64") },
+      maxTokens: 1500,
+      effort: "low",
+      meta: { user, kind: "pack-check" },
+      mock: () => ({ packs: [] }),
+    });
+    return r.packs
+      .map((p) => ({ what: p.what, box: cleanBox({ x: p.left, y: p.top, w: p.right - p.left, h: p.bottom - p.top }) }))
+      .filter((p) => p.box && !(ours && overlap(p.box, ours) > 0.5))
+      .map((p) => p.what);
+  } catch (e) {
+    console.error("pack check failed", e);
+    return [];
+  }
+}
