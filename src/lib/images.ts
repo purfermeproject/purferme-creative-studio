@@ -7,7 +7,7 @@ import { UserFacingError, isMock } from "./ai";
 import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
-import { compositePack as composite, PackPhotoError, type PackPosition, type PackScale } from "./pack-composite";
+import { compositePack as composite, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
 
 /** Composite, turning an unusable pack photo into a message the team can act on. */
 async function compositePack(...args: Parameters<typeof composite>) {
@@ -66,6 +66,8 @@ export async function generateImage(opts: {
   frameIndex?: number | null;
   /** Composite this original pack photo into the scene (the model never draws the pack). */
   lockedPack?: { data: Buffer; position: PackPosition; scale: PackScale; assetId?: string | null; liftBackdrop?: boolean } | null;
+  /** With a locked pack: `prompt` paints the scene around the real pack; this one is for the older "leave a spot, paste after" method if that fails. */
+  fallbackPrompt?: string;
 }) {
   const size = generationSizeFor(opts.target.w, opts.target.h);
   let mime: string;
@@ -101,7 +103,30 @@ export async function generateImage(opts: {
           n: 1,
         });
       let res;
-      if (ref) {
+      let paintedAround = false;
+      if (opts.lockedPack) {
+        // Best: give the model a canvas with our real pack already in place (protected by a mask)
+        // and let it paint the scene around it, so scale, perspective, light and shadow fit.
+        try {
+          const prepared = await preparePack(opts.lockedPack.data, opts.lockedPack.liftBackdrop);
+          const [gw, gh] = size.split("x").map(Number);
+          const inputs = await paintAroundInputs(prepared.source, opts.target, { w: gw, h: gh }, opts.lockedPack.position, opts.lockedPack.scale);
+          res = await openai.images.edit({
+            model: IMAGE_MODEL,
+            prompt: opts.prompt,
+            image: [await toFile(inputs.canvas, "canvas.png", { type: "image/png" })],
+            mask: await toFile(inputs.mask, "mask.png", { type: "image/png" }),
+            size,
+            n: 1,
+          });
+          paintedAround = true;
+        } catch (e) {
+          if (e instanceof PackPhotoError) throw new UserFacingError(e.message);
+          if (!(e instanceof OpenAI.BadRequestError || e instanceof OpenAI.UnprocessableEntityError)) throw e;
+          console.warn("Painting around the pack failed; falling back to compositing:", e.message);
+          res = await openai.images.generate({ model: IMAGE_MODEL, prompt: opts.fallbackPrompt ?? opts.prompt, size, n: 1 });
+        }
+      } else if (ref) {
         try {
           res = await edit(IMAGE_MODEL.startsWith("gpt-image-1"));
         } catch (e) {
@@ -117,7 +142,17 @@ export async function generateImage(opts: {
       const fitted = await fitToSize(Buffer.from(b64, "base64"), opts.target.w, opts.target.h);
       data = (
         opts.lockedPack
-          ? (await compositePack(fitted, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale, liftBackdrop: opts.lockedPack.liftBackdrop })).data
+          ? // Always put our original pack pixels back on top, so the pack is exactly the photo even if the model drifted.
+            // When the model painted around it, the scene already has a real shadow, so we don't add ours.
+            (
+              await compositePack(fitted, opts.lockedPack.data, {
+                ...opts.target,
+                position: opts.lockedPack.position,
+                scale: opts.lockedPack.scale,
+                liftBackdrop: opts.lockedPack.liftBackdrop,
+                shadow: !paintedAround,
+              })
+            ).data
           : fitted
       ).toString("base64");
       inputTokens = res.usage?.input_tokens ?? 0;

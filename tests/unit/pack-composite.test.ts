@@ -90,3 +90,32 @@ describe("pack photo on a plain studio backdrop", () => {
     expect(backdropRemoved).toBe(false);
   });
 });
+
+describe("painting the scene around the real pack", () => {
+  it("puts the pack where it will end up after the final crop", async () => {
+    const { mapBoxToGeneration } = await import("@/lib/pack-composite");
+    const target = { w: 1080, h: 1920 };
+    const gen = { w: 1024, h: 1536 };
+    const box = { left: 600, top: 1000, width: 300, height: 450 };
+    const g = mapBoxToGeneration(target, gen, box);
+    // Undo the centre-crop + scale that fitToSize applies (cover): back to the same box on the final image.
+    const s = Math.max(target.w / gen.w, target.h / gen.h);
+    const offX = (gen.w - target.w / s) / 2;
+    expect(Math.round((g.left - offX) * s)).toBeCloseTo(600, -1);
+    expect(Math.round(g.top * s)).toBeCloseTo(1000, -1);
+    expect(Math.round(g.width * s)).toBeCloseTo(300, -1);
+  });
+
+  it("protects exactly the pack in the mask and leaves everything else paintable", async () => {
+    const { paintAroundInputs } = await import("@/lib/pack-composite");
+    const pack = await stripedPack(240, 340, 20);
+    const { preparePack } = await import("@/lib/pack-composite");
+    const { source } = await preparePack(pack);
+    const { canvas, mask, genBox } = await paintAroundInputs(source, { w: 1080, h: 1350 }, { w: 1024, h: 1536 }, "right", "medium");
+    expect((await sharp(canvas).metadata()).width).toBe(1024);
+    const alpha = await sharp(mask).extractChannel(3).raw().toBuffer();
+    const at = (x: number, y: number) => alpha[y * 1024 + x];
+    expect(at(10, 10)).toBe(0); // scene: paintable
+    expect(at(genBox.left + Math.floor(genBox.width / 2), genBox.top + Math.floor(genBox.height / 2))).toBe(255); // pack: protected
+  });
+});

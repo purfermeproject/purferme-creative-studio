@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     const spec = input.custom
       ? { w: input.custom.w, h: input.custom.h, label: `custom ${ratioLabel(input.custom.w, input.custom.h)}`, note: undefined as string | undefined }
       : (input.specId ? findSpec(input.specId) : null) ?? defaultSpecFor(input.platform, input.creativeType);
-    const prompt = buildImagePrompt({
+    const promptInput = {
       concept: input.concept,
       frameIndex: input.frameIndex,
       platform: input.platform,
@@ -91,12 +91,15 @@ export async function POST(req: Request) {
       packPosition: input.packPosition,
       target: { w: spec.w, h: spec.h, label: spec.label, note: spec.note },
       textMode: input.textMode,
-    });
+    };
+    const prompt = buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
+    const fallbackPrompt = buildImagePrompt(promptInput);
     const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${packMode === "locked" ? " · original pack" : ""}`;
     const image = await generateImage({
       prompt,
       target: { w: spec.w, h: spec.h },
       reference: null,
+      fallbackPrompt,
       user,
       label,
       frameIndex: input.frameIndex,

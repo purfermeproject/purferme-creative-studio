@@ -45,17 +45,30 @@ export function packBox(canvas: { w: number; h: number }, pack: { w: number; h: 
 export async function compositePack(
   scene: Buffer,
   pack: Buffer,
-  /** liftBackdrop: try removing a plain backdrop (off for packs cropped on purpose, whose edges are the pack). */
-  opts: { w: number; h: number; position?: PackPosition; scale?: PackScale; format?: "jpeg" | "png"; liftBackdrop?: boolean },
+  /** liftBackdrop: try removing a plain backdrop (off for packs cropped on purpose, whose edges are the pack). shadow: add our own soft shadow (off when the scene already has one). */
+  opts: { w: number; h: number; position?: PackPosition; scale?: PackScale; format?: "jpeg" | "png"; liftBackdrop?: boolean; shadow?: boolean },
 ): Promise<{ data: Buffer; box: PackBox; cutout: boolean; backdropRemoved: boolean }> {
   const { w, h } = opts;
+  const { source, cutout, backdropRemoved } = await preparePack(pack, opts.liftBackdrop);
+  const meta = await sharp(source).metadata();
+  const box = packBox({ w, h }, { w: meta.width ?? 1, h: meta.height ?? 1 }, opts.position ?? "right", opts.scale ?? "medium");
+  const resized = await sharp(source).resize(box.width, box.height, { fit: "fill", kernel: "lanczos3" }).ensureAlpha().png().toBuffer();
+  const shadowLayer = opts.shadow === false ? null : await dropShadow(resized, box, { w, h });
+  const base = sharp(scene).resize(w, h, { fit: "cover", position: "centre" });
+  const out = base.composite([...(shadowLayer ? [shadowLayer] : []), { input: resized, left: box.left, top: box.top }]);
+  const data = opts.format === "png" ? await out.png().toBuffer() : await out.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+  return { data, box, cutout, backdropRemoved };
+}
+
+/** Readable, big enough, lifted off a plain backdrop if needed, and trimmed to the pack. */
+export async function preparePack(pack: Buffer, liftBackdrop?: boolean): Promise<{ source: Buffer; cutout: boolean; backdropRemoved: boolean }> {
   let cutout: boolean;
   let source: Buffer;
   let backdropRemoved = false;
   try {
     cutout = await isCutout(pack);
     source = await sharp(pack).rotate().png().toBuffer();
-    if (!cutout && opts.liftBackdrop !== false) {
+    if (!cutout && liftBackdrop !== false) {
       // A pack photo on a plain studio backdrop would look pasted on: lift it off the backdrop
       // (transparency only; the pack's pixels stay as they are).
       const lifted = await removeBackdrop(source);
@@ -80,11 +93,12 @@ export async function compositePack(
       .toBuffer()
       .catch(() => source);
   }
-  const meta = await sharp(source).metadata();
-  const box = packBox({ w, h }, { w: meta.width ?? 1, h: meta.height ?? 1 }, opts.position ?? "right", opts.scale ?? "medium");
-  const resized = await sharp(source).resize(box.width, box.height, { fit: "fill", kernel: "lanczos3" }).ensureAlpha().png().toBuffer();
+  return { source, cutout, backdropRemoved };
+}
 
-  // Shadow: the pack's silhouette in black, softened and nudged down.
+/** A soft shadow: the pack's silhouette in black, softened and nudged down. */
+async function dropShadow(resized: Buffer, box: PackBox, canvas: { w: number; h: number }) {
+  const { w, h } = canvas;
   const blur = Math.max(4, Math.round(Math.min(w, h) * 0.012));
   const pad = blur * 3;
   const alpha = await sharp(resized).extractChannel(3).linear(0.38, 0).raw().toBuffer();
@@ -96,12 +110,46 @@ export async function compositePack(
     .toBuffer();
   const drop = Math.round(h * 0.012);
 
-  const shadowLayer = await clip(shadow, { w: box.width + pad * 2, h: box.height + pad * 2 }, box.left - pad, box.top - pad + drop, { w, h });
+  return clip(shadow, { w: box.width + pad * 2, h: box.height + pad * 2 }, box.left - pad, box.top - pad + drop, { w, h });
+}
 
-  const base = sharp(scene).resize(w, h, { fit: "cover", position: "centre" });
-  const out = base.composite([...(shadowLayer ? [shadowLayer] : []), { input: resized, left: box.left, top: box.top }]);
-  const data = opts.format === "png" ? await out.png().toBuffer() : await out.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
-  return { data, box, cutout, backdropRemoved };
+/**
+ * Where a box on the final image sits on the (differently shaped) image the
+ * model generates, which is later centre-cropped and scaled to the final size.
+ */
+export function mapBoxToGeneration(target: { w: number; h: number }, gen: { w: number; h: number }, box: PackBox): PackBox {
+  const s = Math.max(target.w / gen.w, target.h / gen.h);
+  const offX = (gen.w - target.w / s) / 2;
+  const offY = (gen.h - target.h / s) / 2;
+  return {
+    left: Math.round(offX + box.left / s),
+    top: Math.round(offY + box.top / s),
+    width: Math.max(1, Math.round(box.width / s)),
+    height: Math.max(1, Math.round(box.height / s)),
+  };
+}
+
+/**
+ * Inputs for painting the scene around the real pack: a canvas with the pack
+ * already at its final size and place, and a mask that protects it (the model
+ * may only paint where the mask is transparent).
+ */
+export async function paintAroundInputs(source: Buffer, target: { w: number; h: number }, gen: { w: number; h: number }, position: PackPosition, scale: PackScale) {
+  const meta = await sharp(source).metadata();
+  const targetBox = packBox(target, { w: meta.width ?? 1, h: meta.height ?? 1 }, position, scale);
+  const g = mapBoxToGeneration(target, gen, targetBox);
+  const genBox = { ...g, left: Math.min(Math.max(0, g.left), gen.w - g.width), top: Math.min(Math.max(0, g.top), gen.h - g.height) };
+  const packOnGen = await sharp(source).resize(genBox.width, genBox.height, { fit: "fill", kernel: "lanczos3" }).ensureAlpha().png().toBuffer();
+  const canvas = await sharp({ create: { width: gen.w, height: gen.h, channels: 4, background: { r: 214, g: 206, b: 194, alpha: 1 } } })
+    .composite([{ input: packOnGen, left: genBox.left, top: genBox.top }])
+    .png()
+    .toBuffer();
+  // Transparent = the model may paint here; the pack's own shape stays opaque (protected).
+  const mask = await sharp({ create: { width: gen.w, height: gen.h, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: packOnGen, left: genBox.left, top: genBox.top }])
+    .png()
+    .toBuffer();
+  return { canvas, mask, genBox, targetBox };
 }
 
 /** Crops an overlay to the part that falls inside the canvas (sharp can't place layers partly outside). */

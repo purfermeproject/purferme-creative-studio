@@ -6,10 +6,10 @@ const PACK_WORDS = "pack(?:et)?s?|pouch(?:es)?|box(?:es)?|jars?|wrappers?|carton
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Scene text with every mention of the pack replaced, so the model leaves the spot empty instead of drawing one. */
-export function withoutPack(text: string, productName: string): string {
+export function withoutPack(text: string, productName: string, replacement = "[empty spot: the real pack is added later]"): string {
   const name = escapeRe(productName.trim());
   return text
-    .replace(new RegExp(`\\b(?:the\\s+)?(?:${name}\\s*)?(?:${PACK_WORDS})\\b`, "gi"), "[empty spot: the real pack is added later]")
+    .replace(new RegExp(`\\b(?:the\\s+)?(?:${name}\\s*)?(?:${PACK_WORDS})\\b`, "gi"), replacement)
     .replace(new RegExp(name, "gi"), "the product");
 }
 
@@ -28,6 +28,8 @@ export function buildImagePrompt(opts: {
    */
   packMode?: "locked" | "none";
   packPosition?: "right" | "center" | "left";
+  /** The real pack is already in the input image (paint-around mode): build the scene around it. */
+  packInScene?: boolean;
   /** "overlay" = no words in the picture; crisp brand text is added afterwards. */
   textMode?: "overlay" | "ai";
   /** Final pixel size after cropping, so the model keeps important things inside the crop. */
@@ -38,16 +40,26 @@ export function buildImagePrompt(opts: {
   const text = (frame?.onscreen || c.copy.headline || "").trim();
   const isMainListing = platform === "amazon" && opts.creativeType.toLowerCase().includes("listing") && opts.frameIndex === 0;
   const locked = opts.packMode !== "none";
+  const inScene = locked && opts.packInScene;
+  const scenePack = (t: string) => withoutPack(t, opts.productName, inScene ? "[our real pack, already in the image]" : undefined);
   const spot = { right: "lower right", center: "lower centre", left: "lower left" }[opts.packPosition ?? "right"];
   const lines = [
     `Advertising image for ${PLATFORM_LABELS[platform]} (${opts.creativeType}${isVideoType(opts.creativeType) ? ", a still for one scene of the video" : ""}).`,
     `Product: ${opts.productName}.`,
-    locked
-      ? `Do NOT show any product pack, box, jar, wrapper, label or brand logo anywhere: the real, unaltered pack photo will be placed into the image afterwards. Leave a clear, uncluttered spot on a surface at the ${spot} of the frame where a pack can stand, lit to match the scene, with nothing in front of it.`
-      : "Do NOT show any product pack, box, jar, wrapper, label or brand logo anywhere: this image shows the scene only.",
-    isMainListing ? "Main listing image: a plain pure white background only, no objects, no props, no text (the pack is added afterwards)." : `Scene: ${withoutPack(frame?.visual ?? c.ai_prompt, opts.productName)}`,
-    isMainListing ? "" : `Style and details: ${withoutPack(c.ai_prompt, opts.productName)}`,
-    "Nobody holds, carries or shows any packaged product: no pouches, boxes, wrappers, jars or snack packets anywhere, and no brand names or logos. Never invent packaging: only the brand's real pack photo is ever used.",
+    inScene
+      ? `The image already contains our real product pack at its final size and position (${spot}). Build the whole scene around it so it truly belongs: it stands on a real surface (counter, table or shelf) that runs under it at the right height and scale; the camera is at the pack's eye level and looks at it front-on, like the pack photo, so the scene's perspective matches; light comes from the same direction and colour temperature as the light on the pack; add a soft contact shadow and a faint reflection where it meets the surface; things around it sit naturally beside or behind it, never in front of it. Do not cover, repaint, recolour, resize or duplicate the pack, and do not add any other pack, box, jar or logo.`
+      : locked
+        ? `Do NOT show any product pack, box, jar, wrapper, label or brand logo anywhere: the real, unaltered pack photo will be placed into the image afterwards. Leave a clear, uncluttered spot on a surface at the ${spot} of the frame where a pack can stand, lit to match the scene, with nothing in front of it.`
+        : "Do NOT show any product pack, box, jar, wrapper, label or brand logo anywhere: this image shows the scene only.",
+    isMainListing
+      ? inScene
+        ? "Main listing image: keep the pack and make everything else plain pure white, with only a very soft natural shadow under the pack; no props, no text."
+        : "Main listing image: a plain pure white background only, no objects, no props, no text (the pack is added afterwards)."
+      : `Scene: ${scenePack(frame?.visual ?? c.ai_prompt)}`,
+    isMainListing ? "" : `Style and details: ${scenePack(c.ai_prompt)}`,
+    inScene
+      ? "Apart from our real pack, nobody holds, carries or shows any packaged product (no pouches, boxes, wrappers, jars or snack packets) and there are no other brand names or logos."
+      : "Nobody holds, carries or shows any packaged product: no pouches, boxes, wrappers, jars or snack packets anywhere, and no brand names or logos. Never invent packaging: only the brand's real pack photo is ever used.",
     "No close-ups of the product itself (cookies, spread, bars): if food appears, keep it small and natural in the scene, so it can't be mistaken for the real product shot.",
     isMainListing
       ? "No added text other than what is printed on the pack."
@@ -59,7 +71,7 @@ export function buildImagePrompt(opts: {
     platform === "amazon" || c.needs_real_person
       ? "No people's faces; if hands are needed, show only hands."
       : "If a person appears, keep them natural and incidental; no doctors, experts or before/after framing.",
-    "Warm, natural light; Indian home or work setting; clean, appetising, photo-real. No health claims, badges or certification marks.",
+    "Photography: a real Indian home, office or street with lived-in detail; natural window or daylight; 35mm lens, shallow depth of field, true-to-life colours, gentle film grain; candid, not posed stock and not glossy CGI. One clear focal point, uncluttered background. No health claims, badges or certification marks.",
   ];
   if (opts.target) {
     const { w, h, label, note } = opts.target;
