@@ -19,6 +19,7 @@ import {
   removeUserRole,
   uploadProductPhoto,
   usePhotoAsPack,
+  saveImageStyle,
   setUserRole,
   saveBrand,
   savePlatformRule,
@@ -97,6 +98,7 @@ export default async function AdminPage() {
             ["#products", "Products"],
             ["#brand", "Brand"],
             ["#brand-kit", "Brand kit"],
+            ["#image-style", "Image style"],
             ["#platforms", "Platforms"],
             ["#terms", "Compliance terms"],
             ["#thresholds", "Verdict thresholds"],
@@ -499,6 +501,29 @@ export default async function AdminPage() {
           </ActionForm>
         </div>
       </Section>
+      <Section
+        id="image-style"
+        title="Image style"
+        intro="How every generated image should look. This is the editable part of each image prompt; rules that protect the real pack and keep ads compliant are always added on top. Leave a field empty to use the default."
+      >
+        <ActionForm action={saveImageStyle} submitLabel="Save image style" className="card grid gap-4 md:grid-cols-2" testId="image-style">
+          {(
+            [
+              ["look", "Photography look", "Lens, light, depth of field, film or digital, how real it should feel."],
+              ["places", "Places and settings", "Where scenes happen: homes, offices, commutes, cities."],
+              ["people", "People", "Who appears and how: candid, age, styling. Compliance rules about people are added automatically."],
+              ["props", "Props and food styling", "What's around the product and how food looks."],
+              ["mood", "Colour and mood", "Palette, warmth, contrast, feeling."],
+              ["avoid", "Avoid", "Things that make images look fake or off-brand."],
+            ] as const
+          ).map(([k, label, hint]) => (
+            <Field key={k} label={label} hint={hint}>
+              <textarea name={k} defaultValue={brand.imageStyle[k]} rows={3} className="input" />
+            </Field>
+          ))}
+        </ActionForm>
+      </Section>
+
       <Section
         id="roles"
         title="Team roles"

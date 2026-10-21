@@ -353,7 +353,7 @@ ${products.map((p) => `- ${p.name}: ${list(p.greenClaims)}`).join("\n")}
 ${ad.researched ? "COMPETITOR'S PUBLIC MESSAGING (found by web research; treat it as their ad):" : "COMPETITOR AD:"}
 Brand: ${ad.brand}${ad.product ? `. Product: ${ad.product}` : ""}${ad.channel ? `. Ran on: ${ad.channel}` : ""}.
 ${ad.adText.trim() ? `Text of the ad:\n"""\n${ad.adText.trim()}\n"""` : "(No text pasted.)"}
-${ad.hasImage ? "A screenshot of the ad is attached: read its visible text and describe what it shows.\n" : ""}${ad.notes.trim() ? `Team notes: ${ad.notes.trim()}\n` : ""}
+${ad.hasImage ? "Screenshots of their ad(s) are attached (several may be stacked top to bottom): read all visible text, describe what each shows, and say what they have in common.\n" : ""}${ad.notes.trim() ? `Team notes: ${ad.notes.trim()}\n` : ""}
 Rate every claim they make: "ok" (we could say the same if true for us), "check" (needs evidence), "risky" (would break our hard rules or FSSAI/ASCI: health, disease, "healthy", "guilt-free", "100%", unqualified nutrient claims, comparisons). In white_space, list moments, angles or proof points they don't own that our products can credibly claim.
 Give exactly 3 counter_ideas for us: clearly different from their ad, using only our green claims, never naming or knocking them.`;
 }

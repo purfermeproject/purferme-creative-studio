@@ -85,6 +85,13 @@
       "when": 1792504106238,
       "tag": "0011_competitor_products",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792565642372,
+      "tag": "0012_image_style",
+      "breakpoints": true
     }
   ]
 }

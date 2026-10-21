@@ -398,3 +398,15 @@ export async function removeProductPhoto(_: ActionState, fd: FormData): Promise<
     return fail(e instanceof Error ? e.message : "Couldn't remove the photo.");
   }
 }
+
+const STYLE_KEYS = ["look", "places", "people", "props", "mood", "avoid"] as const;
+
+/** Photography direction for every generated image. Empty fields fall back to the defaults. */
+export async function saveImageStyle(_: ActionState, fd: FormData): Promise<ActionState> {
+  return guard(async () => {
+    const imageStyle = Object.fromEntries(STYLE_KEYS.map((k) => [k, String(fd.get(k) ?? "").trim().slice(0, 1000)]));
+    await db.update(schema.brandSettings).set({ imageStyle, updatedAt: new Date() }).where(eq(schema.brandSettings.id, 1));
+    refresh();
+    return ok("Image style saved. New images use it straight away.");
+  }) as Promise<ActionState>;
+}

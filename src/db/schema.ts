@@ -16,6 +16,7 @@ import type { ScanResult } from "@/lib/compliance";
 import type { VerdictThresholds } from "@/lib/verdicts";
 import { DEFAULT_AVOID_PHRASES, DEFAULT_EXAMPLE_ADS } from "@/lib/creative-defaults";
 import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brand-kit";
+import type { ImageStyle } from "@/lib/image-prompt";
 import type { CompetitorAnalysis, ListingInsight, MarketplaceResearch, Proposal } from "@/lib/schemas";
 
 export type ClaimEvidence = { claim: string; evidence: string; source?: string };
@@ -59,6 +60,8 @@ export const brandSettings = pgTable("brand_settings", {
   exampleAds: text("example_ads").notNull().default(DEFAULT_EXAMPLE_ADS),
   avoidPhrases: text("avoid_phrases").notNull().default(DEFAULT_AVOID_PHRASES),
   kit: jsonb("kit").$type<BrandKit>().notNull().default(DEFAULT_BRAND_KIT),
+  /** Photography direction for generated images (empty fields use the defaults). */
+  imageStyle: jsonb("image_style").$type<Partial<ImageStyle>>(),
   verdictThresholds: jsonb("verdict_thresholds").$type<VerdictThresholds>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

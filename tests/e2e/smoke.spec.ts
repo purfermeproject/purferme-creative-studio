@@ -609,6 +609,21 @@ test("Competitors: found automatically for a product category, broken down, and 
   await expect(page.getByTestId("research-summary")).toContainText("No new competitors found", { timeout: 60_000 });
   await expect(page.getByTestId("competitor")).toHaveCount(3);
 
+  // Meta Ad Library: one click to their running ads in India, then their screenshots re-run the breakdown.
+  const card = page.getByTestId("competitor").first();
+  const href = await card.getByTestId("ad-library").getByRole("link", { name: /Open in Meta Ad Library/ }).getAttribute("href");
+  expect(href).toContain("facebook.com/ads/library");
+  expect(href).toContain("country=IN");
+  expect(href).toContain("active_status=active");
+  const sharp = (await import("sharp")).default;
+  const shot = await sharp({ create: { width: 500, height: 900, channels: 3, background: "#d7c4a3" } }).png().toBuffer();
+  await card.getByLabel(/Screenshots of .*ads/).setInputFiles([
+    { name: "ad1.png", mimeType: "image/png", buffer: shot },
+    { name: "ad2.png", mimeType: "image/png", buffer: shot },
+  ]);
+  await expect(card.getByRole("img", { name: /Screenshot of the/ })).toBeVisible({ timeout: 30_000 });
+  await expect(card.getByTestId("competitor-analysis")).toBeVisible({ timeout: 60_000 });
+
   // Adding one by hand still works.
   await page.getByText("Add one yourself").click();
   const form = page.getByRole("form", { name: "Add a competitor ad" });
@@ -708,6 +723,30 @@ test("No pack photo, no pack: the app asks for the real photo instead of letting
   await ws.getByLabel("Pack in the image").selectOption("none");
   await ws.getByRole("button", { name: "Make image" }).click();
   await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1);
+});
+
+test("Image prompts: the brand image style is used, and the team can see and edit the direction (rules always stay)", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/admin#image-style");
+  const style = page.getByTestId("image-style");
+  await style.getByLabel("Places and settings").fill("Mumbai local trains, office pantries and balconies at golden hour");
+  await style.getByRole("button", { name: "Save image style" }).click();
+  await expect(style.getByText("Image style saved.")).toBeVisible();
+
+  const ws = await develop(page, { type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  const editor = ws.getByTestId("prompt-editor");
+  await editor.getByRole("button", { name: /Prompt/ }).click();
+  const direction = editor.getByLabel(/What the picture shows/);
+  await expect(direction).toHaveValue(/Places: Mumbai local trains, office pantries and balconies at golden hour/);
+  await editor.getByText("Rules always added").click();
+  await expect(editor).toContainText("Do not cover, repaint, recolour, resize or duplicate the pack");
+  await direction.fill("A commuter on a Mumbai local at 8am, window light, holding a steel tumbler of chai");
+  await editor.getByRole("button", { name: "Use this for the next images" }).click();
+  await expect(editor.getByRole("button", { name: /Prompt/ })).toContainText("edited");
+  await ws.getByRole("button", { name: "Make image" }).click();
+  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1);
+  await editor.getByRole("button", { name: "Reset to the app's version" }).click();
+  await expect(direction).toHaveValue(/Places: Mumbai local trains/);
 });
 
 test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {

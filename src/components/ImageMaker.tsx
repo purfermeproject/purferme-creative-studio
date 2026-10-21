@@ -72,26 +72,57 @@ export function ImageMaker({
 
   const [progress, setProgress] = useState("");
 
+  // The editable part of the image prompt. null = use the app's own direction for each scene.
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [direction, setDirection] = useState<string | null>(null);
+  const [draftDirection, setDraftDirection] = useState("");
+  const [rules, setRules] = useState("");
+  const [promptBusy, setPromptBusy] = useState(false);
+
+  const imageBody = (frameIndex: number) => ({
+    platform,
+    productId,
+    creativeType,
+    concept,
+    frameIndex,
+    creativeId: creativeId ?? null,
+    packImage: packImage ?? null,
+    specId: specId === CUSTOM ? null : specId,
+    textMode,
+    packMode,
+    packPosition,
+    packScale,
+    photoId: packMode === "locked" && photoId ? photoId : null,
+    custom: specId === CUSTOM ? { w: customW, h: customH } : null,
+    direction: direction ?? undefined,
+  });
+
+  async function loadPrompt(reset = false) {
+    setPromptBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/image", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...imageBody(frame), direction: reset ? undefined : (direction ?? undefined), preview: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't load the prompt.");
+      setDraftDirection(data.direction);
+      setRules(data.rules);
+      if (reset) setDirection(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't load the prompt.");
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
   async function requestImage(frameIndex: number): Promise<MadeImage & { usedPackPhoto: boolean }> {
     const res = await fetch("/api/image", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        platform,
-        productId,
-        creativeType,
-        concept,
-        frameIndex,
-        creativeId: creativeId ?? null,
-        packImage: packImage ?? null,
-        specId: specId === CUSTOM ? null : specId,
-        textMode,
-        packMode,
-        packPosition,
-        packScale,
-        photoId: packMode === "locked" && photoId ? photoId : null,
-        custom: specId === CUSTOM ? { w: customW, h: customH } : null,
-      }),
+      body: JSON.stringify(imageBody(frameIndex)),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Couldn't make the image. Try again.");
@@ -262,6 +293,51 @@ export function ImageMaker({
           >
             Make all {concept.frames.length} scenes
           </button>
+        ) : null}
+      </div>
+      <div className="rounded-lg border border-line" data-testid="prompt-editor">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-semibold"
+          aria-expanded={promptOpen}
+          onClick={() => {
+            const next = !promptOpen;
+            setPromptOpen(next);
+            if (next) void loadPrompt();
+          }}
+        >
+          <span>
+            Prompt{direction !== null ? <span className="ml-2 chip-amber">edited</span> : null}
+          </span>
+          <span aria-hidden>{promptOpen ? "▾" : "▸"}</span>
+        </button>
+        {promptOpen ? (
+          <div className="space-y-2 border-t border-line p-3">
+            {promptBusy && !draftDirection ? (
+              <div className="skeleton h-28 w-full" />
+            ) : (
+              <>
+                <label htmlFor={`direction-${concept.title}`} className="text-sm font-semibold">
+                  What the picture shows and how it&apos;s shot <span className="font-normal text-ink-soft">(edit freely)</span>
+                </label>
+                <textarea id={`direction-${concept.title}`} className="input font-mono text-xs" rows={9} value={draftDirection} onChange={(e) => setDraftDirection(e.target.value)} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" className="btn-secondary px-3 py-1 text-xs" onClick={() => setDirection(draftDirection)} disabled={!draftDirection.trim() || draftDirection === direction}>
+                    Use this for the next images
+                  </button>
+                  <button type="button" className="btn-secondary px-3 py-1 text-xs" onClick={() => loadPrompt(true)} disabled={promptBusy}>
+                    Reset to the app&apos;s version
+                  </button>
+                  {direction !== null ? <span className="text-xs text-amber">Your version is used until you reset it.</span> : null}
+                </div>
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-ink-soft">Rules always added (can&apos;t be removed)</summary>
+                  <p className="mt-1 rounded bg-surface-2 p-2 font-mono whitespace-pre-wrap text-ink-soft">{rules}</p>
+                </details>
+                <p className="hint text-xs">The brand-wide photography style is in Settings → Image style.</p>
+              </>
+            )}
+          </div>
         ) : null}
       </div>
       {packMode === "locked" ? (

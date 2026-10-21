@@ -1,0 +1,1 @@
+ALTER TABLE "brand_settings" ADD COLUMN "image_style" jsonb;

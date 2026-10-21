@@ -3,8 +3,8 @@ import { z } from "zod";
 import { authErrorStatus, requireRole } from "@/auth";
 import { db, schema } from "@/db";
 import { errorMessage } from "@/lib/ai";
-import { getProduct } from "@/lib/data";
-import { buildImagePrompt } from "@/lib/image-prompt";
+import { getBrand, getProduct } from "@/lib/data";
+import { buildImagePrompt, buildImagePromptParts } from "@/lib/image-prompt";
 import { defaultSpecFor, findSpec, MAX_SIDE, MIN_SIDE, ratioLabel } from "@/lib/image-specs";
 import { generateImage, loadReference, type Reference } from "@/lib/images";
 import { ConceptSchema } from "@/lib/schemas";
@@ -28,6 +28,10 @@ const Body = z.object({
   packScale: z.enum(PACK_SCALES).default("medium"),
   /** Which real product photo to place: the pack photo (default) or one of the product's extra photos. */
   photoId: z.string().uuid().nullable().optional(),
+  /** The team's edited direction (what the picture shows and how it's shot). The rules are always added. */
+  direction: z.string().trim().max(4000).optional(),
+  /** Return the prompt that would be sent, without making an image (free). */
+  preview: z.boolean().default(false),
   custom: z
     .object({ w: z.number().int().min(MIN_SIDE).max(MAX_SIDE), h: z.number().int().min(MIN_SIDE).max(MAX_SIDE) })
     .nullable()
@@ -91,7 +95,13 @@ export async function POST(req: Request) {
       packPosition: input.packPosition,
       target: { w: spec.w, h: spec.h, label: spec.label, note: spec.note },
       textMode: input.textMode,
+      style: (await getBrand()).imageStyle,
+      direction: input.direction,
     };
+    if (input.preview) {
+      const parts = buildImagePromptParts({ ...promptInput, packInScene: packMode === "locked" });
+      return Response.json({ direction: parts.direction, rules: parts.rules });
+    }
     const prompt = buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
     const fallbackPrompt = buildImagePrompt(promptInput);
     const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${packMode === "locked" ? " · original pack" : ""}`;

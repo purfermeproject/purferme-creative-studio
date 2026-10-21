@@ -46,6 +46,10 @@ const WHERE: [string, string][] = [
 ];
 const MARKET_LABEL = { amazon: "Amazon", flipkart: "Flipkart" } as const;
 
+/** Meta Ad Library search for a brand's active ads shown in India (the website shows commercial ads; the API doesn't for India). */
+const adLibraryUrl = (brand: string) =>
+  `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=IN&media_type=all&search_type=keyword_unordered&q=${encodeURIComponent(brand)}`;
+
 function PlaybookCard({ p }: { p: Playbook }) {
   const b = p.playbook;
   return (
@@ -297,6 +301,19 @@ export function CompetitorsClient({
     router.refresh();
   }
 
+  async function addScreenshots(id: string, files: File[]) {
+    setBusy((b) => ({ ...b, [id]: `Uploading ${files.length}…` }));
+    setRowError((r) => ({ ...r, [id]: "" }));
+    const fd = new FormData();
+    files.slice(0, 6).forEach((f) => fd.append("files", f));
+    const res = await fetch(`/api/competitors/${id}/screenshots`, { method: "POST", body: fd });
+    const data = await res.json().catch(() => ({}));
+    setBusy((b) => ({ ...b, [id]: "" }));
+    if (!res.ok) return setRowError((r) => ({ ...r, [id]: data.error ?? "Couldn't add the screenshots." }));
+    router.refresh();
+    if (canAnalyse) await analyse(id);
+  }
+
   async function find() {
     const market = where === "amazon" || where === "flipkart";
     setResearch({
@@ -502,7 +519,7 @@ export function CompetitorsClient({
             <label htmlFor="c-file" className="label">
               Screenshot <span className="font-normal text-ink-soft">(optional if you pasted the text)</span>
             </label>
-            <input id="c-file" name="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+            <input id="c-file" name="file" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" />
           </div>
           <div>
             <label htmlFor="c-link" className="label">
@@ -641,6 +658,29 @@ export function CompetitorsClient({
                   ) : null}
                 </div>
               </header>
+              <div className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-2 p-2 text-sm" data-testid="ad-library">
+                <a href={adLibraryUrl(r.brand)} target="_blank" rel="noopener noreferrer" className="btn-secondary px-3 py-1 text-xs">
+                  Open in Meta Ad Library ↗
+                </a>
+                {canAdd ? (
+                  <label className="btn-secondary cursor-pointer px-3 py-1 text-xs">
+                    {busy[r.id]?.startsWith("Uploading") ? busy[r.id] : "Add screenshots of their ads"}
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="sr-only"
+                      aria-label={`Screenshots of ${r.brand}'s ads`}
+                      onChange={(e) => {
+                        const files = [...(e.target.files ?? [])];
+                        e.target.value = "";
+                        if (files.length) void addScreenshots(r.id, files);
+                      }}
+                    />
+                  </label>
+                ) : null}
+                <span className="text-xs text-ink-soft">Screenshot 3–6 of their running ads in the Ad Library (India, active), then add them here; the breakdown re-runs on their real ads.</span>
+              </div>
               <div className="grid gap-4 md:grid-cols-[12rem_minmax(0,1fr)]">
                 <div className="space-y-2">
                   {r.imageUrl ? (

@@ -16,7 +16,7 @@ describe("buildImagePrompt", () => {
   const base = { concept, platform: "meta" as const, creativeType: "9:16 UGC-style video (15–30s)", productName: "Chocolate Cookies" };
 
   it("uses the chosen scene and its exact on-screen text", () => {
-    const p = buildImagePrompt({ ...base, frameIndex: 1 });
+    const p = buildImagePrompt({ ...base, frameIndex: 1, textMode: "ai" });
     expect(p).toContain("Scene: Cookie dunk");
     expect(p).toContain('"No maida."');
     expect(p).toContain("the real, unaltered pack photo will be placed into the image afterwards");
@@ -67,5 +67,23 @@ describe("locked pack: scene text never asks for a pack", () => {
     const out = withoutPack("Close-up: Chocolate Cookies, millet & oats, 240g pack on a desk; a pouch peeks out of her backpack", "Chocolate Cookies, millet & oats, 240g");
     expect(out).toBe("Close-up: [empty spot: the real pack is added later] on a desk; a [empty spot: the real pack is added later] peeks out of her backpack");
     expect(withoutPack("Snack boxes and packaging", "X")).not.toMatch(/box|packaging/i);
+  });
+});
+
+describe("editable direction, fixed rules", () => {
+  const base = { concept, platform: "meta" as const, creativeType: "Static image ad (4:5)", productName: "Chocolate Cookies", frameIndex: 0 };
+  it("uses the brand's image style in the direction", async () => {
+    const { buildImagePromptParts, withImageStyleDefaults } = await import("@/lib/image-prompt");
+    const style = withImageStyleDefaults({ places: "Mumbai local trains and office pantries" });
+    const { direction } = buildImagePromptParts({ ...base, style });
+    expect(direction).toContain("Places: Mumbai local trains and office pantries");
+    expect(direction).toContain("Photography: Real photography, not CGI");
+  });
+  it("lets the team rewrite the direction, but the rules always stay and packs are still stripped", async () => {
+    const { buildImagePromptParts } = await import("@/lib/image-prompt");
+    const { prompt, direction } = buildImagePromptParts({ ...base, packMode: "locked", direction: "A girl holds the Chocolate Cookies pack on a rooftop at sunset" });
+    expect(direction).not.toMatch(/Chocolate Cookies pack/);
+    expect(prompt).toContain("RULES (always apply):");
+    expect(prompt).toContain("Never invent packaging");
   });
 });

@@ -191,7 +191,7 @@ describe("competitor prompts", () => {
     const p = buildCompetitorPrompt(SEED_BRAND, [choc], { brand: "Crunchy Co", product: "Cookies", channel: "Instagram", adText: "The healthy cookie!", notes: "", hasImage: true });
     expect(p).toContain("Crunchy Co");
     expect(p).toContain("The healthy cookie!");
-    expect(p).toContain("A screenshot of the ad is attached");
+    expect(p).toContain("Screenshots of their ad(s) are attached");
     expect(p).toContain(`- ${choc.name}: ${choc.greenClaims.join("; ")}`);
     expect(p).toContain("never naming or knocking them");
   });
