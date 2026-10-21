@@ -1,5 +1,6 @@
 import { isVideoType } from "./prompts";
 import type { Concept } from "./schemas";
+import { imageAttention } from "./psychology";
 import { PLATFORM_LABELS, type Platform } from "./types";
 
 const PACK_WORDS = "pack(?:et)?s?|pouch(?:es)?|box(?:es)?|jars?|wrappers?|cartons?|packaging|tins?|tubs?";
@@ -77,6 +78,7 @@ export function buildImagePromptParts(opts: ImagePromptOpts): { direction: strin
     `Advertising image for ${PLATFORM_LABELS[platform]} (${opts.creativeType}${isVideoType(opts.creativeType) ? ", a still for one scene of the video" : ""}).`,
     isMainListing ? "" : `Scene: ${scenePack(frame?.visual ?? c.ai_prompt)}`,
     isMainListing ? "" : `Style and details: ${scenePack(c.ai_prompt)}`,
+    imageAttention(platform, isMainListing),
     `Photography: ${style.look}`,
     `Places: ${style.places}`,
     `People: ${style.people}`,

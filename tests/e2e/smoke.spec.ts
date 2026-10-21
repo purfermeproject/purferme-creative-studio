@@ -70,10 +70,14 @@ test("workflow: brief → 3 proposals → develop → saved draft with version 1
   await expect(page.getByTestId("empty-state")).toBeVisible();
   await page.goto("/create");
   await fillBrief(page, { objective: "Awareness", type: "9:16 UGC-style video (15–30s)" });
+  await page.getByTestId("shopper-mindset").locator("summary").click();
+  await expect(page.getByTestId("shopper-mindset")).toContainText("Scrolling, not shopping");
+  await expect(page.getByTestId("shopper-mindset")).toContainText("Unaware or problem-aware");
   await page.getByRole("button", { name: "Propose 3 concepts" }).click();
   await expect(page.getByTestId("progress")).toBeVisible();
   await expect(page.getByTestId("proposal-2")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("proposal-0").getByTestId("mock-badge")).toBeVisible();
+  await expect(page.getByTestId("proposal-1").getByTestId("lever")).toHaveText("Lever: Transparency and trust");
   await page.getByTestId("proposal-1").getByRole("button", { name: "Develop as ad concept" }).click();
   const ws = page.getByTestId("workspace-creative");
   await expect(ws).toBeVisible({ timeout: 60_000 });

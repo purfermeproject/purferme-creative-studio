@@ -98,10 +98,10 @@ export function mockProposals(input: GenerationInput, greenClaims: string[]): Pr
   const claim = greenClaims[0] ?? "Made with millets";
   const pick = (v: string, fallback: string) => (v === "auto" ? fallback : v);
   const rows = [
-    { title: "The 4:30 slump", angle: pick(input.angle, "Coffee/chai ritual"), persona: pick(input.persona, "Working professional 25–35, city"), hook: "3pm called. It wants chai.", mech: "POV / first-person moment" },
-    { title: "Flip the pack", angle: "Ingredient % transparency", persona: "Parent of kids 4–12", hook: "I read the back first. Every time.", mech: "label-reading challenge (flip the pack, read it out)" },
-    { title: "Tiffin trade", angle: "Tiffin and lunchbox", persona: "College student", hook: "Nobody trades for these. I checked.", mech: "mini-story with a twist" },
-    { title: "Crunch test", angle: "Taste first", persona: "Couple sharing breakfast", hook: "Listen.", mech: "ASMR / crunch close-up demo" },
+    { title: "The 4:30 slump", angle: pick(input.angle, "Coffee/chai ritual"), persona: pick(input.persona, "Working professional 25–35, city"), hook: "3pm called. It wants chai.", mech: "POV / first-person moment", lever: "Recognisable moment" },
+    { title: "Flip the pack", angle: "Ingredient % transparency", persona: "Parent of kids 4–12", hook: "I read the back first. Every time.", mech: "label-reading challenge (flip the pack, read it out)", lever: "Transparency and trust" },
+    { title: "Tiffin trade", angle: "Tiffin and lunchbox", persona: "College student", hook: "Nobody trades for these. I checked.", mech: "mini-story with a twist", lever: "Identity and belonging" },
+    { title: "Crunch test", angle: "Taste first", persona: "Couple sharing breakfast", hook: "Listen.", mech: "ASMR / crunch close-up demo", lever: "Sensory appeal" },
   ];
   return rows.slice(0, input.n).map((r, i) => ({
     title: r.title,
@@ -111,6 +111,7 @@ export function mockProposals(input: GenerationInput, greenClaims: string[]): Pr
     hook: r.hook,
     format: input.placement ? `${input.creativeType} · ${input.placement.label}` : input.creativeType,
     hook_mechanism: r.mech,
+    lever: r.lever,
     claims: [{ text: claim, tier: "green" as const }],
     why: "Sample text from mock mode; switch mock mode off for real proposals.",
     based_on: input.landscape ? (i % 2 === 0 ? "Adapts: pack visible in the first second" : "Open ground: ingredient % transparency") : undefined,

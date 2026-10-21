@@ -48,6 +48,7 @@ export const ProposalSchema = z.object({
   hook: z.string().describe("The opening line or on-screen text for the first 2 seconds"),
   format: z.string(),
   hook_mechanism: z.string(),
+  lever: z.string().optional().describe("The main persuasion lever it builds on, from the list in the brief (e.g. Sensory appeal)"),
   claims: z.array(z.object({ text: z.string(), tier: z.enum(["green", "amber"]) })).describe("Claims the idea leans on"),
   why: z.string().describe("Why it serves the objective on this platform, one sentence"),
   based_on: z

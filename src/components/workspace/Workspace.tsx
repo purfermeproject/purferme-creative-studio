@@ -106,7 +106,12 @@ function ProposalCard({
       <div className="flex flex-wrap gap-1.5">
         <span className="chip">{p.persona}</span>
         <span className="chip">{p.angle}</span>
-        <span className="chip">{p.hook_mechanism}</span>
+        {p.hook_mechanism ? <span className="chip">{p.hook_mechanism}</span> : null}
+        {p.lever ? (
+          <span className="chip-green" title="The persuasion principle this idea builds on" data-testid="lever">
+            Lever: {p.lever}
+          </span>
+        ) : null}
       </div>
       <p className="text-sm">
         <span className="font-semibold">Why: </span>

@@ -199,6 +199,7 @@ export const SEED_TERMS: SeedTerm[] = [
     ["Harmful", String.raw`harmful`],
     ["Boost", String.raw`\bboost\w*`],
     ["Sugar-free / zero sugar", String.raw`\bsugar[\s-]?free|zero[\s-]sugar|\bno sugar\b|0\s?g sugar`],
+    ["Fear or shame framing", String.raw`\bbad (mom|mum|mother|dad|father|parent)s?\b|\bpoison\w*|killing (you|your)|\btoxic\b|\bashamed\b|feel guilty`],
   ]),
   ...all("amber", [
     ["Nutrient content claim", String.raw`packed with|loaded with|rich in|high[\s-]in|high[\s-]protein|source of`],
@@ -210,6 +211,8 @@ export const SEED_TERMS: SeedTerm[] = [
     ["No added sugar", String.raw`no added sugar|without added sugar|no sugar added`],
     ["Naturally sweetened", String.raw`naturally sweet\w*`],
     ["High fibre / fibre-rich", String.raw`high[\s-]fib(re|er)|fib(re|er)[\s-]rich`],
+    ["Urgency / scarcity (only if real)", String.raw`\bhurry\b|last chance|selling fast|only \d+ left|limited stock|few left|ends tonight|don'?t miss out|before it'?s gone|while stocks last`],
+    ["Popularity claim (needs real numbers)", String.raw`best[\s-]?sell\w*|thousands of (happy )?customers|lakhs? of (happy )?customers|everyone('?s| is) (loving|buying|talking)|\bviral\b|cult favou?rite`],
   ]),
   ...["choc", "bfast", "pbr"].map((slug) => ({
     label: "No added sugar (product has jaggery)",

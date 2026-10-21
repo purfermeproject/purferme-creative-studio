@@ -3,6 +3,7 @@
 import { ChoiceOrCustom } from "@/components/ChoiceOrCustom";
 import { PLACEMENTS } from "@/lib/placements";
 import { AUTO } from "@/lib/prompts";
+import { AWARENESS, MINDSET } from "@/lib/psychology";
 import { DELIVERABLES, OBJECTIVES, PLATFORMS, type Deliverable, type Objective, type Platform } from "@/lib/types";
 import Link from "next/link";
 import { matchesProduct } from "@/lib/landscape";
@@ -196,6 +197,22 @@ export function BriefPanel({
             </Tile>
           ))}
         </div>
+        <details className="rounded-xl bg-surface-2 p-3 text-xs text-ink-soft" data-testid="shopper-mindset">
+          <summary className="cursor-pointer font-semibold text-ink">How shoppers meet this ad: {MINDSET[brief.platform].label}</summary>
+          <p className="mt-2">{MINDSET[brief.platform].state}</p>
+          <ul className="mt-2 list-disc space-y-1 pl-4">
+            {MINDSET[brief.platform].job.map((j) => (
+              <li key={j}>{j}</li>
+            ))}
+          </ul>
+          {brief.objective ? (
+            <p className="mt-2">
+              <span className="font-semibold text-ink">Where they are: </span>
+              {AWARENESS[brief.objective].stage} {AWARENESS[brief.objective].lead}
+            </p>
+          ) : null}
+          <p className="mt-2">Each proposal is built on a different persuasion lever, so different ideas reach different people.</p>
+        </details>
         {market ? (
           playbook ? (
             <label className="flex items-start gap-2 rounded-xl bg-gold-soft p-3 text-sm" data-testid="playbook-toggle">

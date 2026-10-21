@@ -1,6 +1,7 @@
 import type { Deliverable, Objective, Platform } from "./types";
 import { OBJECTIVES, PLATFORM_LABELS } from "./types";
 import type { Landscape } from "./landscape";
+import { psychologyBlock } from "./psychology";
 
 type BrandLike = {
   brandContext: string;
@@ -203,13 +204,13 @@ ${brand.exampleAds?.trim() ? `\nADS WE LIKE (match this voice, specificity and r
 
   const deliverable = input.deliverable ? DELIVERABLE_GUIDANCE[input.deliverable](input.platform) : "";
   const outputRules = proposals
-    ? `For each proposal give: title, angle, persona, big_idea (the moment, the twist, the proof point), hook (the first 2 seconds), format, hook_mechanism, the claims it leans on with tiers, and why (one sentence on how it serves the objective on ${PLATFORM_LABELS[input.platform]}).
-Make the ${input.n} proposals genuinely different directions (different moment, hook mechanism and persona or angle), so the team has a real choice. Never lean on a red claim.`
+    ? `For each proposal give: title, angle, persona, big_idea (the moment, the twist, the proof point), hook (the first 2 seconds), format, hook_mechanism, lever (the main persuasion lever), the claims it leans on with tiers, and why (one sentence on how it works on the viewer's mind on ${PLATFORM_LABELS[input.platform]} and serves the objective).
+Make the ${input.n} proposals genuinely different directions (different moment, hook mechanism, lever and persona or angle), so the team has a real choice and each one can reach a different kind of person. Never lean on a red claim.`
     : `Video: 4–7 frames with timestamps totalling 15–30s. Image sets: one frame per image (max 7) or per banner size.
 List every claim used with its tier. Never include a red claim. Product details must match exactly.
 ${shape}
 ${input.hasPackImage ? "A photo of the real pack is attached: describe it accurately in ai_prompt and visuals (colours, layout, text on pack). Do not invent pack details.\n" : ""}Set needs_real_person true when any shot needs a real human (always for Amazon people, testimonials and founder/farm footage). Set ai_label_needed true when a synthetic person or realistic synthetic scene appears.
-In why_it_fits, explain in one or two sentences why the concept suits ${PLATFORM_LABELS[input.platform]} specifically.${deliverable ? `\n${deliverable}` : ""}`;
+In why_it_fits, name the persuasion lever and explain in one or two sentences why the concept works on how people use ${PLATFORM_LABELS[input.platform]}.${deliverable ? `\n${deliverable}` : ""}`;
 
   return `You are the creative strategist for an Indian D2C food brand. ${proposals ? `Propose ${input.n} distinct creative directions (short proposals, not finished ads).` : `Write ${input.n} ad concepts.`}
 
@@ -225,6 +226,7 @@ ${knowledge ? `${knowledge}\n` : ""}${product.story?.trim() ? `PRODUCT STORY (re
 PLATFORM: ${PLATFORM_LABELS[input.platform]}. CREATIVE TYPE: ${input.creativeType}.${
     input.placement ? `\nPLACEMENT: ${input.placement.label}. ${input.placement.guidance || "Design natively for this placement's format, length and safe areas."}` : ""
   }${input.competitor ? `\n${competitorBlock(input.competitor)}` : ""}${input.playbook ? `\n${playbookBlock(input.playbook)}` : ""}${input.landscape ? `\n${landscapeBlock(input.landscape)}` : ""}${objective ? `\nCAMPAIGN OBJECTIVE: ${objective.label}. ${OBJECTIVE_GUIDANCE[objective.id]}` : ""}
+${psychologyBlock(input.platform, input.objective, proposals)}
 ${rule.rules}
 
 DIRECTION: angle = ${angle}; persona = ${persona}; language = ${input.language}

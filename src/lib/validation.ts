@@ -187,6 +187,7 @@ export function validateCreative(input: {
   if (c.hook.trim().split(/\s+/).length > 14) {
     issues.push({ id: "hook:long", level: "brand", title: "Hook is long", detail: "Hooks land best in under about 12 words (2 seconds, sound off)." });
   }
+  issues.push(...attentionIssues(c, platform));
   const ctas = [c.copy.cta, ...(c.copy.variants ?? []).map((v) => v.cta)].filter((x) => x?.trim());
   if (!ctas.length) issues.push({ id: "cta", level: "info", title: "No call to action", detail: "Add a CTA such as Shop now or Learn more." });
   if (c.ai_label_needed) issues.push({ id: "ai-label", level: "info", title: "Show an AI label", detail: "A synthetic person or realistic synthetic scene appears: label it for as long as it's on screen (ASCI)." });
@@ -194,6 +195,65 @@ export function validateCreative(input: {
 
   const blocking = issues.filter((i) => i.level === "block").length;
   return { scan: scanResult, claims, issues, blocking, needsHumanReview: issues.some((i) => i.level === "review") };
+}
+
+const AD_SPEAK = /^(looking for|are you looking|introducing|say hello to|meet (the|our)|presenting|discover the|try (the|our)|the perfect|want a|need a|craving a|searching for)\b/i;
+const SHOWS_PRODUCT = /\b(pack(et)?|pouch|box|jar|bar|cookies?|product|label|bite|spread|wrapper)\b/i;
+const isVideoFrames = (c: ValidatableConcept) => c.frames.length > 1 && c.frames.some((f) => /\d\s*s\b/.test(f.slot ?? ""));
+const words = (s?: string) => (s?.trim() ? s.trim().split(/\s+/).length : 0);
+
+/**
+ * How the ad will meet a real viewer: does it stop a scroll, work with the sound
+ * off, show the product in time and stay easy to process? Advisory, never blocking.
+ */
+export function attentionIssues(c: ValidatableConcept, platform: Platform): Issue[] {
+  const out: Issue[] = [];
+  const video = isVideoFrames(c);
+  if (AD_SPEAK.test(c.hook.trim())) {
+    out.push({
+      id: "attn:ad-speak",
+      level: "brand",
+      title: "Hook sounds like an ad",
+      detail: "People scroll past anything that looks like advertising in the first second. Open on their moment, an action or a surprising fact instead.",
+    });
+  }
+  if (video && !c.frames[0]?.onscreen?.trim()) {
+    out.push({
+      id: "attn:sound-off",
+      level: "brand",
+      title: "First scene has no on-screen text",
+      detail: `Many people watch ${platform === "meta" ? "Reels and feed videos" : "autoplaying ads"} muted at first. Put the hook on screen in the first 2 seconds.`,
+    });
+  }
+  if (video && !c.frames.slice(0, 2).some((f) => SHOWS_PRODUCT.test(`${f.visual ?? ""} ${f.onscreen ?? ""}`))) {
+    out.push({
+      id: "attn:product-late",
+      level: "info",
+      title: "Show the product by about 3 seconds",
+      detail: "Most viewers leave in the first few seconds; if the product appears late they remember the moment but not the brand.",
+    });
+  }
+  if (c.claims.length > 3) {
+    out.push({
+      id: "attn:claims",
+      level: "brand",
+      title: "Too many claims at once",
+      detail: `${c.claims.length} claims compete for attention. One sharp proof point is easier to believe and remember; keep the rest for the listing.`,
+    });
+  }
+  const maxWords = platform === "meta" ? 15 : 12;
+  if (!video) {
+    const busy = c.frames.filter((f) => words(f.onscreen) > maxWords).length;
+    if (busy) {
+      out.push({
+        id: "attn:busy",
+        level: "brand",
+        title: "Too much text to read on a phone",
+        detail: `${busy} image${busy > 1 ? "s have" : " has"} more than ${maxWords} words on it. ${platform === "meta" ? "In a feed" : "As a small thumbnail"} people take in one short line; move the rest to the caption or listing.`,
+      });
+    }
+  }
+  return out;
 }
 
 /** Our visible lines that closely echo a competitor's (same words, mostly). */
