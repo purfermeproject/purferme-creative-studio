@@ -21,6 +21,8 @@ async function compositePack(...args: Parameters<typeof composite>) {
 }
 
 export const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-flare";
+/** Detail level for generated photos. "high" costs more per image but is much sharper; set OPENAI_IMAGE_QUALITY to change it. */
+const QUALITY = (["low", "medium", "high", "auto"] as const).find((q) => q === process.env.OPENAI_IMAGE_QUALITY) ?? "high";
 
 let client: OpenAI | null = null;
 function getClient() {
@@ -126,6 +128,7 @@ export async function generateImage(opts: {
           // Only the gpt-image-1 family accepts input_fidelity; newer models keep the reference faithfully by default.
           ...(withFidelity ? { input_fidelity: "high" as const } : {}),
           size,
+          quality: QUALITY,
           n: 1,
         });
       /** paint = paint the scene around our pack; false = make the scene without any pack, then place ours (the model never sees it, so it can't copy it). */
@@ -133,7 +136,7 @@ export async function generateImage(opts: {
         let res;
         let paintedAround = false;
         if (opts.lockedPack && !paint) {
-          res = await openai.images.generate({ model: IMAGE_MODEL, prompt: fallbackPrompt ?? prompt, size, n: 1 });
+          res = await openai.images.generate({ model: IMAGE_MODEL, prompt: fallbackPrompt ?? prompt, size, quality: QUALITY, n: 1 });
         } else if (opts.lockedPack) {
           // Best: give the model a canvas with our real pack already in place (protected by a mask)
           // and let it paint the scene around it, so scale, perspective, light and shadow fit.
@@ -147,6 +150,7 @@ export async function generateImage(opts: {
               image: [await toFile(inputs.canvas, "canvas.png", { type: "image/png" })],
               mask: await toFile(inputs.mask, "mask.png", { type: "image/png" }),
               size,
+              quality: QUALITY,
               n: 1,
             });
             paintedAround = true;
@@ -154,7 +158,7 @@ export async function generateImage(opts: {
             if (e instanceof PackPhotoError) throw new UserFacingError(e.message);
             if (!(e instanceof OpenAI.BadRequestError || e instanceof OpenAI.UnprocessableEntityError)) throw e;
             console.warn("Painting around the pack failed; falling back to compositing:", e.message);
-            res = await openai.images.generate({ model: IMAGE_MODEL, prompt: fallbackPrompt ?? prompt, size, n: 1 });
+            res = await openai.images.generate({ model: IMAGE_MODEL, prompt: fallbackPrompt ?? prompt, size, quality: QUALITY, n: 1 });
           }
         } else if (ref) {
           try {
@@ -164,7 +168,7 @@ export async function generateImage(opts: {
             else throw e;
           }
         } else {
-          res = await openai.images.generate({ model: IMAGE_MODEL, prompt, size, n: 1 });
+          res = await openai.images.generate({ model: IMAGE_MODEL, prompt, size, quality: QUALITY, n: 1 });
         }
         const b64 = res.data?.[0]?.b64_json;
         if (!b64) throw new UserFacingError("The image service returned no image. Try again.");
@@ -309,6 +313,7 @@ Keep everything else the same: the composition and the style. Do not add any pro
       prompt,
       image: [await toFile(src, "current.png", { type: "image/png" })],
       size: generationSizeFor(w, h),
+      quality: QUALITY,
       n: 1,
     });
   } catch (e) {
