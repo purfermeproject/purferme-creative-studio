@@ -8,7 +8,7 @@ import { buildImagePrompt, buildImagePromptParts } from "@/lib/image-prompt";
 import { defaultSpecFor, findSpec, MAX_SIDE, MIN_SIDE, ratioLabel } from "@/lib/image-specs";
 import { generateImage, loadReference, type Reference } from "@/lib/images";
 import { ConceptSchema } from "@/lib/schemas";
-import { PACK_POSITIONS, PACK_SCALES } from "@/lib/pack-composite";
+import { adLayout, PACK_POSITIONS, PACK_SCALES } from "@/lib/pack-composite";
 import { PLATFORMS } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -22,8 +22,11 @@ const Body = z.object({
   creativeId: z.string().uuid().nullable().optional(),
   specId: z.string().max(40).nullable().optional(),
   textMode: z.enum(["overlay", "ai"]).default("overlay"),
-  /** locked = composite the real pack photo (default); none = a scene without the product. The AI never draws a pack. */
-  packMode: z.enum(["locked", "none"]).default("locked"),
+  /**
+   * layout = a photo plus our real pack standing on a brand panel (default; the model never sees the pack);
+   * locked = the real pack placed inside the scene; none = a scene without the product. The AI never draws a pack.
+   */
+  packMode: z.enum(["layout", "locked", "none"]).default("layout"),
   packPosition: z.enum(PACK_POSITIONS).default("right"),
   packScale: z.enum(PACK_SCALES).default("medium"),
   /** Which real product photo to place: the pack photo (default) or one of the product's extra photos. */
@@ -69,7 +72,7 @@ export async function POST(req: Request) {
             : await loadReference(product.packImageUrl);
     // Without a pack photo there is nothing to lock; fall back to describing the pack.
     // Only real product photos are used: no photo on file means no pack image, never an AI-drawn one.
-    if (input.packMode === "locked" && !reference) {
+    if (input.packMode !== "none" && !reference) {
       return Response.json(
         { error: `There's no pack photo for ${product.name} yet, so the AI would have to invent one. Add your real pack photo in Tools → Settings → Products (it's placed into images unchanged), or choose “No pack in this image”.`, code: "no-pack-photo" },
         { status: 400 },
@@ -82,6 +85,7 @@ export async function POST(req: Request) {
         : !input.packImage
           ? (/^\/api\/assets\/([0-9a-f-]{36})$/i.exec(product.packImageUrl ?? "")?.[1] ?? null)
           : null;
+    const brand0 = await getBrand();
     const spec = input.custom
       ? { w: input.custom.w, h: input.custom.h, label: `custom ${ratioLabel(input.custom.w, input.custom.h)}`, note: undefined as string | undefined }
       : (input.specId ? findSpec(input.specId) : null) ?? defaultSpecFor(input.platform, input.creativeType);
@@ -91,11 +95,12 @@ export async function POST(req: Request) {
       platform: input.platform,
       creativeType: input.creativeType,
       productName: product.name,
-      packMode,
+      packMode: packMode === "layout" ? ("none" as const) : packMode,
+      layout: packMode === "layout" ? adLayout(spec).kind : undefined,
       packPosition: input.packPosition,
       target: { w: spec.w, h: spec.h, label: spec.label, note: spec.note },
       textMode: input.textMode,
-      style: (await getBrand()).imageStyle,
+      style: brand0.imageStyle,
       direction: input.direction,
     };
     if (input.preview) {
@@ -104,7 +109,8 @@ export async function POST(req: Request) {
     }
     const prompt = buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
     const fallbackPrompt = buildImagePrompt(promptInput);
-    const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${packMode === "locked" ? " · original pack" : ""}`;
+    const withPack = packMode !== "none";
+    const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${withPack ? " · original pack" : ""}${packMode === "layout" ? " · brand panel" : ""}`;
     const image = await generateImage({
       prompt,
       target: { w: spec.w, h: spec.h },
@@ -117,6 +123,10 @@ export async function POST(req: Request) {
         packMode === "locked" && reference
           ? { data: reference.data, position: input.packPosition, scale: input.packScale, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
           : null,
+      layoutPack:
+        packMode === "layout" && reference
+          ? { data: reference.data, position: input.packPosition, panel: brand0.kit.colors.primary, accent: brand0.kit.colors.accent, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
+          : null,
     });
     if (input.creativeId) {
       await db
@@ -124,7 +134,7 @@ export async function POST(req: Request) {
         .set({ imageIds: sql`array_append(${schema.creatives.imageIds}, ${image.id}::uuid)`, updatedAt: new Date() })
         .where(eq(schema.creatives.id, input.creativeId));
     }
-    return Response.json({ ...image, label: packMode === "locked" ? `${spec.label} · original pack` : spec.label, usedPackPhoto: Boolean(reference), packMode });
+    return Response.json({ ...image, label: withPack ? `${spec.label} · original pack${packMode === "layout" ? " · brand panel" : ""}` : spec.label, usedPackPhoto: Boolean(reference), packMode });
   } catch (e) {
     return Response.json({ error: errorMessage(e) }, { status: 500 });
   }

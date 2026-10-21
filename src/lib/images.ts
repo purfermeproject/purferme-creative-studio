@@ -7,7 +7,7 @@ import { UserFacingError, isMock } from "./ai";
 import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
-import { compositePack as composite, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
+import { compositePack as composite, layoutAd, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
 import { findInventedPacks } from "./pack-detect";
 
 /** Composite, turning an unusable pack photo into a message the team can act on. */
@@ -69,7 +69,17 @@ export async function generateImage(opts: {
   lockedPack?: { data: Buffer; position: PackPosition; scale: PackScale; assetId?: string | null; liftBackdrop?: boolean } | null;
   /** With a locked pack: `prompt` paints the scene around the real pack; this one is for the older "leave a spot, paste after" method if that fails. */
   fallbackPrompt?: string;
+  /** Designed layout: a photo with no pack, then our real pack standing on a brand panel (the model never sees the pack). */
+  layoutPack?: { data: Buffer; position: PackPosition; panel: string; accent: string; assetId?: string | null; liftBackdrop?: boolean } | null;
 }) {
+  const layout = async (scene: Buffer) => {
+    try {
+      return (await layoutAd(scene, opts.layoutPack!.data, { ...opts.target, position: opts.layoutPack!.position, panel: opts.layoutPack!.panel, accent: opts.layoutPack!.accent, liftBackdrop: opts.layoutPack!.liftBackdrop })).data;
+    } catch (e) {
+      if (e instanceof PackPhotoError) throw new UserFacingError(e.message);
+      throw e;
+    }
+  };
   const size = generationSizeFor(opts.target.w, opts.target.h);
   let mime: string;
   let data: string;
@@ -81,9 +91,13 @@ export async function generateImage(opts: {
   // With an OpenAI key, images are always real, even while text generation is in mock mode.
   if (isMock() && !process.env.OPENAI_API_KEY) {
     mime = "image/svg+xml";
-    data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label, { drawPack: !opts.lockedPack })).toString("base64");
+    data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label, { drawPack: !opts.lockedPack && !opts.layoutPack })).toString("base64");
     model = "mock";
-    if (opts.lockedPack) {
+    if (opts.layoutPack) {
+      const scene = await sharp(Buffer.from(data, "base64")).resize(opts.target.w, opts.target.h).png().toBuffer();
+      mime = "image/jpeg";
+      data = (await layout(scene)).toString("base64");
+    } else if (opts.lockedPack) {
       // Placeholder scene, but the real pack is composited exactly as it would be for a real image.
       const scene = await sharp(Buffer.from(data, "base64")).resize(opts.target.w, opts.target.h).png().toBuffer();
       mime = "image/jpeg";
@@ -161,7 +175,15 @@ export async function generateImage(opts: {
       };
 
       let made = await once(opts.prompt, opts.fallbackPrompt);
-      if (opts.lockedPack) {
+      if (opts.layoutPack) {
+        // The photo must not contain any packaging of its own; redo once if the model drew some anyway.
+        const invented = await findInventedPacks(made.image, null, opts.user);
+        if (invented.length) {
+          made = await once(`${opts.prompt}\n\nIMPORTANT: a previous attempt wrongly showed ${invented.join("; ")}. Show NO jar, box, pouch, packet, bottle or label anywhere; hands may only hold food, a spoon, toast or a cup.`, undefined);
+          if ((await findInventedPacks(made.image, null, opts.user)).length) warning = "The AI may have drawn packaging in the photo. Check the image, then make another or use Edit with words to remove it.";
+        }
+        made = { image: await layout(made.image), box: null };
+      } else if (opts.lockedPack) {
         // The model sometimes invents a second pack (e.g. in someone's hand). Check, and redo once if so.
         let invented = await findInventedPacks(made.image, made.box, opts.user);
         if (invented.length) {
@@ -203,7 +225,7 @@ export async function generateImage(opts: {
     prompt: opts.prompt,
     model,
     size: opts.target,
-    sourceAssetIds: opts.lockedPack?.assetId ? [opts.lockedPack.assetId] : [],
+    sourceAssetIds: opts.lockedPack?.assetId ? [opts.lockedPack.assetId] : opts.layoutPack?.assetId ? [opts.layoutPack.assetId] : [],
   });
   await db.insert(schema.generationLogs).values({
     user: opts.user,

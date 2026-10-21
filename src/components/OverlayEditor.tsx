@@ -29,9 +29,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Default text options for an image: hook as the headline, at the top when the pack sits at the bottom. */
-export function defaultOverlay(kit: BrandKit, d: { headline: string; sub: string; cta: string }, packAtBottom: boolean): OverlayOptions {
+export type PackLayout = "panel" | "scene" | "none";
+export const packLayoutOf = (label?: string): PackLayout => (label?.includes("brand panel") ? "panel" : label?.includes("original pack") ? "scene" : "none");
+
+/** Default text options for an image: hook as the headline, at the top when the pack sits at the bottom; on a brand panel, the button goes on the panel. */
+export function defaultOverlay(kit: BrandKit, d: { headline: string; sub: string; cta: string }, pack: PackLayout): OverlayOptions {
+  const packAtBottom = pack !== "none";
   return {
+    ctaOnPanel: pack === "panel",
     layout: packAtBottom ? "top" : "band",
     headline: d.headline,
     sub: d.sub,
@@ -75,7 +80,7 @@ export function OverlayEditor({
   imageUrl,
   kit,
   defaults,
-  packAtBottom = false,
+  pack = "none",
   creativeId,
   frameIndex,
   baseLabel,
@@ -85,7 +90,7 @@ export function OverlayEditor({
   imageUrl: string;
   kit: BrandKit;
   defaults: { headline: string; sub: string; cta: string };
-  packAtBottom?: boolean;
+  pack?: PackLayout;
   creativeId?: string | null;
   frameIndex?: number | null;
   baseLabel?: string;
@@ -98,7 +103,7 @@ export function OverlayEditor({
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [o, setO] = useState<OverlayOptions>(() => defaultOverlay(kit, defaults, packAtBottom));
+  const [o, setO] = useState<OverlayOptions>(() => defaultOverlay(kit, defaults, pack));
 
   useEffect(() => {
     let alive = true;

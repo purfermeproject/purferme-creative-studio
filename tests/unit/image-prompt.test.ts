@@ -106,3 +106,12 @@ describe("people never handle a pack the model would have to invent", () => {
     expect(p).not.toContain("No close-ups of the product");
   });
 });
+
+describe("designed layout photo", () => {
+  it("never shows a pack and keeps the action clear of the panel", () => {
+    const p = buildImagePrompt({ concept, platform: "meta", creativeType: "Feed image", productName: "Chocolate Cookies", frameIndex: 0, packMode: "none", layout: "bottom" });
+    expect(p).toContain("brand-colour panel with our real pack will cover the bottom third");
+    expect(p).toContain("Do NOT show any product pack");
+    expect(p).not.toContain("our pack is the hero");
+  });
+});

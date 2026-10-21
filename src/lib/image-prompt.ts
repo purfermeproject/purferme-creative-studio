@@ -69,6 +69,8 @@ type ImagePromptOpts = {
   style?: ImageStyle;
   /** The team's own edited direction (scene, style); replaces the generated one. Rules still apply. */
   direction?: string;
+  /** Designed layout: a brand panel with our real pack will cover the bottom (or right) of this photo. */
+  layout?: "bottom" | "right";
 };
 
 /**
@@ -114,6 +116,11 @@ export function buildImagePromptParts(opts: ImagePromptOpts): { direction: strin
         ? "Main listing image: keep the pack and make everything else plain pure white, with only a very soft natural shadow under the pack; no props, no text."
         : "Main listing image: a plain pure white background only, no objects, no props, no text (the pack is added afterwards)."
       : "",
+    opts.layout
+      ? opts.layout === "bottom"
+        ? "This photo is the top of a designed ad: a brand-colour panel with our real pack will cover the bottom third. Put the moment, the hands and any faces in the upper two-thirds, with the action reading clearly there; keep the bottom third simple (table surface or background) because it will be covered."
+        : "This photo fills the left 60% of a designed ad: a brand-colour panel with our real pack covers the right 40%. Put the moment, hands and faces in the left half; keep the right side simple because it will be covered."
+      : "",
     inScene && !isMainListing
       ? "Compose it as an ad, not a candid photo: our pack is the hero and the eye lands on it first. The action happens right beside it and leads to it (a hand spreading the product on toast, a spoon dipping into a small bowl of it, a piece broken over a cup). People are secondary: they sit beside or behind the pack, never overlapped or cut by it, and look toward the food or the pack."
       : "",
@@ -125,7 +132,7 @@ export function buildImagePromptParts(opts: ImagePromptOpts): { direction: strin
       ? "No added text other than what is printed on the pack."
       : opts.textMode === "ai" && text
         ? `On-image text, rendered exactly, large and legible on a phone: "${text}". No other words except what is printed on the pack.`
-        : `Do not render any added words, letters, numbers, prices, badges or logos anywhere (only what is physically printed on the pack). Leave a calm, uncluttered area across the ${locked ? "top quarter" : "lower third"} for a headline that will be added afterwards.`,
+        : `Do not render any added words, letters, numbers, prices, badges or logos anywhere (only what is physically printed on the pack). Leave a calm, uncluttered area across the ${locked || opts.layout ? "top quarter" : "lower third"} for a headline that will be added afterwards.`,
     platform === "amazon" || c.needs_real_person
       ? "No people's faces; if hands are needed, show only hands."
       : "If a person appears, keep them natural and incidental; no doctors, experts or before/after framing.",

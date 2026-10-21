@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { BrandKit } from "@/lib/brand-kit";
 import { defaultSpecFor, IMAGE_SPECS, MAX_SIDE, MIN_SIDE, neededSpecsFor } from "@/lib/image-specs";
 import { findPlacement } from "@/lib/placements";
-import { OverlayEditor, addTextAutomatically, defaultOverlay } from "./OverlayEditor";
+import { OverlayEditor, addTextAutomatically, defaultOverlay, packLayoutOf } from "./OverlayEditor";
 import { PlacementPreview } from "./PlacementPreview";
 import type { Concept } from "@/lib/schemas";
 import type { Platform } from "@/lib/types";
@@ -51,7 +51,7 @@ export function ImageMaker({
   const [picked, setPicked] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
   const [textMode, setTextMode] = useState<"auto" | "overlay" | "ai">("auto");
-  const [packMode, setPackMode] = useState<"locked" | "none">("locked");
+  const [packMode, setPackMode] = useState<"layout" | "locked" | "none">("layout");
   const [packPosition, setPackPosition] = useState<"right" | "center" | "left">("right");
   const [packScale, setPackScale] = useState<"small" | "medium" | "large">("medium");
   const [photoId, setPhotoId] = useState("");
@@ -93,7 +93,7 @@ export function ImageMaker({
     packMode,
     packPosition,
     packScale,
-    photoId: packMode === "locked" && photoId ? photoId : null,
+    photoId: packMode !== "none" && photoId ? photoId : null,
     custom: !spec && specId === CUSTOM ? { w: customW, h: customH } : null,
     direction: direction ?? undefined,
   });
@@ -157,7 +157,7 @@ export function ImageMaker({
             const t = await addTextAutomatically({
               imageUrl: img.url,
               kit,
-              options: defaultOverlay(kit, textDefaults(frames[i]), packMode === "locked"),
+              options: defaultOverlay(kit, textDefaults(frames[i]), packMode === "layout" ? "panel" : packMode === "locked" ? "scene" : "none"),
               label: img.label ?? "Image",
               creativeId,
               frameIndex: frames[i],
@@ -280,10 +280,11 @@ export function ImageMaker({
           Pack in the image
         </label>
         <select id={`pack-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packMode} onChange={(e) => setPackMode(e.target.value as typeof packMode)}>
-          <option value="locked">Pack: our real pack photo</option>
+          <option value="layout">Pack: real pack on a brand panel (recommended)</option>
+          <option value="locked">Pack: real pack inside the scene (AI blends it; check it)</option>
           <option value="none">No pack in this image</option>
         </select>
-        {packMode === "locked" ? (
+        {packMode !== "none" ? (
           <>
             {photos.length ? (
               <>
@@ -308,14 +309,18 @@ export function ImageMaker({
               <option value="center">Pack in the centre</option>
               <option value="left">Pack on the left</option>
             </select>
-            <label htmlFor={`packsize-${concept.title}`} className="sr-only">
-              Pack size
-            </label>
-            <select id={`packsize-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packScale} onChange={(e) => setPackScale(e.target.value as typeof packScale)}>
-              <option value="small">Small pack</option>
-              <option value="medium">Medium pack</option>
-              <option value="large">Large pack</option>
-            </select>
+            {packMode === "locked" ? (
+              <>
+                <label htmlFor={`packsize-${concept.title}`} className="sr-only">
+                  Pack size
+                </label>
+                <select id={`packsize-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packScale} onChange={(e) => setPackScale(e.target.value as typeof packScale)}>
+                  <option value="small">Small pack</option>
+                  <option value="medium">Medium pack</option>
+                  <option value="large">Large pack</option>
+                </select>
+              </>
+            ) : null}
           </>
         ) : null}
         <button type="button" className="btn-secondary" onClick={() => make([frame])} disabled={busy || (specId === CUSTOM && !customValid)}>
@@ -389,8 +394,10 @@ export function ImageMaker({
           </div>
         ) : null}
       </div>
-      {packMode === "locked" ? (
-        <p className="hint">The AI paints the scene only and never draws a pack; your real pack photo is then placed in without any change.</p>
+      {packMode === "layout" ? (
+        <p className="hint">The AI makes the photo only and never sees or draws a pack. Your real pack then stands on a brand-colour panel, unchanged, with the hook on top: it can&apos;t float, be copied or come out the wrong size.</p>
+      ) : packMode === "locked" ? (
+        <p className="hint">The AI paints the scene around your real pack. It can look natural, but check every image: it sometimes floats, is copied or is the wrong scale.</p>
       ) : (
         <p className="hint">Scene only: no pack at all (the AI is told never to draw one).</p>
       )}
@@ -491,9 +498,12 @@ export function ImageMaker({
                     Edit with words
                   </button>
                 )}
-                <button type="button" className="text-accent hover:underline disabled:opacity-50" disabled={working === img.id} onClick={() => allSizes(img)}>
-                  {working === img.id && wordsFor !== img.id ? "Resizing…" : "All sizes"}
-                </button>
+                {img.label?.includes("brand panel") ? null : (
+                  // A designed layout would be cut by cropping; "Make all sizes" lays out each size properly instead.
+                  <button type="button" className="text-accent hover:underline disabled:opacity-50" disabled={working === img.id} onClick={() => allSizes(img)}>
+                    {working === img.id && wordsFor !== img.id ? "Resizing…" : "All sizes"}
+                  </button>
+                )}
                 <a href={`${img.url}?download`} className="text-accent hover:underline">
                   Download
                 </a>
@@ -557,7 +567,7 @@ export function ImageMaker({
           frameIndex={editing.frameIndex ?? null}
           baseLabel={editing.label}
           defaults={textDefaults(editing.frameIndex ?? 0)}
-          packAtBottom={Boolean(editing.label?.includes("original pack"))}
+          pack={packLayoutOf(editing.label)}
           onSaved={(img) => onImages([...images, { ...img, frameIndex: editing.frameIndex ?? null }])}
           onClose={() => setEditing(null)}
         />

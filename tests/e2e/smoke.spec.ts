@@ -514,11 +514,13 @@ test("Original pack is placed unchanged, and images with it can't be AI-edited",
   await expect(card.getByText("Pack image uploaded.")).toBeVisible();
 
   const ws = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
-  await expect(ws.getByLabel("Pack in the image")).toHaveValue("locked");
+  await expect(ws.getByLabel("Pack in the image")).toHaveValue("layout");
   await makeImage(ws);
-  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack");
+  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack · brand panel");
+  // A designed layout is never cropped into other sizes (that would cut the panel); Make all sizes lays each one out.
+  await expect(ws.getByRole("button", { name: "All sizes" })).toHaveCount(0);
   await expect(ws.getByRole("button", { name: "Edit with words" })).toHaveCount(0);
-  await expect(ws.getByLabel("Pack in the image").locator("option")).toHaveText(["Pack: our real pack photo", "No pack in this image"]);
+  await expect(ws.getByLabel("Pack in the image").locator("option")).toHaveText(["Pack: real pack on a brand panel (recommended)", "Pack: real pack inside the scene (AI blends it; check it)", "No pack in this image"]);
   // The server refuses too.
   const assetUrl = await ws.getByTestId("image-gallery").locator("img").first().getAttribute("src");
   const res = await page.request.post("/api/image/edit", { data: { assetId: assetUrl!.split("/").pop(), instruction: "make it warmer" } });
@@ -800,7 +802,7 @@ test("Image prompts: the brand image style is used, and the team can see and edi
   const direction = editor.getByLabel(/What the picture shows/);
   await expect(direction).toHaveValue(/Places: Mumbai local trains, office pantries and balconies at golden hour/);
   await editor.getByText("Rules always added").click();
-  await expect(editor).toContainText("There must be exactly ONE pack in the whole image");
+  await expect(editor).toContainText("Do NOT show any product pack");
   await direction.fill("A commuter on a Mumbai local at 8am, window light, holding a steel tumbler of chai");
   await editor.getByRole("button", { name: "Use this for the next images" }).click();
   await expect(editor.getByRole("button", { name: /Prompt/ })).toContainText("edited");

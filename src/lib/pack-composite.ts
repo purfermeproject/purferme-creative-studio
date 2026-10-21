@@ -1,6 +1,9 @@
 import "server-only";
 import sharp from "sharp";
+import { adLayout } from "./ad-layout";
 import { removeBackdrop } from "./cutout";
+
+export { adLayout };
 
 export const PACK_POSITIONS = ["right", "center", "left"] as const;
 export type PackPosition = (typeof PACK_POSITIONS)[number];
@@ -164,4 +167,61 @@ async function clip(input: Buffer, size: { w: number; h: number }, left: number,
     .png()
     .toBuffer();
   return { input: part, left: x0, top: y0 };
+}
+
+/**
+ * A designed ad: the AI photo (which never contains a pack), a brand-colour panel, and our real pack
+ * standing on the panel with a soft ground shadow. The pack is only scaled, never redrawn, and it always
+ * stands on something, so it can't float, be copied by the model, or come out at the wrong scale.
+ */
+export async function layoutAd(
+  scene: Buffer,
+  pack: Buffer,
+  opts: { w: number; h: number; position?: PackPosition; panel: string; accent: string; liftBackdrop?: boolean; format?: "jpeg" | "png" },
+): Promise<{ data: Buffer; box: PackBox; cutout: boolean }> {
+  const { w, h } = opts;
+  const L = adLayout({ w, h });
+  const { source, cutout } = await preparePack(pack, opts.liftBackdrop);
+  const meta = await sharp(source).metadata();
+  const pw0 = meta.width ?? 1;
+  const ph0 = meta.height ?? 1;
+  const maxW = L.kind === "right" ? L.panel.width * 0.8 : w * 0.46;
+  const k = Math.min(L.packH / ph0, maxW / pw0);
+  const width = Math.max(1, Math.round(pw0 * k));
+  const height = Math.max(1, Math.round(ph0 * k));
+  const side = Math.round(w * 0.07);
+  const left =
+    L.kind === "right"
+      ? L.panel.left + Math.round((L.panel.width - width) / 2)
+      : opts.position === "left"
+        ? side
+        : opts.position === "center"
+          ? Math.round((w - width) / 2)
+          : w - width - side;
+  const top = Math.max(0, L.floor - height);
+  const box = { left, top, width, height };
+
+  const photo = await sharp(scene).resize(L.photo.width, L.photo.height, { fit: "cover", position: "centre" }).png().toBuffer();
+  const panel = await sharp({ create: { width: L.panel.width, height: L.panel.height, channels: 3, background: opts.panel } }).png().toBuffer();
+  const line = L.kind === "bottom" ? { width: w, height: Math.max(4, Math.round(h * 0.006)) } : { width: Math.max(4, Math.round(w * 0.004)), height: h };
+  const accent = await sharp({ create: { width: line.width, height: line.height, channels: 3, background: opts.accent } }).png().toBuffer();
+  const resized = await sharp(source).resize(width, height, { fit: "fill", kernel: "lanczos3" }).ensureAlpha().png().toBuffer();
+
+  // Ground shadow: a soft, flat ellipse where the pack meets the panel.
+  const sw = Math.round(width * 1.15);
+  const sh = Math.max(8, Math.round(height * 0.07));
+  const blur = Math.max(3, Math.round(sh * 0.45));
+  const ellipse = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${sw + blur * 4}" height="${sh + blur * 4}"><ellipse cx="${(sw + blur * 4) / 2}" cy="${(sh + blur * 4) / 2}" rx="${sw / 2}" ry="${sh / 2}" fill="black" fill-opacity="0.45"/></svg>`);
+  const shadow = await sharp(ellipse).blur(blur).png().toBuffer();
+  const shadowLayer = await clip(shadow, { w: sw + blur * 4, h: sh + blur * 4 }, Math.round(left + width / 2 - (sw + blur * 4) / 2), Math.round(top + height - (sh + blur * 4) / 2), { w, h });
+
+  const out = sharp({ create: { width: w, height: h, channels: 3, background: opts.panel } }).composite([
+    { input: photo, left: L.photo.left, top: L.photo.top },
+    { input: panel, left: L.panel.left, top: L.panel.top },
+    { input: accent, left: L.panel.left, top: L.panel.top },
+    ...(shadowLayer ? [shadowLayer] : []),
+    { input: resized, left, top },
+  ]);
+  const data = opts.format === "png" ? await out.png().toBuffer() : await out.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+  return { data, box, cutout };
 }

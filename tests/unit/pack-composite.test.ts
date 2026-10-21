@@ -119,3 +119,22 @@ describe("painting the scene around the real pack", () => {
     expect(at(genBox.left + Math.floor(genBox.width / 2), genBox.top + Math.floor(genBox.height / 2))).toBe(255); // pack: protected
   });
 });
+
+describe("designed layout: photo + real pack on a brand panel", () => {
+  it("keeps the pack's own pixels, stands it on the panel and clear of the Reels caption area", async () => {
+    const { layoutAd, adLayout } = await import("@/lib/pack-composite");
+    const pack = await stripedPack(200, 300);
+    for (const [w, h] of [[1080, 1350], [1080, 1920], [1200, 628]]) {
+      const { data, box } = await layoutAd(await scene(w, h), pack, { w, h, position: "right", panel: "#3b1f5c", accent: "#c8862a", format: "png" });
+      const L = adLayout({ w, h });
+      expect(box.left + box.width).toBeLessThanOrEqual(w);
+      expect(box.top + box.height).toBe(L.floor);
+      if (L.kind === "bottom") expect(box.top + box.height).toBeGreaterThan(L.panel.top);
+      else expect(box.left).toBeGreaterThanOrEqual(L.panel.left);
+      if (h / w >= 1.7) expect(box.top + box.height).toBeLessThanOrEqual(h * 0.8);
+      const placed = await sharp(data).extract(box).removeAlpha().raw().toBuffer();
+      const expected = await sharp(pack).resize(box.width, box.height, { fit: "fill", kernel: "lanczos3" }).removeAlpha().raw().toBuffer();
+      expect(placed.equals(expected)).toBe(true);
+    }
+  });
+});

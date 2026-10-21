@@ -29,7 +29,7 @@ import { ProposalVisual, sketchRatio } from "./ProposalVisual";
 import type { MadeImage } from "@/components/ImageMaker";
 import { findPlacement } from "@/lib/placements";
 import type { Concept } from "@/lib/schemas";
-import { addTextAutomatically, defaultOverlay } from "@/components/OverlayEditor";
+import { addTextAutomatically, defaultOverlay, packLayoutOf } from "@/components/OverlayEditor";
 import { useAutosave, type SaveState } from "./useAutosave";
 import { ValidationPanel } from "./ValidationPanel";
 
@@ -358,7 +358,7 @@ export function Workspace({
         options: defaultOverlay(
           kit,
           { headline: onscreen || concept.hook, sub: concept.copy.headline && concept.copy.headline !== (onscreen || concept.hook) ? concept.copy.headline : "", cta: concept.copy.cta || "Shop now" },
-          true,
+          packLayoutOf(image.label),
         ),
         label: image.label ?? "Image",
         creativeId,
@@ -398,7 +398,7 @@ export function Workspace({
         creativeId: null,
         specId: placementSpec(brief.platform, brief.placement),
         packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
-        packMode: "locked",
+        packMode: "layout",
       });
       const withText = await withHook(image, proposalConcept(p), null);
       setProposalImages((m) => ({ ...m, [p.title]: { image, withText, busy: false, error: "" } }));
@@ -421,7 +421,7 @@ export function Workspace({
         creativeId: c.id,
         specId: placementSpec(c.platform, c.placement),
         packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
-        packMode: "locked",
+        packMode: "layout",
       });
       setCreative((cur) => (cur && cur.id === c.id ? { ...cur, images: [...cur.images, image] } : cur));
       const withText = await withHook(image, snapshotToConcept(c.snapshot), c.id);
