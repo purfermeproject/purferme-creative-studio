@@ -104,10 +104,13 @@ export async function generateImage(opts: {
           size,
           n: 1,
         });
-      const once = async (prompt: string, fallbackPrompt: string | undefined) => {
+      /** paint = paint the scene around our pack; false = make the scene without any pack, then place ours (the model never sees it, so it can't copy it). */
+      const once = async (prompt: string, fallbackPrompt: string | undefined, paint = true) => {
         let res;
         let paintedAround = false;
-        if (opts.lockedPack) {
+        if (opts.lockedPack && !paint) {
+          res = await openai.images.generate({ model: IMAGE_MODEL, prompt: fallbackPrompt ?? prompt, size, n: 1 });
+        } else if (opts.lockedPack) {
           // Best: give the model a canvas with our real pack already in place (protected by a mask)
           // and let it paint the scene around it, so scale, perspective, light and shadow fit.
           try {
@@ -164,7 +167,8 @@ export async function generateImage(opts: {
         let invented = await findInventedPacks(made.image, ours(made.box), opts.user);
         if (invented.length) {
           const fix = `\n\nIMPORTANT: a previous attempt wrongly showed ${invented.join("; ")}. Show NO other jar, box, pouch, packet, bottle or label anywhere, and nobody holds any container; hands may only hold food, a spoon, toast or a cup.`;
-          made = await once(opts.prompt + fix, opts.fallbackPrompt ? opts.fallbackPrompt + fix : undefined);
+          // Second try without showing the model our pack at all, so it has nothing to copy.
+          made = await once(opts.prompt + fix, opts.fallbackPrompt ? opts.fallbackPrompt + fix : undefined, !opts.fallbackPrompt);
           invented = await findInventedPacks(made.image, ours(made.box), opts.user);
           if (invented.length) warning = `The AI may have added packaging that isn't ours (${invented.join("; ")}). Check the image, then make another or use Edit with words to remove it.`;
         }

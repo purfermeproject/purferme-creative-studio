@@ -23,3 +23,13 @@ describe("pack crop", () => {
     expect(got.equals(want)).toBe(true);
   });
 });
+
+describe("telling our pack from a copy the AI drew", () => {
+  it("treats only the same box as ours; a bigger copy behind it is invented", async () => {
+    const { sameBox } = await import("@/lib/pack-detect");
+    const ours = { x: 0.69, y: 0.47, w: 0.15, h: 0.36 };
+    expect(sameBox({ x: 0.68, y: 0.46, w: 0.16, h: 0.37 }, ours)).toBe(true);
+    // The photo above: a larger box standing behind and to the left of ours.
+    expect(sameBox({ x: 0.62, y: 0.38, w: 0.18, h: 0.42 }, ours)).toBe(false);
+  });
+});

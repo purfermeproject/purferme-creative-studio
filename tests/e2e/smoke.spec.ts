@@ -785,7 +785,7 @@ test("Image prompts: the brand image style is used, and the team can see and edi
   const direction = editor.getByLabel(/What the picture shows/);
   await expect(direction).toHaveValue(/Places: Mumbai local trains, office pantries and balconies at golden hour/);
   await editor.getByText("Rules always added").click();
-  await expect(editor).toContainText("Do not cover, repaint, recolour, resize or duplicate the pack");
+  await expect(editor).toContainText("There must be exactly ONE pack in the whole image");
   await direction.fill("A commuter on a Mumbai local at 8am, window light, holding a steel tumbler of chai");
   await editor.getByRole("button", { name: "Use this for the next images" }).click();
   await expect(editor.getByRole("button", { name: /Prompt/ })).toContainText("edited");

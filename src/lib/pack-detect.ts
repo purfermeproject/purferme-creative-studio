@@ -79,6 +79,11 @@ const ExtraPacksSchema = z.object({
     .describe("Every packaged product or labelled container visible (jar, box, pouch, packet, bottle, tub), each as fractions of the image (0–1)"),
 });
 
+/** True when two boxes are the same object: each covers most of the other. A copy partly behind ours is not the same. */
+export function sameBox(a: Box, b: Box): boolean {
+  return overlap(a, b) > 0.6 && overlap(b, a) > 0.6;
+}
+
 /** Share of box a covered by box b (0–1). */
 function overlap(a: Box, b: Box): number {
   const w = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
@@ -107,7 +112,7 @@ Give each one's rectangle as fractions of the image size (left/right of the widt
     });
     return r.packs
       .map((p) => ({ what: p.what, box: cleanBox({ x: p.left, y: p.top, w: p.right - p.left, h: p.bottom - p.top }) }))
-      .filter((p) => p.box && !(ours && overlap(p.box, ours) > 0.5))
+      .filter((p) => p.box && !(ours && sameBox(p.box, ours)))
       .map((p) => p.what);
   } catch (e) {
     console.error("pack check failed", e);
