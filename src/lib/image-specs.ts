@@ -18,7 +18,7 @@ export const IMAGE_SPECS: Record<Platform, ImageSpec[]> = {
     { id: "amz-aplus-banner", label: "A+ header banner 970×300", w: 970, h: 300 },
   ],
   flipkart: [
-    { id: "fk-listing", label: "Listing image 1:1", w: 1100, h: 1100, note: "Mobile-first: big text, one message per image." },
+    { id: "fk-listing", label: "Listing image 1:1", w: 2000, h: 2000, note: "2000×2000 master (Flipkart needs 1100+ for zoom). Mobile-first: big text, one message per image." },
     { id: "fk-video", label: "Product video frame 16:9", w: 1920, h: 1080 },
     { id: "fk-banner-wide", label: "Banner, wide 3:1 (adapt in Ads panel)", w: 1800, h: 600 },
     { id: "fk-banner-sq", label: "Banner, square 1:1 (adapt in Ads panel)", w: 1080, h: 1080 },

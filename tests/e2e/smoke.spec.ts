@@ -364,6 +364,31 @@ test("Preview shows the image in platform mock-ups with safe zones", async ({ pa
   await expect(pv).toHaveCount(0);
 });
 
+test("Product truth: barcode is checked, verified numbers are saved, and the quick-commerce tile previews the image", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/admin");
+  const card = page.getByTestId("product-bar");
+  await card.locator("summary").click();
+  const truth = card.getByTestId("truth-bar");
+  await truth.getByLabel("GTIN / EAN barcode").fill("4006381333932");
+  await card.getByRole("button", { name: "Save" }).first().click();
+  await expect(card.getByText("isn't a valid barcode number")).toBeVisible();
+  await truth.getByLabel("GTIN / EAN barcode").fill("4006381333931");
+  await truth.getByLabel("Net quantity").fill("6 bars × 40 g");
+  await card.getByRole("button", { name: "Save" }).first().click();
+  await expect(card.getByText("Saved.")).toBeVisible();
+  await page.reload();
+  await page.getByTestId("product-bar").locator("summary").click();
+  await expect(page.getByTestId("truth-bar").getByLabel("Net quantity")).toHaveValue("6 bars × 40 g");
+
+  const ws = await develop(page, { platform: "Amazon" });
+  await ws.getByRole("button", { name: "Make image" }).click();
+  await ws.getByRole("button", { name: "Preview" }).first().click();
+  const pv = page.getByTestId("placement-preview");
+  await pv.getByRole("button", { name: "Quick-commerce tile" }).click();
+  await expect(pv.getByTestId("qc-grid")).toContainText("Thumbnail test");
+});
+
 test("Check a finished design: reads the text, flags claims and size", async ({ page }) => {
   const sharp = (await import("sharp")).default;
   const png = await sharp({ create: { width: 720, height: 1280, channels: 3, background: "#c8862a" } }).png().toBuffer();

@@ -19,7 +19,7 @@ describe("defaultSpecFor", () => {
     expect(d("amazon", "Sponsored Brands video (16:9, muted)")).toBe("1920x1080");
     expect(d("amazon", "Sponsored Brands headline + custom image")).toBe("1200x628");
     expect(d("amazon", "A+ content module plan")).toBe("970x600");
-    expect(d("flipkart", "Listing image set (7 images)")).toBe("1100x1100");
+    expect(d("flipkart", "Listing image set (7 images)")).toBe("2000x2000");
     expect(d("flipkart", "Display banner (homepage/category)")).toBe("1800x600");
     expect(d("flipkart", "Short product video (16:9)")).toBe("1920x1080");
     expect(d("meta", "my own weird type")).toBe("1080x1350");

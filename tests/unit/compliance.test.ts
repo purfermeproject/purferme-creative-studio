@@ -91,7 +91,7 @@ describe("scan: scoping and edge cases", () => {
     const meta = applicableTerms(terms, "meta", null).map((t) => t.label);
     expect(meta).toContain("Before/after");
     expect(meta).not.toContain("Mentions Amazon");
-    expect(meta).not.toContain("Infant / baby / 6–24 months");
+    expect(meta).toContain("Infant / baby / 6–24 months"); // applies on every platform
   });
 });
 

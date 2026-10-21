@@ -12,6 +12,7 @@ import { PLATFORMS, PRODUCT_STATUSES, SEVERITIES, isPlatform } from "@/lib/types
 import { DEFAULT_THRESHOLDS, type VerdictThresholds } from "@/lib/verdicts";
 import { isHexColor, withKitDefaults, type BrandKit } from "@/lib/brand-kit";
 import { parseEvidence, parseUrls } from "@/lib/product-knowledge";
+import { validGtin } from "@/lib/product-truth";
 import { storeAsset } from "@/lib/asset-store";
 import { removeBackdrop } from "@/lib/cutout";
 import { detectPackBox } from "@/lib/pack-detect";
@@ -57,6 +58,14 @@ const productSchema = z.object({
   allergens: z.string().trim(),
   story: z.string().trim().max(5000),
   ingredients: z.string().trim().max(3000).default(""),
+  sku: z.string().trim().max(60).default(""),
+  gtin: z.string().trim().max(20).default(""),
+  netQuantity: z.string().trim().max(80).default(""),
+  mrp: z.string().trim().max(40).default(""),
+  shelfLife: z.string().trim().max(120).default(""),
+  storage: z.string().trim().max(300).default(""),
+  nutrition: z.string().trim().max(3000).default(""),
+  fssaiLicence: z.string().trim().max(40).default(""),
   packImageUrl: z.string().trim(),
 });
 
@@ -69,6 +78,7 @@ export async function saveProduct(_: ActionState, fd: FormData): Promise<ActionS
     if (v.status !== "ready" && !v.statusReason) {
       return fail(`Add a reason when a product is on ${v.status}, so the team knows why it can't be generated.`);
     }
+    if (v.gtin && !validGtin(v.gtin)) return fail(`GTIN “${v.gtin}” isn't a valid barcode number (wrong length or check digit).`);
     const links = parseUrls(String(fd.get("productUrls") ?? ""));
     if (links.invalid.length) return fail(`These product links aren't valid web addresses: ${links.invalid.join(", ")}`);
     await db

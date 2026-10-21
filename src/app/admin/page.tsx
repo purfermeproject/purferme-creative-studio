@@ -8,6 +8,7 @@ import { asc } from "drizzle-orm";
 import { currentUser, roleOf } from "@/auth";
 import { db, schema } from "@/db";
 import { formatEvidence, formatUrls } from "@/lib/product-knowledge";
+import { missingTruth, TRUTH_FIELDS } from "@/lib/product-truth";
 import { assetInfo } from "@/lib/asset-store";
 import { can, ROLE_HINTS, ROLE_LABELS } from "@/lib/roles";
 import {
@@ -189,6 +190,22 @@ export default async function AdminPage() {
                       placeholder={"e.g. Deep cocoa, not too sweet; snaps cleanly then goes crumbly in chai.\nBrown kraft pack with a green window.\nPeople keep them at their desk for the 4pm slump; kids steal them from tiffins.\nReview: 'finally a cookie I don't have to hide from my nutritionist friend'"}
                     />
                   </Field>
+                </div>
+                <div className="md:col-span-2" data-testid={`truth-${p.slug}`}>
+                  <p className="label">Product truth</p>
+                  <p className="hint mb-2">One verified set of facts for every channel. Ads and listings only state numbers that are here.{missingTruth(p).length ? ` Missing: ${missingTruth(p).join(", ")}.` : " Complete."}</p>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {TRUTH_FIELDS.filter(([k]) => k !== "nutrition").map(([k, label, hint]) => (
+                      <Field key={k} label={label} hint={hint}>
+                        <input name={k} defaultValue={p[k]} className="input" />
+                      </Field>
+                    ))}
+                  </div>
+                  <div className="mt-3">
+                    <Field label="Nutrition (as printed on the label)" hint="Per 100 g and per serving. Ads may quote only these numbers.">
+                      <textarea name="nutrition" defaultValue={p.nutrition} rows={4} className="input font-mono text-xs" />
+                    </Field>
+                  </div>
                 </div>
                 <Field label="Ingredients" hint="As on the pack, with percentages where known.">
                   <textarea name="ingredients" defaultValue={p.ingredients} rows={4} className="input" />

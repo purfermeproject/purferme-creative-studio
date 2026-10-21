@@ -39,6 +39,16 @@ export const products = pgTable("products", {
   packImageUrl: text("pack_image_url"),
   /** Structured product knowledge used by generation and validation. */
   ingredients: text("ingredients").notNull().default(""),
+  /** Product truth (one verified source for every channel). */
+  sku: text("sku").notNull().default(""),
+  gtin: text("gtin").notNull().default(""),
+  netQuantity: text("net_quantity").notNull().default(""),
+  mrp: text("mrp").notNull().default(""),
+  shelfLife: text("shelf_life").notNull().default(""),
+  storage: text("storage").notNull().default(""),
+  /** Verified nutrition panel, as printed (per 100 g and per serving). */
+  nutrition: text("nutrition").notNull().default(""),
+  fssaiLicence: text("fssai_licence").notNull().default(""),
   messagingPriorities: text("messaging_priorities").array().notNull().default([]),
   claimEvidence: jsonb("claim_evidence").$type<ClaimEvidence[]>().notNull().default([]),
   productUrls: jsonb("product_urls").$type<ProductUrl[]>().notNull().default([]),

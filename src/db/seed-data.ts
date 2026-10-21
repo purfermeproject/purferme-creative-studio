@@ -23,6 +23,10 @@ export const SEED_BRAND = {
     "Protein number",
     "Festive gifting",
     "Founder and farm story",
+    "Real customer evidence (real, permissioned quotes only)",
+    "Product education (texture, how to use, what's inside)",
+    "Offer and trial (discovery pack, launch offer)",
+    "Everyday relevance (office bag, travel, breakfast)",
   ],
   personas: [
     "Working professional 25–35, city",
@@ -194,6 +198,7 @@ export const SEED_TERMS: SeedTerm[] = [
     ["FSSAI approved", String.raw`fssai[\s-]?approved`],
     ["Harmful", String.raw`harmful`],
     ["Boost", String.raw`\bboost\w*`],
+    ["Sugar-free / zero sugar", String.raw`\bsugar[\s-]?free|zero[\s-]sugar|\bno sugar\b|0\s?g sugar`],
   ]),
   ...all("amber", [
     ["Nutrient content claim", String.raw`packed with|loaded with|rich in|high[\s-]in|high[\s-]protein|source of`],
@@ -202,7 +207,17 @@ export const SEED_TERMS: SeedTerm[] = [
     ["Clean", String.raw`\bclean\b`],
     ["Wholesome / nutritious", String.raw`wholesome|nutritious|nourish\w*`],
     ["Best / No. 1", String.raw`\bbest\b|no\.?\s?1\b|number one`],
+    ["No added sugar", String.raw`no added sugar|without added sugar|no sugar added`],
+    ["Naturally sweetened", String.raw`naturally sweet\w*`],
+    ["High fibre / fibre-rich", String.raw`high[\s-]fib(re|er)|fib(re|er)[\s-]rich`],
   ]),
+  ...["choc", "bfast", "pbr"].map((slug) => ({
+    label: "No added sugar (product has jaggery)",
+    regex: String.raw`no added sugar|without added sugar|no sugar added`,
+    severity: "red" as const,
+    platform: null,
+    productSlug: slug,
+  })),
   { label: "Mentions Amazon", regex: String.raw`\bamazon\b`, severity: "red", platform: "amazon", productSlug: null },
   { label: '"Click here"', regex: String.raw`click here`, severity: "red", platform: "amazon", productSlug: null },
   {
@@ -215,9 +230,9 @@ export const SEED_TERMS: SeedTerm[] = [
   { label: "Before/after", regex: String.raw`before\s*(and|&|/)\s*after`, severity: "red", platform: "meta", productSlug: null },
   {
     label: "Infant / baby / 6–24 months",
-    regex: String.raw`\binfant\w*|\bbaby\b|\b6\s?-\s?24\s?months?\b`,
+    regex: String.raw`\binfant\w*|\bbab(y|ies)\b|\b6\s?[-–]\s?24\s?months?\b`,
     severity: "red",
-    platform: "flipkart",
+    platform: null,
     productSlug: null,
   },
   { label: "Dry fruit (Breakfast Cookies)", regex: String.raw`dry fruit`, severity: "red", platform: null, productSlug: "bfast" },

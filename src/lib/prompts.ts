@@ -24,6 +24,8 @@ type ProductLike = {
   ingredients?: string;
   messagingPriorities?: string[];
   claimEvidence?: { claim: string; evidence: string; source?: string }[];
+  netQuantity?: string;
+  nutrition?: string;
 };
 type RuleLike = { rules: string };
 
@@ -168,6 +170,10 @@ export function buildGenerationPrompt(brand: BrandLike, product: ProductLike, ru
     product.ingredients?.trim() ? `INGREDIENTS: ${product.ingredients.trim()}` : "",
     product.messagingPriorities?.length ? `MESSAGING PRIORITIES (lead with these, in order): ${product.messagingPriorities.join("; ")}` : "",
     evidence.length ? `EVIDENCE ON FILE FOR AMBER CLAIMS: ${evidence.map((e) => `${e.claim}: ${e.evidence}`).join("; ")}` : "",
+    product.netQuantity?.trim() ? `NET QUANTITY: ${product.netQuantity.trim()}` : "",
+    product.nutrition?.trim()
+      ? `VERIFIED NUTRITION (the only numbers you may quote, exactly as written): ${product.nutrition.trim().replace(/\s*\n\s*/g, "; ")}`
+      : "NUTRITION: none on file, so do not state any nutrient numbers.",
   ]
     .filter(Boolean)
     .join("\n");

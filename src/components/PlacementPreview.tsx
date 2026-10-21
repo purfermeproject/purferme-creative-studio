@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Platform } from "@/lib/types";
 
-type Mock = "reels" | "feed" | "amazon-search" | "amazon-listing" | "flipkart-card";
+type Mock = "reels" | "feed" | "amazon-search" | "amazon-listing" | "flipkart-card" | "qc-grid";
 const MOCKS: Record<Platform, { id: Mock; label: string }[]> = {
   meta: [
     { id: "reels", label: "Reels / Stories" },
@@ -12,10 +12,12 @@ const MOCKS: Record<Platform, { id: Mock; label: string }[]> = {
   amazon: [
     { id: "amazon-search", label: "Search results" },
     { id: "amazon-listing", label: "Listing page" },
+    { id: "qc-grid", label: "Quick-commerce tile" },
   ],
   flipkart: [
     { id: "flipkart-card", label: "Mobile listing card" },
     { id: "amazon-listing", label: "Product page gallery" },
+    { id: "qc-grid", label: "Quick-commerce tile" },
   ],
 };
 
@@ -186,6 +188,40 @@ export function PlacementPreview({
         <p className="px-3 text-lg font-semibold">{priceText}</p>
         <div className="m-3 rounded-full bg-amber-400 py-2 text-center font-semibold">Add to cart</div>
         {zones ? <p className="px-3 pb-3 text-[11px] text-neutral-600">Blue box: the pack should fill about 85% of a main image.</p> : null}
+      </div>,
+    );
+  } else if (mock === "qc-grid") {
+    // Blinkit / Zepto / Instamart-style category grid: three small tiles per row, roughly 100 px wide on a phone.
+    body = phone(
+      <div className="absolute inset-0 overflow-y-auto bg-neutral-50 text-[10px]" data-testid="qc-grid">
+        <div className="bg-yellow-300 p-3 pt-5">
+          <p className="text-[11px] font-bold">Delivery in 10 minutes</p>
+          <div className="mt-1 rounded-lg bg-white px-3 py-2 text-xs text-neutral-500">Search &quot;healthy snacks&quot;</div>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5 p-2">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className={`space-y-0.5 rounded-lg border border-neutral-200 bg-white p-1.5 ${i === 0 ? "" : "opacity-40"}`}>
+              <div className="relative aspect-square bg-white">
+                {i === 0 ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imageUrl} alt="" className="h-full w-full object-contain" />
+                ) : (
+                  <span className="absolute inset-3 rounded bg-neutral-300" />
+                )}
+              </div>
+              <p className="line-clamp-2 leading-tight font-medium">{i === 0 ? productName : "Other brand snack"}</p>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold">{i === 0 ? priceText : "₹ 99"}</span>
+                <span className="rounded border border-green-700 px-1.5 font-bold text-green-700">ADD</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        {zones ? (
+          <p className="p-3 text-[11px] text-neutral-600">
+            Thumbnail test: at this size can a shopper tell the product, flavour and pack size in under a second? If not, simplify the image or use a cleaner pack shot.
+          </p>
+        ) : null}
       </div>,
     );
   } else {
