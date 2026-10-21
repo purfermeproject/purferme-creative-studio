@@ -69,6 +69,9 @@ const ExtraPacksSchema = z.object({
   packs: z
     .array(z.object({ what: z.string().describe("e.g. 'second cookie box behind the grey block', 'jar in a man's hand'") }))
     .describe("Every packaged product or labelled container still visible, however partly"),
+  writing: z
+    .array(z.object({ text: z.string().describe("The words or numbers as they appear, e.g. '23.8% foxtail millet'"), where: z.string() }))
+    .describe("Any written words, numbers, notes, signs or labels in the picture (not on the grey block)"),
 });
 
 /** True when two boxes are the same object: each covers most of the other. A copy partly behind ours is not the same. */
@@ -94,7 +97,13 @@ export async function blankOutPack(image: Buffer, ours: { left: number; top: num
  * peeking out behind it, a second box beside it or a jar in someone's hand is all that can be found.
  * Empty in mock mode, without a key, or on error, so a failed check never blocks an image.
  */
-export async function findInventedPacks(image: Buffer, ours: { left: number; top: number; width: number; height: number } | null, user: string): Promise<string[]> {
+export async function findInventedPacks(
+  image: Buffer,
+  ours: { left: number; top: number; width: number; height: number } | null,
+  user: string,
+  /** Also report written words (the AI is told never to add any; real text is added afterwards). */
+  opts: { checkWriting?: boolean } = {},
+): Promise<string[]> {
   if (isMock() || (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY)) return [];
   try {
     const masked = ours ? await blankOutPack(image, ours) : image;
@@ -103,14 +112,15 @@ export async function findInventedPacks(image: Buffer, ours: { left: number; top
       schema: ExtraPacksSchema,
       prompt: `This is an advertising image.${ours ? " One area is covered by a flat grey block on purpose: ignore the grey block itself." : ""}
 List every packaged product or labelled container you can still see: boxes, cartons, jars, pouches, packets, bottles, tubs or wrappers, including any edge or corner of a box peeking out from behind${ours ? " or beside the grey block" : " another object"}, ones held in hands, and ones in the background. Look closely at the edges around the grey block.
-Ignore plain cups, mugs, plates, bowls, glasses, cutlery, laptops and books. Return an empty list if there are none.`,
+Ignore plain cups, mugs, plates, bowls, glasses, cutlery, laptops and books. Return an empty list if there are none.
+Also list any written words, numbers, notes, signs or labels visible anywhere in the picture (handwritten or printed), except on the grey block. Return an empty list if there are none.`,
       image: { mediaType: "image/jpeg", base64: small.toString("base64") },
       maxTokens: 1200,
       effort: "low",
       meta: { user, kind: "pack-check" },
-      mock: () => ({ packs: [] }),
+      mock: () => ({ packs: [], writing: [] }),
     });
-    return r.packs.map((p) => p.what).filter(Boolean);
+    return [...r.packs.map((p) => p.what), ...(opts.checkWriting ? r.writing.map((w) => `written text “${w.text}” (${w.where})`) : [])].filter(Boolean);
   } catch (e) {
     console.error("pack check failed", e);
     return [];

@@ -45,3 +45,12 @@ describe("text-free images for the overlay", () => {
     expect(buildImagePrompt({ ...base, textMode: "ai" })).toContain('"3pm called."');
   });
 });
+
+describe("hook text on the image", () => {
+  it("drops the quote marks a hook is written in", async () => {
+    const { unquote } = await import("@/components/overlay-render");
+    expect(unquote("“Flip it. Read the %.”")).toBe("Flip it. Read the %.");
+    expect(unquote('"POV: breakfast is in your bag."')).toBe("POV: breakfast is in your bag.");
+    expect(unquote("Chai's crunch-mate")).toBe("Chai's crunch-mate");
+  });
+});

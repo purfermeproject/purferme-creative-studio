@@ -117,6 +117,7 @@ export async function POST(req: Request) {
       onStage?.(packMode === "layout" ? "Writing the photo brief from the ad (scene, style, where the panel goes)" : "Writing the image brief from the ad");
       const image = await generateImage({
         onStage,
+        noWriting: input.textMode !== "ai",
         prompt,
         target: { w: spec.w, h: spec.h },
         reference: null,

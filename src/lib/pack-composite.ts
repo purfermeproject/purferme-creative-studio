@@ -185,26 +185,23 @@ export async function layoutAd(
   const meta = await sharp(source).metadata();
   const pw0 = meta.width ?? 1;
   const ph0 = meta.height ?? 1;
-  const maxW = L.kind === "right" ? L.panel.width * 0.8 : w * 0.46;
+  const maxW = L.kind === "right" ? L.panel.width * 0.8 : w * 0.44;
   const k = Math.min(L.packH / ph0, maxW / pw0);
   const width = Math.max(1, Math.round(pw0 * k));
   const height = Math.max(1, Math.round(ph0 * k));
   const side = Math.round(w * 0.07);
-  const left =
-    L.kind === "right"
-      ? L.panel.left + Math.round((L.panel.width - width) / 2)
-      : opts.position === "left"
-        ? side
-        : opts.position === "center"
-          ? Math.round((w - width) / 2)
-          : w - width - side;
+  // The pack stands on the right of the panel; the second line and the button use the left (see adLayout().text).
+  const left = L.kind === "right" ? L.panel.left + Math.round((L.panel.width - width) / 2) : w - width - side;
   const top = Math.max(0, L.floor - height);
   const box = { left, top, width, height };
 
   const photo = await sharp(scene).resize(L.photo.width, L.photo.height, { fit: "cover", position: "centre" }).png().toBuffer();
   const panel = await sharp({ create: { width: L.panel.width, height: L.panel.height, channels: 3, background: opts.panel } }).png().toBuffer();
-  const line = L.kind === "bottom" ? { width: w, height: Math.max(4, Math.round(h * 0.006)) } : { width: Math.max(4, Math.round(w * 0.004)), height: h };
-  const accent = await sharp({ create: { width: line.width, height: line.height, channels: 3, background: opts.accent } }).png().toBuffer();
+  // The photo fades into the panel colour instead of stopping at a hard line.
+  const vertical = L.kind === "bottom";
+  const fade = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${L.fade.width}" height="${L.fade.height}"><defs><linearGradient id="f" x1="0" y1="0" x2="${vertical ? 0 : 1}" y2="${vertical ? 1 : 0}"><stop offset="0" stop-color="${opts.panel}" stop-opacity="0"/><stop offset="0.55" stop-color="${opts.panel}" stop-opacity="0.75"/><stop offset="1" stop-color="${opts.panel}" stop-opacity="1"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#f)"/></svg>`,
+  );
   const resized = await sharp(source).resize(width, height, { fit: "fill", kernel: "lanczos3" }).ensureAlpha().png().toBuffer();
 
   // Ground shadow: a soft, flat ellipse where the pack meets the panel.
@@ -218,7 +215,7 @@ export async function layoutAd(
   const out = sharp({ create: { width: w, height: h, channels: 3, background: opts.panel } }).composite([
     { input: photo, left: L.photo.left, top: L.photo.top },
     { input: panel, left: L.panel.left, top: L.panel.top },
-    { input: accent, left: L.panel.left, top: L.panel.top },
+    { input: fade, left: L.fade.left, top: L.fade.top },
     ...(shadowLayer ? [shadowLayer] : []),
     { input: resized, left, top },
   ]);

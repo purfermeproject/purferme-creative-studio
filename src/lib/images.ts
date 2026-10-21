@@ -71,6 +71,8 @@ export async function generateImage(opts: {
   fallbackPrompt?: string;
   /** Designed layout: a photo with no pack, then our real pack standing on a brand panel (the model never sees the pack). */
   layoutPack?: { data: Buffer; position: PackPosition; panel: string; accent: string; assetId?: string | null; liftBackdrop?: boolean } | null;
+  /** The prompt forbids added words (real text goes on afterwards): check the photo for any. */
+  noWriting?: boolean;
   /** Called at each stage, so the team (and the server log) can see what is happening. */
   onStage?: (text: string) => void;
 }) {
@@ -192,12 +194,16 @@ export async function generateImage(opts: {
       let made = await once(opts.prompt, opts.fallbackPrompt);
       if (opts.layoutPack) {
         // The photo must not contain any packaging of its own; redo once if the model drew some anyway.
-        stage("Checking the photo for any packaging the AI drew");
-        const invented = await findInventedPacks(made.image, null, opts.user);
+        stage(opts.noWriting ? "Checking the photo for any packaging or text the AI drew" : "Checking the photo for any packaging the AI drew");
+        const check = { checkWriting: opts.noWriting };
+        const invented = await findInventedPacks(made.image, null, opts.user, check);
         if (invented.length) {
           stage(`Found ${invented.join("; ")}: making the photo again`);
-          made = await once(`${opts.prompt}\n\nIMPORTANT: a previous attempt wrongly showed ${invented.join("; ")}. Show NO jar, box, pouch, packet, bottle or label anywhere; hands may only hold food, a spoon, toast or a cup.`, undefined);
-          if ((await findInventedPacks(made.image, null, opts.user)).length) warning = "The AI may have drawn packaging in the photo. Check the image, then make another or use Edit with words to remove it.";
+          made = await once(
+            `${opts.prompt}\n\nIMPORTANT: a previous attempt wrongly showed ${invented.join("; ")}. Show NO jar, box, pouch, packet, bottle or label anywhere, and NO written words, numbers, notes or signs; hands may only hold food, a spoon, toast or a cup.`,
+            undefined,
+          );
+          if ((await findInventedPacks(made.image, null, opts.user, check)).length) warning = "The AI may have drawn packaging or text in the photo. Check the image, then make another.";
         }
         made = { image: await layout(made.image), box: null };
       } else if (opts.lockedPack) {

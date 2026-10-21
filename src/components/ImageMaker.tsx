@@ -340,16 +340,16 @@ export function ImageMaker({
                     </select>
                   </>
                 ) : null}
-                <label htmlFor={`packpos-${concept.title}`} className="sr-only">
-                  Pack position
-                </label>
-                <select id={`packpos-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packPosition} onChange={(e) => setPackPosition(e.target.value as typeof packPosition)}>
-                  <option value="right">Pack on the right</option>
-                  <option value="center">Pack in the centre</option>
-                  <option value="left">Pack on the left</option>
-                </select>
                 {packMode === "locked" ? (
                   <>
+                    <label htmlFor={`packpos-${concept.title}`} className="sr-only">
+                      Pack position
+                    </label>
+                    <select id={`packpos-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packPosition} onChange={(e) => setPackPosition(e.target.value as typeof packPosition)}>
+                      <option value="right">Pack on the right</option>
+                      <option value="center">Pack in the centre</option>
+                      <option value="left">Pack on the left</option>
+                    </select>
                     <label htmlFor={`packsize-${concept.title}`} className="sr-only">
                       Pack size
                     </label>

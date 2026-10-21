@@ -29,6 +29,11 @@ export function safeArea(w: number, h: number) {
   };
 }
 
+/** Hooks are often written in quotes (“…”); on the image they read better without them. */
+export function unquote(s: string): string {
+  return s.trim().replace(/^["“”'‘’]+|["“”'‘’]+$/g, "").trim();
+}
+
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
   const out: string[] = [];
   for (const para of text.split("\n")) {
@@ -76,9 +81,10 @@ export function drawOverlay(
     // On a wide layout the text stays over the photo, clear of the panel on the right.
     const maxW = (panel?.kind === "right" ? panel.photo.width - safe.x : safe.w) - pad * 2;
     ctx.font = `800 ${hSize}px ${head}`;
-    const hLines = o.headline.trim() ? wrap(ctx, o.headline.trim(), maxW) : [];
+    const hLines = o.headline.trim() ? wrap(ctx, unquote(o.headline), maxW) : [];
     ctx.font = `400 ${sSize}px ${body}`;
-    const sLines = o.sub.trim() ? wrap(ctx, o.sub.trim(), maxW) : [];
+    // On a brand panel the second line sits on the panel beside the pack, not under the hook.
+    const sLines = o.sub.trim() && !panel ? wrap(ctx, unquote(o.sub), maxW) : [];
     ctx.font = `700 ${cSize}px ${head}`;
     const ctaW = o.showCta && o.cta.trim() ? ctx.measureText(o.cta.trim()).width + cSize * 1.6 : 0;
     const ctaH = ctaW ? cSize * 2.1 : 0;
@@ -131,12 +137,34 @@ export function drawOverlay(
     }
     ctx.shadowColor = "transparent";
     ctx.shadowBlur = 0;
+    if (panel && panel.kind === "bottom") {
+      // Logo, then the ad's second line, large and readable, in the free part of the panel beside the pack.
+      const t = panel.text;
+      let ty = t.top;
+      if (logo && o.logoCorner !== "none" && logo.naturalWidth) {
+        const lw = Math.round(Math.min(t.width * 0.55, W * 0.2));
+        const lh = Math.round((logo.naturalHeight / logo.naturalWidth) * lw);
+        ctx.drawImage(logo, t.left, ty, lw, lh);
+        ty += lh + pad * 0.6;
+      }
+      const size = Math.round(short * 0.05 * o.textScale);
+      ctx.font = `700 ${size}px ${head}`;
+      const lines = o.sub.trim() ? wrap(ctx, unquote(o.sub), t.width).slice(0, 3) : [];
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = kit.colors.text;
+      for (const l of lines) {
+        ctx.fillText(l, t.left, ty);
+        ty += size * 1.15;
+      }
+      y = ty + size * 0.5;
+    }
     if (ctaW) {
       let cx: number;
       if (panel) {
-        // Beside the pack on the bottom panel, or under it on a right-hand panel; accent colour so it shows on the panel.
-        cx = panel.kind === "right" ? panel.panel.left + (panel.panel.width - ctaW) / 2 : safe.x + pad;
-        y = panel.kind === "right" ? Math.min(panel.floor + pad * 0.8, H - ctaH - pad) : panel.panel.top + pad * 1.6;
+        // Under the second line beside the pack, or under the pack on a right-hand panel; accent colour so it shows on the panel.
+        cx = panel.kind === "right" ? panel.panel.left + (panel.panel.width - ctaW) / 2 : panel.text.left;
+        y = panel.kind === "right" ? Math.min(panel.floor + pad * 0.8, H - ctaH - pad) : Math.min(y, panel.floor - ctaH);
       } else {
         y += sSize * 0.8;
         cx = align === "center" ? W / 2 - ctaW / 2 : x;
@@ -154,7 +182,7 @@ export function drawOverlay(
     }
   }
 
-  if (logo && o.logoCorner !== "none" && logo.naturalWidth) {
+  if (logo && o.logoCorner !== "none" && logo.naturalWidth && (panel?.kind !== "bottom" || o.layout === "none")) {
     const lw = Math.round(W * 0.2);
     const lh = Math.round((logo.naturalHeight / logo.naturalWidth) * lw);
     const lx = o.logoCorner.endsWith("left") ? safe.x + pad * 0.5 : safe.x + safe.w - lw - pad * 0.5;
