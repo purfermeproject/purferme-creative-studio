@@ -1,0 +1,8 @@
+{"products":[
+ {"handle":"chocolate-cookies","title":"Chocolate Millet Cookies 240g","body_html":"<p>Tasty cookies.</p>","vendor":"Pur Ferme","product_type":"Cookies","tags":[],
+  "variants":[{"title":"Default Title","sku":"","price":"349.00","compare_at_price":null,"barcode":"","grams":240,"available":true}],
+  "images":[{"src":"https://cdn.shopify.com/s/files/1/choc-main.jpg?v=1","width":1000,"height":1000,"alt":null,"position":1},{"src":"https://cdn.shopify.com/s/files/1/choc-2.jpg?v=1","width":1200,"height":800,"alt":"Cookies","position":2}]},
+ {"handle":"cookie-combo","title":"Cookie Combo - Pack of 2 (Chocolate + Breakfast)","body_html":"","vendor":"Pur Ferme","product_type":"","tags":["combo"],
+  "variants":[{"title":"Default Title","sku":"PF-COMBO","price":"649.00","compare_at_price":"698.00","barcode":"","grams":480,"available":true}],
+  "images":[{"src":"https://cdn.shopify.com/s/files/1/combo-main.jpg?v=1","width":1000,"height":1000,"alt":"Combo","position":1}]}
+]}

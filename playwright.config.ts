@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 3100;
@@ -12,6 +13,8 @@ const env = {
   AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-0123456789",
   AUTH_TRUST_HOST: "true",
   ALLOWED_EMAILS: "e2e@example.com",
+  // The Shopify page reads a saved sample store instead of the network.
+  SHOPIFY_FIXTURE_DIR: path.resolve("tests/fixtures/shopify"),
 };
 Object.assign(process.env, env);
 

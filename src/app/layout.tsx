@@ -34,7 +34,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                 <span className="font-serif text-2xl font-semibold tracking-tight text-purple">Puŕ Fermé</span>
                 <span className="eyebrow hidden sm:inline">Creative Studio</span>
               </Link>
-              <div className="order-3 w-full overflow-x-auto md:order-none md:w-auto md:flex-1">
+              <div className="order-3 w-full overflow-x-auto">
                 <Nav />
               </div>
               <div className="ml-auto flex items-center gap-3">

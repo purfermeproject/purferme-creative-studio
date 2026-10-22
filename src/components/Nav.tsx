@@ -10,6 +10,7 @@ const MAIN = [
   { href: "/library", label: "Library" },
   { href: "/competitors", label: "Competitors" },
   { href: "/results", label: "Results" },
+  { href: "/shopify", label: "Shopify" },
 ];
 
 const TOOLS = [

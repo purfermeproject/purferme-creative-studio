@@ -34,7 +34,7 @@ export function unquote(s: string): string {
   return s.trim().replace(/^["“”'‘’]+|["“”'‘’]+$/g, "").trim();
 }
 
-function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+export function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
   const out: string[] = [];
   for (const para of text.split("\n")) {
     let line = "";

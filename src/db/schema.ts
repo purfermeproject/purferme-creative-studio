@@ -10,6 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { StoreSnapshot } from "@/lib/shopify-parse";
 import type { AdapterAccountType } from "next-auth/adapters";
 import type { CreativeStatus, Platform, ProductStatus, Role, Severity } from "@/lib/types";
 import type { ScanResult } from "@/lib/compliance";
@@ -17,7 +18,7 @@ import type { VerdictThresholds } from "@/lib/verdicts";
 import { DEFAULT_AVOID_PHRASES, DEFAULT_EXAMPLE_ADS } from "@/lib/creative-defaults";
 import { DEFAULT_BRAND_KIT, type BrandKit } from "@/lib/brand-kit";
 import type { ImageStyle } from "@/lib/image-prompt";
-import type { CompetitorAnalysis, ListingInsight, MarketplaceResearch, Proposal } from "@/lib/schemas";
+import type { CompetitorAnalysis, ListingInsight, MarketplaceResearch, Proposal, ShopifyListing } from "@/lib/schemas";
 
 export type ClaimEvidence = { claim: string; evidence: string; source?: string };
 export type ProductUrl = { label: string; url: string };
@@ -367,3 +368,23 @@ export type Result = typeof results.$inferSelect;
 export type CreativeVersion = typeof creativeVersions.$inferSelect;
 export type CompetitorAd = typeof competitorAds.$inferSelect;
 export type MarketPlaybook = typeof marketPlaybooks.$inferSelect;
+
+/** The live Shopify store as last fetched: catalogue, theme colours and links to our products (one row). */
+export const shopifyStore = pgTable("shopify_store", {
+  id: integer("id").primaryKey().default(1),
+  snapshot: jsonb("snapshot").$type<StoreSnapshot>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A generated Shopify set for one store product: new listing text and the images made for it. */
+export const shopifyListings = pgTable("shopify_listings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  handle: text("handle").notNull(),
+  productIds: uuid("product_ids").array().notNull().default([]),
+  listing: jsonb("listing").$type<ShopifyListing>().notNull(),
+  imageIds: uuid("image_ids").array().notNull().default([]),
+  mock: boolean("mock").notNull().default(false),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export type ShopifyListingRow = typeof shopifyListings.$inferSelect;

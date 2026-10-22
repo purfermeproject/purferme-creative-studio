@@ -5,7 +5,7 @@ import { acceptedMime, storeAsset } from "@/lib/asset-store";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const Meta = z.object({
-  kind: z.enum(["overlay", "upload", "logo", "font", "edit", "resize"]),
+  kind: z.enum(["overlay", "upload", "logo", "font", "edit", "resize", "shopify"]),
   label: z.string().max(120).optional(),
   creativeId: z.string().uuid().optional(),
   frameIndex: z.coerce.number().int().min(0).max(20).optional(),

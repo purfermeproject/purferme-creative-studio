@@ -181,3 +181,20 @@ export const MarketplaceResearchSchema = z.object({
   }),
 });
 export type MarketplaceResearch = z.infer<typeof MarketplaceResearchSchema>;
+
+/** A Shopify product listing, written to Shopify's own field limits. */
+export const ShopifyListingSchema = z.object({
+  title: z.string().describe("Product title: product type, key benefit or flavour, and size; 70 characters or fewer"),
+  body_html: z
+    .string()
+    .describe("Description as simple HTML using only <p>, <h3>, <ul>, <li>, <strong>: opening line, why you'll love it, what's inside (ingredients), how to enjoy, storage and pack size"),
+  seo_title: z.string().describe("Page title for Google, 70 characters or fewer"),
+  seo_description: z.string().describe("Meta description for Google, 160 characters or fewer, with the product type and one reason to buy"),
+  product_type: z.string().describe("e.g. Cookies, Nut butter, Snack bar"),
+  tags: z.array(z.string()).describe("5–10 lower-case tags for collections and site search"),
+  image_alts: z
+    .array(z.string())
+    .describe("Alt text for the new images, in this order: 1 the pack on its own, 2 the key facts card, 3 lifestyle. Plain description, 125 characters or fewer each"),
+  facts: z.array(z.string()).describe("3 or 4 short lines for the key facts image (2–5 words each), only from approved claims and product facts"),
+});
+export type ShopifyListing = z.infer<typeof ShopifyListingSchema>;

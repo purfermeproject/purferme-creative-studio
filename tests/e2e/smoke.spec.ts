@@ -849,6 +849,39 @@ test("Image prompts: the brand image style is used, and the team can see and edi
   await expect(direction).toHaveValue(/Places: Mumbai local trains/);
 });
 
+test("Shopify: reads the live store, shows what to fix, and makes a 2048×2048 set with a listing and a ZIP for upload", async ({ page }) => {
+  const JSZip = (await import("jszip")).default;
+  await signIn(page);
+  await page.goto("/shopify");
+  await page.getByLabel("Store web address").fill("purferme.example");
+  await page.getByRole("button", { name: "Fetch from live store" }).click();
+  const colours = page.getByTestId("store-colours");
+  await expect(colours).toContainText("2 products");
+  await expect(colours).toContainText("#fffcf6");
+
+  const choc = page.getByTestId("shopify-chocolate-cookies");
+  await expect(choc.getByTestId("audit")).toContainText("to fix on the live listing");
+  await expect(choc.getByLabel("Chocolate Cookies, millet & oats, 240g")).toBeChecked();
+  // The combo is linked to both cookies it contains.
+  const combo = page.getByTestId("shopify-cookie-combo");
+  await expect(combo.getByText("Combo", { exact: true })).toBeVisible();
+  await expect(combo.getByLabel("Chocolate Cookies, millet & oats, 240g")).toBeChecked();
+  await expect(combo.getByLabel("Breakfast Cookies, millet & oats, 240g")).toBeChecked();
+
+  await choc.getByRole("button", { name: "Make the Shopify set" }).click();
+  await expect(choc.getByTestId("shopify-images").locator("img")).toHaveCount(2, { timeout: 60_000 });
+  await expect(choc.getByTestId("shopify-set")).toContainText("SEO description");
+  const href = await choc.getByTestId("shopify-zip").getAttribute("href");
+  const zip = await JSZip.loadAsync(await (await page.request.get(href!)).body());
+  const names = Object.keys(zip.files).sort();
+  expect(names).toEqual(["chocolate-cookies-1-main-2048x2048.jpg", "chocolate-cookies-2-key-facts-2048x2048.jpg", "listing.csv", "listing.txt"]);
+  expect(await zip.file("listing.csv")!.async("string")).toContain("Handle,Title,Body (HTML)");
+
+  // It's still there after a reload.
+  await page.reload();
+  await expect(page.getByTestId("shopify-chocolate-cookies").getByTestId("shopify-images").locator("img")).toHaveCount(2);
+});
+
 test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {
   await signIn(page);
   await page.goto("/admin#roles");

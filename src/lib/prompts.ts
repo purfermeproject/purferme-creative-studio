@@ -417,3 +417,48 @@ For each listing record: brand, exact title, URL, price, pack size, price per 10
 Then write the playbook: the title formula winners use, must-have keywords, the image stack slot by slot, A+ modules, the price/pack sweet spot, review doubts our listing and ads should answer up front, ad practices the winners show (Sponsored Products/Brands, Flipkart Ads), and specific changes for our product that use only our allowed claims (never copy a competitor's health claims).
 Only report what you actually saw; leave a field empty rather than guessing. Use real URLs only.`;
 }
+
+/** A Shopify listing for one store product (several of our products for a combo), from product truth only. */
+export function buildShopifyListingPrompt(
+  brand: BrandLike,
+  products: ProductLike[],
+  current: { title: string; bodyText: string; productType: string; tags: string[]; variants: string[] },
+): string {
+  const facts = products
+    .map((p) =>
+      [
+        `PRODUCT: ${p.name}`,
+        `GREEN CLAIMS (allowed): ${list(p.greenClaims)}`,
+        `AMBER CLAIMS (only with the evidence on file): ${list(p.amberClaims)}${p.claimEvidence?.length ? ` | evidence: ${p.claimEvidence.map((e) => `${e.claim}: ${e.evidence}`).join("; ")}` : ""}`,
+        `RED CLAIMS (never use): ${list(p.redClaims)}`,
+        p.ingredients?.trim() ? `INGREDIENTS (as on pack): ${p.ingredients.trim()}` : "INGREDIENTS: not on file, so say only what the claims say",
+        p.netQuantity?.trim() ? `NET QUANTITY: ${p.netQuantity.trim()}` : "",
+        p.nutrition?.trim() ? `VERIFIED NUTRITION (only numbers you may quote): ${p.nutrition.trim().replace(/\s*\n\s*/g, "; ")}` : "NUTRITION: none on file, so state no nutrient numbers",
+        p.allergens ? `ALLERGENS: ${p.allergens}` : "",
+        p.story?.trim() ? `STORY: ${p.story.trim()}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    )
+    .join("\n\n");
+  return `You write product pages for an Indian D2C food brand's own Shopify website.
+
+${brand.brandContext}
+${brand.hardRules}
+${brand.tone ? `TONE: ${brand.tone}` : ""}
+
+${products.length > 1 ? `This listing is a COMBO of ${products.length} products: describe what's in the box and why they go together.\n\n` : ""}${facts}
+
+THE CURRENT LIVE LISTING (keep what is accurate, improve the rest):
+Title: ${current.title}
+Type: ${current.productType || "(none)"}; Tags: ${current.tags.join(", ") || "(none)"}; Variants: ${current.variants.join("; ") || "(one)"}
+Description: ${current.bodyText.slice(0, 2500) || "(empty)"}
+
+WRITE THE LISTING:
+- Title (70 characters or fewer): what it is, the flavour or main ingredient, and the pack size. No hype words.
+- body_html: simple HTML only (<p>, <h3>, <ul>, <li>, <strong>). Open with one sensory line about taste and the moment it fits. Then: Why you'll love it (3–5 bullets from GREEN claims), What's inside (ingredients exactly as on file), How to enjoy, Storage and pack size.
+- seo_title (70 or fewer) and seo_description (160 or fewer): the product type and one concrete reason to buy, written for people searching Google.
+- image_alts: plain descriptions of the images for screen readers and Google Images.
+- facts: 3 or 4 very short lines for the key facts image, only from GREEN claims and the product facts above.
+- Use only claims above. Never use a red claim, never invent nutrition numbers, health effects, awards, reviews or certifications. Never mention marketplaces or competitors.`;
+}

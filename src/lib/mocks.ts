@@ -1,4 +1,4 @@
-import type { CompetitorAnalysis, CompetitorDiscovery, MarketplaceResearch, Concept, DeepCheck, DesignRead, Proposal, WeeklyBrief } from "./schemas";
+import type { CompetitorAnalysis, CompetitorDiscovery, MarketplaceResearch, Concept, DeepCheck, DesignRead, Proposal, ShopifyListing, WeeklyBrief } from "./schemas";
 import { isVideoType, type GenerationInput } from "./prompts";
 import type { ScanResult } from "./compliance";
 
@@ -228,5 +228,23 @@ export function mockMarketplace(platform: "amazon" | "flipkart", count: number):
       ad_tips: ["Sponsored Brands video with on-screen text", "Bid on 'no maida cookies'"],
       for_our_product: ["Put 'No maida, sweetened with jaggery' in the first 80 characters of the title"],
     },
+  };
+}
+
+/** Mock Shopify listing, built only from the product facts (clearly sample wording). */
+export function mockShopifyListing(products: { name: string; greenClaims: string[]; ingredients?: string; netQuantity?: string }[]): ShopifyListing {
+  const main = products[0];
+  const combo = products.length > 1;
+  const name = combo ? `Combo: ${products.map((p) => p.name.split(",")[0]).join(" + ")}` : main.name;
+  const claims = [...new Set(products.flatMap((p) => p.greenClaims))].slice(0, 4);
+  return {
+    title: name.slice(0, 70),
+    body_html: `<p>Sample listing (mock mode): ${name}.</p><h3>Why you'll love it</h3><ul>${claims.map((c) => `<li>${c}</li>`).join("")}</ul>${main.ingredients ? `<h3>What's inside</h3><p>${main.ingredients}</p>` : ""}<h3>Storage and pack size</h3><p>${main.netQuantity || "See pack"}. Store in a cool, dry place.</p>`,
+    seo_title: name.slice(0, 70),
+    seo_description: `${name}. ${claims[0] ?? ""}`.slice(0, 160),
+    product_type: combo ? "Combo" : "Snacks",
+    tags: ["millets", "no maida", combo ? "combo" : "snacks"],
+    image_alts: [`${name} pack`, `${name} key facts`, `${name} lifestyle`],
+    facts: claims.slice(0, 3).map((c) => c.split(",")[0].slice(0, 32)),
   };
 }
