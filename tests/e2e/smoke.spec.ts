@@ -859,26 +859,37 @@ test("Shopify: reads the live store, shows what to fix, and makes a 2048×2048 s
   await expect(colours).toContainText("2 products");
   await expect(colours).toContainText("#fffcf6");
 
-  const choc = page.getByTestId("shopify-chocolate-cookies");
-  await expect(choc.getByTestId("audit")).toContainText("to fix on the live listing");
-  await expect(choc.getByLabel("Chocolate Cookies, millet & oats, 240g")).toBeChecked();
+  await expect(page.getByTestId("card-chocolate-cookies")).toContainText("to fix");
   // The combo is linked to both cookies it contains.
+  await page.getByTestId("card-cookie-combo").click();
   const combo = page.getByTestId("shopify-cookie-combo");
   await expect(combo.getByText("Combo", { exact: true })).toBeVisible();
   await expect(combo.getByLabel("Chocolate Cookies, millet & oats, 240g")).toBeChecked();
   await expect(combo.getByLabel("Breakfast Cookies, millet & oats, 240g")).toBeChecked();
+  await combo.getByRole("button", { name: "Close" }).click();
 
+  await page.getByTestId("card-chocolate-cookies").click();
+  const choc = page.getByTestId("shopify-chocolate-cookies");
+  await expect(choc.getByTestId("audit")).toContainText("to fix on the live listing");
+  await expect(choc.getByLabel("Chocolate Cookies, millet & oats, 240g")).toBeChecked();
   await choc.getByRole("button", { name: "Make the Shopify set" }).click();
   await expect(choc.getByTestId("shopify-images").locator("img")).toHaveCount(2, { timeout: 60_000 });
-  await expect(choc.getByTestId("shopify-set")).toContainText("SEO description");
+  await expect(choc.getByLabel("New listing")).toContainText("SEO description");
+  // The product panel, store grid and new set have no serious accessibility problems.
+  const AxeBuilder = (await import("@axe-core/playwright")).default;
+  const axe = await new AxeBuilder({ page }).analyze();
+  expect(axe.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? "")).map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(" | ")}`)).toEqual([]);
   const href = await choc.getByTestId("shopify-zip").getAttribute("href");
   const zip = await JSZip.loadAsync(await (await page.request.get(href!)).body());
   const names = Object.keys(zip.files).sort();
   expect(names).toEqual(["chocolate-cookies-1-main-2048x2048.jpg", "chocolate-cookies-2-key-facts-2048x2048.jpg", "listing.csv", "listing.txt"]);
   expect(await zip.file("listing.csv")!.async("string")).toContain("Handle,Title,Body (HTML)");
+  await choc.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByTestId("card-chocolate-cookies")).toContainText("Set ready");
 
   // It's still there after a reload.
   await page.reload();
+  await page.getByTestId("card-chocolate-cookies").click();
   await expect(page.getByTestId("shopify-chocolate-cookies").getByTestId("shopify-images").locator("img")).toHaveCount(2);
 });
 

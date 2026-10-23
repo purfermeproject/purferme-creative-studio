@@ -3,6 +3,7 @@ import { currentUser, roleOf } from "@/auth";
 import { db, schema } from "@/db";
 import { getBrand, getProducts } from "@/lib/data";
 import { getStore } from "@/lib/shopify";
+import { SHOPIFY_IMAGE } from "@/lib/shopify-parse";
 import { ShopifyClient, type SavedSet } from "./ShopifyClient";
 
 export const metadata = { title: "Shopify · Puŕ Fermé Creative Studio" };
@@ -35,9 +36,9 @@ export default async function ShopifyPage() {
       <div>
         <p className="eyebrow">Your website</p>
         <h1 className="display text-4xl">Shopify</h1>
-        <p className="hint mt-1 max-w-3xl">
-          Reads your live Shopify store (products, images, colours), shows what to fix, and makes a ready-to-upload set for each product: a new listing written from your
-          product facts and approved claims, and {2048}×{2048} images in your store&apos;s own colours with your real pack (all packs for a combo).
+        <p className="hint mt-1 max-w-2xl">
+          See every product on your live store, what to fix, and download a ready-to-upload set: a new listing and {SHOPIFY_IMAGE}×{SHOPIFY_IMAGE} images in your store&apos;s own
+          colours, with your real pack.
         </p>
       </div>
       <ShopifyClient

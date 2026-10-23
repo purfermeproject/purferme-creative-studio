@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-const PAGES = ["/create", "/guide", "/check", "/library", "/results", "/admin", "/admin/usage"];
+const PAGES = ["/create", "/guide", "/check", "/library", "/results", "/shopify", "/admin", "/admin/usage"];
 
 test("main pages have no serious or critical accessibility violations", async ({ page }) => {
   await page.goto("/login");
