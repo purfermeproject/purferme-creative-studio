@@ -3,7 +3,7 @@ import { authErrorStatus, requireRole } from "@/auth";
 import { errorMessage, structuredCall } from "@/lib/ai";
 import { latestPlaybook } from "@/lib/competitors";
 import { getBrand, getProduct } from "@/lib/data";
-import { LISTING_LABELS, LISTING_PLATFORMS, LISTING_RULES, ListingPlanSchema, TEAM_PLANS } from "@/lib/listing-plan";
+import { LISTING_LABELS, LISTING_PLATFORMS, LISTING_RULES, ListingPlanSchema, SavedPlanSchema, TEAM_PLANS } from "@/lib/listing-plan";
 import { checkPlan, savePlan } from "@/lib/listing-store";
 import { mockListingPlan } from "@/lib/mocks";
 import { buildListingPlanPrompt } from "@/lib/prompts";
@@ -11,7 +11,7 @@ import { buildListingPlanPrompt } from "@/lib/prompts";
 export const maxDuration = 300;
 
 const Make = z.object({ productId: z.string().uuid(), platform: z.enum(LISTING_PLATFORMS), source: z.enum(["ai", "team"]) });
-const Save = z.object({ productId: z.string().uuid(), platform: z.enum(LISTING_PLATFORMS), plan: ListingPlanSchema });
+const Save = z.object({ productId: z.string().uuid(), platform: z.enum(LISTING_PLATFORMS), plan: SavedPlanSchema });
 
 /** Makes a plan: the team's own (from their listing analysis) or a new one written by the AI in the same format. */
 export async function POST(req: Request) {

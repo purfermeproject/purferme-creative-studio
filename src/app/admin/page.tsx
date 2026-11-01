@@ -268,7 +268,7 @@ export default async function AdminPage() {
                 </ActionForm>
                 <div className="w-full space-y-3 border-t border-line pt-4" data-testid={`photos-${p.slug}`}>
                   <p className="label">More product photos</p>
-                  <p className="hint">Back of pack, product out of the pack, jar open, a few pieces on a plate… The workspace can place any of these into images unchanged, and shows them on proposals.</p>
+                  <p className="hint">Back of pack, product out of the pack, jar open, and real lifestyle shots (a tiffin, a desk with chai, a family kitchen). Images can place any of these unchanged, and Listing images can use a lifestyle shot as a slide&apos;s photo instead of AI.</p>
                   {p.photoAssetIds.length ? (
                     <ul className="flex flex-wrap gap-3">
                       {p.photoAssetIds.map((aid) => (

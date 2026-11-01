@@ -40,8 +40,11 @@ export const SlideSchema = z.object({
     .optional()
     .describe("Only for kind = comparison"),
 });
-export type Slide = z.infer<typeof SlideSchema>;
+/** A slide as saved: the team can pick one of the product's own photos instead of an AI photo. */
+export const SavedSlideSchema = SlideSchema.extend({ photoId: z.string().uuid().optional() });
+export type Slide = z.infer<typeof SavedSlideSchema>;
 
+/** What the planner writes (it never picks photos: those are the team's choice). */
 export const ListingPlanSchema = z.object({
   main: z.object({
     note: z.string().describe("What the main image must make clear at thumbnail size (from the pack itself: name, size, hero ingredients)"),
@@ -49,7 +52,8 @@ export const ListingPlanSchema = z.object({
   slides: z.array(SlideSchema).describe("6–8 slides, in order"),
   principles: z.array(z.string()).optional().describe("The few rules this plan follows, in plain words"),
 });
-export type ListingPlan = z.infer<typeof ListingPlanSchema>;
+export const SavedPlanSchema = ListingPlanSchema.extend({ slides: z.array(SavedSlideSchema) });
+export type ListingPlan = z.infer<typeof SavedPlanSchema>;
 
 /** How the team builds an image stack (from their listing analysis); used to brief the planner and to check plans. */
 export const LISTING_RULES = [

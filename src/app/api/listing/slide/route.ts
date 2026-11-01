@@ -78,7 +78,15 @@ export async function POST(req: Request) {
         if (blocked.length) throw new UserFacingError(`Slide ${slot} can't be made yet: ${blocked.map((c) => c.text).join("; ")}. Edit the words, then try again.`);
 
         let base: Buffer;
-        if (slide.kind === "comparison") {
+        const own = slide.kind !== "comparison" && slide.photoId ? slide.photoId : null;
+        if (own && !product.photoAssetIds.includes(own)) throw new UserFacingError("The photo chosen for this slide isn't one of this product's photos any more. Pick another.");
+        if (own) {
+          stage("Using your own photo (no AI)");
+          const photo = await loadReference(`/api/assets/${own}`);
+          if (!photo) throw new UserFacingError("That photo couldn't be loaded. Upload it again in Settings → Products.");
+          stage("Placing your real pack on the brand panel (unchanged, only scaled)");
+          base = await slideBase(photo.data, pack.data, { size: S, band: BAND, panel: brand.kit.colors.primary });
+        } else if (slide.kind === "comparison") {
           stage("Placing your real pack next to a plain, unbranded box (no competitor shown)");
           base = await comparisonBase(pack.data, { size: S, band: BAND, background: PAPER });
         } else {

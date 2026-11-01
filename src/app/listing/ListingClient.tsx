@@ -338,10 +338,36 @@ function PlanEditor({
                 {s.kind === "comparison" ? (
                   <ComparisonEditor slide={s} disabled={!canEdit} onChange={(comparison) => setSlide(i, { comparison })} />
                 ) : (
-                  <label className="lg:col-span-2">
-                    <span className="label">Photo: who, where, doing what</span>
-                    <textarea className="input" rows={2} value={s.scene} disabled={!canEdit} onChange={(e) => setSlide(i, { scene: e.target.value })} />
-                  </label>
+                  <div className="space-y-2 lg:col-span-2">
+                    <label className="block max-w-md">
+                      <span className="label">Photo</span>
+                      <select
+                        className="input"
+                        aria-label={`Slide ${slot} photo`}
+                        value={s.photoId ?? ""}
+                        disabled={!canEdit}
+                        onChange={(e) => setSlide(i, { photoId: e.target.value || undefined })}
+                      >
+                        <option value="">AI makes it from the description</option>
+                        {product.photos.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            Your photo: {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {s.photoId ? (
+                      <p className="hint">Your photo is used as it is (no AI), with the header above and your real pack on the panel.</p>
+                    ) : (
+                      <label className="block">
+                        <span className="label">What the AI photo shows: who, where, doing what</span>
+                        <textarea className="input" rows={2} value={s.scene} disabled={!canEdit} onChange={(e) => setSlide(i, { scene: e.target.value })} />
+                      </label>
+                    )}
+                    {!product.photos.length ? (
+                      <p className="hint">Real photos beat AI: add lifestyle shots (a tiffin, a desk with chai, a kitchen) under More product photos in Settings → Products, then pick one here.</p>
+                    ) : null}
+                  </div>
                 )}
               </div>
               {checks.length ? (

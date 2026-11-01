@@ -917,9 +917,16 @@ test("Listing images: the team's plan is loaded and checked, images are made in 
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByTestId("slot-2")).toContainText("Passes the claim rules");
 
+  // A slide can use the team's own photo instead of an AI photo.
+  await page.getByLabel("Slide 5 photo").selectOption({ label: "Your photo: Cookies out of the pack" });
+  await expect(page.getByTestId("slot-5")).toContainText("Your photo is used as it is (no AI)");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByTestId("slot-5").getByRole("button", { name: "Make image 6" }).click();
+  await expect(page.getByTestId("slot-5").locator("img")).toBeVisible({ timeout: 60_000 });
+
   const zip = await JSZip.loadAsync(await (await page.request.get((await page.getByTestId("listing-zip").getAttribute("href"))!)).body());
   const names = Object.keys(zip.files).sort();
-  expect(names).toEqual(["01-main-2000x2000.jpg", "02-only-good-stuff-inside-2000x2000.jpg", "08-better-than-regular-biscuits-2000x2000.jpg", "image-stack.txt"]);
+  expect(names).toEqual(["01-main-2000x2000.jpg", "02-only-good-stuff-inside-2000x2000.jpg", "06-tiffin-time-favourite-2000x2000.jpg", "08-better-than-regular-biscuits-2000x2000.jpg", "image-stack.txt"]);
   expect(await zip.file("image-stack.txt")!.async("string")).toContain("Feature: 0% Maida | 0% Palm Oil");
 
   // Another product: the AI writes the plan in the same format.
