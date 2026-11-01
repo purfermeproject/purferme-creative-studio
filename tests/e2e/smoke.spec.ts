@@ -893,6 +893,42 @@ test("Shopify: reads the live store, shows what to fix, and makes a 2048×2048 s
   await expect(page.getByTestId("shopify-chocolate-cookies").getByTestId("shopify-images").locator("img")).toHaveCount(2);
 });
 
+test("Listing images: the team's plan is loaded and checked, images are made in their format, and the stack downloads in order", async ({ page }) => {
+  const JSZip = (await import("jszip")).default;
+  await signIn(page);
+  await page.goto("/listing");
+  await page.getByLabel("Product").selectOption({ label: "Breakfast Cookies, millet & oats, 240g" });
+  await page.getByRole("button", { name: "Load your team's plan" }).click();
+
+  // Their wording is kept; the checks say what the claim rules need.
+  await expect(page.getByTestId("checks-3")).toContainText("Needs evidence: High fibre");
+  await expect(page.getByTestId("checks-7")).toContainText("Comparison");
+  await expect(page.getByTestId("checks-2")).toContainText("Natural");
+
+  await page.getByTestId("slot-main").getByRole("button", { name: "Make main image" }).click();
+  await expect(page.getByTestId("slot-main").locator("img")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("slot-1").getByRole("button", { name: "Make image 2" }).click();
+  await expect(page.getByTestId("slot-1").locator("img")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("slot-7").getByRole("button", { name: "Make image 8" }).click();
+  await expect(page.getByTestId("slot-7").locator("img")).toBeVisible({ timeout: 60_000 });
+
+  // Fixing the words clears the flag.
+  await page.getByLabel("Slide 2 header").fill("Sweet The Old Way");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByTestId("slot-2")).toContainText("Passes the claim rules");
+
+  const zip = await JSZip.loadAsync(await (await page.request.get((await page.getByTestId("listing-zip").getAttribute("href"))!)).body());
+  const names = Object.keys(zip.files).sort();
+  expect(names).toEqual(["01-main-2000x2000.jpg", "02-only-good-stuff-inside-2000x2000.jpg", "08-better-than-regular-biscuits-2000x2000.jpg", "image-stack.txt"]);
+  expect(await zip.file("image-stack.txt")!.async("string")).toContain("Feature: 0% Maida | 0% Palm Oil");
+
+  // Another product: the AI writes the plan in the same format.
+  await page.getByLabel("Product").selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
+  await page.getByRole("button", { name: "Let the AI plan it" }).click();
+  await expect(page.getByTestId("slot-7")).toBeVisible();
+  await expect(page.getByLabel("Slide 1 header")).toHaveValue("Only Good Stuff Inside");
+});
+
 test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {
   await signIn(page);
   await page.goto("/admin#roles");

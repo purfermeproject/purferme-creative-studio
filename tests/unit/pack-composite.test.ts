@@ -138,3 +138,42 @@ describe("designed layout: photo + real pack on a brand panel", () => {
     }
   });
 });
+
+describe("a light pack on a white backdrop", () => {
+  it("keeps a cream box face solid, even with a soft edge, and still removes a grey shadow", async () => {
+    const { removeBackdrop } = await import("@/lib/cutout");
+    // White backdrop, a soft grey shadow, and a cream box whose edge blends gently into the white.
+    const photo = await sharp({ create: { width: 600, height: 600, channels: 3, background: "#ffffff" } })
+      .composite([
+        { input: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><defs><filter id="b"><feGaussianBlur stdDeviation="14"/></filter></defs><ellipse cx="300" cy="520" rx="200" ry="30" fill="#9a9a9a" filter="url(#b)"/><rect x="150" y="80" width="300" height="420" fill="#f2ead0" filter="url(#b)"/><rect x="170" y="100" width="260" height="380" fill="#f2ead0"/><rect x="210" y="140" width="180" height="140" fill="#3b1f5c"/></svg>'), left: 0, top: 0 },
+      ])
+      .png()
+      .toBuffer();
+    const cut = await removeBackdrop(photo);
+    expect(cut).not.toBeNull();
+    // The result is trimmed to what stayed solid: the whole cream box (about 300×420), not just the
+    // purple block on it (180×140), and not the shadow underneath (that would make it taller).
+    const m = await sharp(cut!.png).metadata();
+    expect(m.width).toBeGreaterThanOrEqual(290);
+    expect(m.height).toBeGreaterThanOrEqual(410);
+    expect(m.height).toBeLessThanOrEqual(470);
+    const alpha = await sharp(cut!.png).extractChannel(3).raw().toBuffer();
+    const at = (x: number, y: number) => alpha[y * m.width! + x];
+    expect(at(Math.round(m.width! / 2), Math.round(m.height! * 0.85))).toBe(255); // cream face, below the purple block
+  });
+});
+
+describe("a tightly cropped pack photo", () => {
+  it("still loses its thin white margin", async () => {
+    const { removeBackdrop } = await import("@/lib/cutout");
+    // The pack fills almost the whole photo: only a 12 px white margin around a 576×576 box.
+    const photo = await sharp({ create: { width: 600, height: 600, channels: 3, background: "#ffffff" } })
+      .composite([{ input: await sharp({ create: { width: 576, height: 576, channels: 3, background: "#f2ead0" } }).png().toBuffer(), left: 12, top: 12 }])
+      .png()
+      .toBuffer();
+    const cut = await removeBackdrop(photo);
+    expect(cut).not.toBeNull();
+    const m = await sharp(cut!.png).metadata();
+    expect(m.width).toBeLessThanOrEqual(580);
+  });
+});

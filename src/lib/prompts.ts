@@ -462,3 +462,41 @@ WRITE THE LISTING:
 - facts: 3 or 4 very short lines for the key facts image, only from GREEN claims and the product facts above.
 - Use only claims above. Never use a red claim, never invent nutrition numbers, health effects, awards, reviews or certifications. Never mention marketplaces or competitors.`;
 }
+
+/** An image stack plan for one product on one marketplace, in the team's own format (see listing-plan.ts). */
+export function buildListingPlanPrompt(
+  brand: BrandLike,
+  product: ProductLike,
+  input: { platform: string; rules: string[]; example: { name: string; plan: unknown } | null; playbook?: PlaybookContext | null; landscape?: Landscape | null; hasQr: boolean },
+): string {
+  const evidence = (product.claimEvidence ?? []).filter((e) => e.claim.trim() && e.evidence.trim());
+  return `You plan the product image stack for an Indian D2C food brand's ${input.platform} listing: the main image and 7 slides after it.
+
+${brand.brandContext}
+${brand.hardRules}
+
+PRODUCT: ${product.name}
+GREEN CLAIMS (allowed): ${list(product.greenClaims)}
+AMBER CLAIMS (only with the evidence on file): ${list(product.amberClaims)}${evidence.length ? `\nEVIDENCE ON FILE: ${evidence.map((e) => `${e.claim}: ${e.evidence}`).join("; ")}` : ""}
+RED CLAIMS (never use, not even reworded): ${list(product.redClaims)}
+${product.ingredients?.trim() ? `INGREDIENTS: ${product.ingredients.trim()}` : ""}
+${product.netQuantity?.trim() ? `NET QUANTITY: ${product.netQuantity.trim()}` : ""}
+${product.nutrition?.trim() ? `VERIFIED NUTRITION (the only numbers you may quote): ${product.nutrition.trim().replace(/\s*\n\s*/g, "; ")}` : "NUTRITION: none on file, so quote no nutrient numbers."}
+${product.story?.trim() ? `STORY: ${product.story.trim()}` : ""}
+${input.hasQr ? "The pack carries a traceability QR (seed to fork): a slide about where it comes from is a story no competitor tells." : ""}
+${input.playbook ? `\n${playbookBlock(input.playbook)}` : ""}${input.landscape ? `\n${landscapeBlock(input.landscape)}` : ""}
+
+HOW THE TEAM BUILDS AN IMAGE STACK:
+${input.rules.map((r) => `- ${r}`).join("\n")}
+- kind: "lifestyle" (a person in a real setting), "closeup" (the food itself, hands allowed) or "comparison" (a table against an unbranded generic version; fill comparison.rows with facts true for most of that category).
+- The real pack photo is placed next to every photo afterwards, so the scene describes the moment, never the pack.
+${
+  input.example
+    ? `
+A PLAN THE TEAM WROTE (for ${input.example.name}). Learn its structure, order, header style, one-feature callouts and photo direction. Its wording may include claims we are not allowed to make: take only the craft, and use only the claim lists above.
+${JSON.stringify(input.example.plan)}
+`
+    : ""
+}
+Write 7 slides. Headers 2–5 words, benefit first. Sub-headers one short line. One feature per slide. Every lifestyle slide names who is in it and where. Use only allowed claims and product facts; never a red claim, health effect, "superfood", "healthy", "guilt-free" or "gluten free", and never name a competitor.`;
+}

@@ -1,3 +1,4 @@
+import type { ListingPlan } from "./listing-plan";
 import type { CompetitorAnalysis, CompetitorDiscovery, MarketplaceResearch, Concept, DeepCheck, DesignRead, Proposal, ShopifyListing, WeeklyBrief } from "./schemas";
 import { isVideoType, type GenerationInput } from "./prompts";
 import type { ScanResult } from "./compliance";
@@ -246,5 +247,26 @@ export function mockShopifyListing(products: { name: string; greenClaims: string
     tags: ["millets", "no maida", combo ? "combo" : "snacks"],
     image_alts: [`${name} pack`, `${name} key facts`, `${name} lifestyle`],
     facts: claims.slice(0, 3).map((c) => c.split(",")[0].slice(0, 32)),
+  };
+}
+
+/** Mock image stack plan from the product's own claims (clearly sample wording). */
+export function mockListingPlan(p: { name: string; greenClaims: string[]; netQuantity?: string }): ListingPlan {
+  const c = (i: number) => p.greenClaims[i % Math.max(1, p.greenClaims.length)] ?? "Made with millets";
+  const scenes = [
+    "Mother in a bright kitchen reading the back of the pack while her child reaches for a snack",
+    "Young professional at an office desk at 11 am with a cup of chai",
+    "Grandmother and grandchild sharing a snack at the dining table in warm light",
+    "School-age child opening a steel tiffin box in a classroom",
+    "Friends on a weekend road trip sharing a snack in the car",
+    "Farmer standing in a golden millet field at sunrise",
+  ];
+  return {
+    main: { note: `Sample (mock mode): ${p.name}${p.netQuantity ? `, ${p.netQuantity}` : ""} readable at thumbnail size.` },
+    principles: ["Every slide has a person in a real setting", "Benefit first", "One feature per slide"],
+    slides: [
+      ...scenes.map((scene, i) => ({ header: ["Only Good Stuff Inside", "Your Desk-Time Snack", "Sweet The Old Way", "Tiffin Time Favourite", "Made For The Road", "Meet Your Farmer"][i], sub: `Sample sub-header (mock mode) ${i + 1}`, feature: c(i), scene, kind: "lifestyle" as const })),
+      { header: "Real Crunch Inside", sub: "Sample close-up (mock mode)", feature: c(6), scene: "Close-up of a hand breaking the product in half, crumbs in the air", kind: "closeup" as const },
+    ],
   };
 }

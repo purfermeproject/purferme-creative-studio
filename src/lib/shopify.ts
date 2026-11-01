@@ -150,14 +150,15 @@ type Area = { left: number; top: number; width: number; height: number };
  * colour, with soft ground shadows. Packs are only scaled, never redrawn. A combo stands in a row,
  * slightly overlapping, the middle one in front.
  */
-export async function packsOn(packs: Buffer[], background: string, area?: Area, size = SHOPIFY_IMAGE): Promise<Buffer> {
+export async function packsOn(packs: Buffer[], background: string, area?: Area, size = SHOPIFY_IMAGE, fill?: number): Promise<Buffer> {
   const a = area ?? { left: 0, top: 0, width: size, height: size };
   const prepared = await Promise.all(packs.map(async (p) => (await preparePack(p)).source));
   const metas = await Promise.all(prepared.map((p) => sharp(p).metadata()));
   const n = prepared.length;
   // Heights: one pack fills ~78% of the area; in a combo the front one is largest.
   const front = n === 1 ? 0 : Math.floor((n - 1) / 2);
-  const baseH = a.height * (n === 1 ? 0.78 : n === 2 ? 0.66 : 0.58);
+  // fill: share of the area the front pack fills (marketplace main images want ~85%).
+  const baseH = a.height * (fill ?? (n === 1 ? 0.78 : n === 2 ? 0.66 : 0.58));
   const sizes = metas.map((m, i) => {
     const hTarget = baseH * (i === front ? 1 : 0.9);
     const k = hTarget / (m.height ?? 1);

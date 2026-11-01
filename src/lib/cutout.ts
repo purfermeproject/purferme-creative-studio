@@ -40,6 +40,20 @@ export async function removeBackdrop(input: Buffer): Promise<Cutout | null> {
   const plain = border.filter((i) => dist(...px(i), br, bg, bb) < 40).length / border.length;
   if (plain < 0.6) return null;
 
+  // Backdrop, or a shadow on it: close to the backdrop colour, or darker but the same tint. A cream or
+  // beige pack face on a white backdrop has a different tint, so the fill stops at it instead of eating it.
+  const tint = (r: number, g: number, b: number) => {
+    const m = (r + g + b) / 3;
+    return [r - m, g - m, b - m] as const;
+  };
+  const [tr, tg, tb] = tint(br, bg, bb);
+  const backdropLike = (r: number, g: number, b: number) => {
+    const d = dist(r, g, b, br, bg, bb);
+    if (d < 28) return true;
+    const [pr, pg, pb] = tint(r, g, b);
+    return d < 95 && dist(pr, pg, pb, tr, tg, tb) < 9;
+  };
+
   // Flood fill from the border: a pixel is backdrop if it's near the backdrop colour
   // and changes smoothly from its neighbour (handles soft shadows and gradients).
   const isBg = new Uint8Array(w * h);
@@ -65,7 +79,7 @@ export async function removeBackdrop(input: Buffer): Promise<Cutout | null> {
       const n = ny * w + nx;
       if (isBg[n]) continue;
       const [nr, ng, nb] = px(n);
-      if (dist(nr, ng, nb, br, bg, bb) < 95 && dist(nr, ng, nb, r, g, b) < 12) {
+      if (backdropLike(nr, ng, nb) && dist(nr, ng, nb, r, g, b) < 12) {
         isBg[n] = 1;
         queue.push(n);
       }
@@ -73,7 +87,9 @@ export async function removeBackdrop(input: Buffer): Promise<Cutout | null> {
   }
   const removed = isBg.reduce((s, v) => s + v, 0) / (w * h);
   // Too little removed (no plain backdrop) or nearly everything (the pack blends in): don't guess.
-  if (removed < 0.08 || removed > 0.9) return null;
+  // (A tightly cropped pack photo has only a thin margin, so the lower bound is small; the plain-border
+  // check above already rules out busy photos.)
+  if (removed < 0.015 || removed > 0.9) return null;
 
   const mask = Buffer.alloc(w * h);
   for (let i = 0; i < w * h; i++) mask[i] = isBg[i] ? 0 : 255;

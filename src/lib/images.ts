@@ -73,6 +73,8 @@ export async function generateImage(opts: {
   fallbackPrompt?: string;
   /** Designed layout: a photo with no pack, then our real pack standing on a brand panel (the model never sees the pack). */
   layoutPack?: { data: Buffer; position: PackPosition; panel: string; accent: string; assetId?: string | null; liftBackdrop?: boolean } | null;
+  /** A photo that our real pack is placed beside later (listing slides): checked for invented packaging like a layout photo. */
+  photoOnly?: boolean;
   /** The prompt forbids added words (real text goes on afterwards): check the photo for any. */
   noWriting?: boolean;
   /** Called at each stage, so the team (and the server log) can see what is happening. */
@@ -196,7 +198,7 @@ export async function generateImage(opts: {
             : "AI is making the photo",
       );
       let made = await once(opts.prompt, opts.fallbackPrompt);
-      if (opts.layoutPack) {
+      if (opts.layoutPack || opts.photoOnly) {
         // The photo must not contain any packaging of its own; redo once if the model drew some anyway.
         stage(opts.noWriting ? "Checking the photo for any packaging or text the AI drew" : "Checking the photo for any packaging the AI drew");
         const check = { checkWriting: opts.noWriting };
@@ -209,7 +211,7 @@ export async function generateImage(opts: {
           );
           if ((await findInventedPacks(made.image, null, opts.user, check)).length) warning = "The AI may have drawn packaging or text in the photo. Check the image, then make another.";
         }
-        made = { image: await layout(made.image), box: null };
+        if (opts.layoutPack) made = { image: await layout(made.image), box: null };
       } else if (opts.lockedPack) {
         // The model sometimes invents a second pack (e.g. in someone's hand). Check, and redo once if so.
         stage("Checking for any extra pack the AI drew");

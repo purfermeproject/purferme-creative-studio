@@ -134,6 +134,13 @@
       "when": 1792650597781,
       "tag": "0018_shopify",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793510670387,
+      "tag": "0019_listing_plans",
+      "breakpoints": true
     }
   ]
 }

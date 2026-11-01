@@ -6,11 +6,13 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  uniqueIndex,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { StoreSnapshot } from "@/lib/shopify-parse";
+import type { ListingPlan } from "@/lib/listing-plan";
 import type { AdapterAccountType } from "next-auth/adapters";
 import type { CreativeStatus, Platform, ProductStatus, Role, Severity } from "@/lib/types";
 import type { ScanResult } from "@/lib/compliance";
@@ -388,3 +390,17 @@ export const shopifyListings = pgTable("shopify_listings", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export type ShopifyListingRow = typeof shopifyListings.$inferSelect;
+
+/** A marketplace image stack for one product: the main image and the slides after it, with what was made for each. */
+export const listingPlans = pgTable("listing_plans", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  productId: uuid("product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  platform: text("platform").$type<"amazon" | "flipkart" | "shopify">().notNull(),
+  plan: jsonb("plan").$type<ListingPlan>().notNull(),
+  /** Generated image per slot: "main", "1", "2", … → asset id. */
+  images: jsonb("images").$type<Record<string, string>>().notNull().default({}),
+  updatedBy: text("updated_by").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("listing_plans_product_platform_idx").on(t.productId, t.platform)]);

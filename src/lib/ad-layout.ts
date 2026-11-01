@@ -49,3 +49,31 @@ export function adLayout(canvas: { w: number; h: number }): {
     packH: Math.round(h * (tall ? 0.36 : h / w > 1.1 ? 0.44 : 0.46)),
   };
 }
+
+/**
+ * A square listing slide: a header band on top, the photo in the middle fading into a brand panel, the
+ * real pack standing on the panel at the right, and the feature callouts on the panel at the left.
+ * A comparison slide keeps the band and puts two packs and a table below it.
+ */
+export function slideLayout(size: number) {
+  const s = size;
+  const band = { left: 0, top: 0, width: s, height: Math.round(s * 0.2) };
+  const photo = { left: 0, top: Math.round(s * 0.16), width: s, height: Math.round(s * 0.64) };
+  const panelTop = Math.round(s * 0.74);
+  return {
+    band,
+    photo,
+    /** The photo fades into the band above and the panel below. */
+    fadeTop: { left: 0, top: photo.top, width: s, height: Math.round(s * 0.06) },
+    fadeBottom: { left: 0, top: panelTop - Math.round(s * 0.12), width: s, height: Math.round(s * 0.12) },
+    panel: { left: 0, top: panelTop, width: s, height: s - panelTop },
+    pack: { floor: Math.round(s * 0.955), height: Math.round(s * 0.46), right: Math.round(s * 0.05), maxWidth: Math.round(s * 0.4) },
+    callouts: { left: Math.round(s * 0.05), top: panelTop + Math.round(s * 0.035), width: Math.round(s * 0.5), height: s - panelTop - Math.round(s * 0.06) },
+    comparison: {
+      packs: { top: band.height + Math.round(s * 0.03), height: Math.round(s * 0.3) },
+      table: { left: Math.round(s * 0.06), top: Math.round(s * 0.6), width: Math.round(s * 0.88), height: Math.round(s * 0.36) },
+      us: Math.round(s * 0.55),
+      them: Math.round(s * 0.82),
+    },
+  };
+}
