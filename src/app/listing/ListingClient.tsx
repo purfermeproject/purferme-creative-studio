@@ -32,6 +32,8 @@ export function ListingClient({ role, kit, rules, products, saved }: { role: Rol
   const [plans, setPlans] = useState(saved);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // Bumped on import so an open editor reloads the new plan.
+  const [version, setVersion] = useState(0);
   const key = `${productId}:${platform}`;
   const current = plans[key] ?? null;
   const product = products.find((p) => p.id === productId);
@@ -53,10 +55,23 @@ export function ListingClient({ role, kit, rules, products, saved }: { role: Rol
 
   return (
     <div className="space-y-6">
+      {canEdit ? (
+        <ImportPanel
+          products={products}
+          platform={platform}
+          onImported={(saved, first) => {
+            setPlans((m) => ({ ...m, ...saved }));
+            setProductId(first.productId);
+            setPlatform(first.platform);
+            setVersion((v) => v + 1);
+          }}
+        />
+      ) : null}
+
       <section className="flex flex-wrap items-end gap-4 rounded-3xl border border-line bg-surface p-5 shadow-[0_12px_32px_-20px_rgba(45,27,84,0.35)]" aria-label="Choose">
         <label className="min-w-64 flex-1">
           <span className="label">Product</span>
-          <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
+          <select className="input" aria-label="Product" value={productId} onChange={(e) => setProductId(e.target.value)}>
             {products.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -129,7 +144,7 @@ export function ListingClient({ role, kit, rules, products, saved }: { role: Rol
 
       {current && product ? (
         <PlanEditor
-          key={key}
+          key={`${key}:${version}`}
           product={product}
           platform={platform}
           kit={kit}
@@ -460,5 +475,196 @@ function ComparisonEditor({ slide, disabled, onChange }: { slide: Slide; disable
       ) : null}
       <p className="hint">Word each row so ✓ is the good answer (“No palm oil”, not “Palm oil”): ✓ shows green, ✗ red. Short values like “9 g” work too. Every row must be true for most products in that category.</p>
     </div>
+  );
+}
+
+type Imported = { title: string; mainNote: string; slides: Slide[]; productId: string | null };
+
+/** Paste or upload the team's slide table (Word, Excel, CSV or a screenshot), check what was read, then use it for the chosen platforms. */
+function ImportPanel({
+  products,
+  platform,
+  onImported,
+}: {
+  products: Product[];
+  platform: ListingPlatform;
+  onImported: (saved: Record<string, SavedPlan>, first: { productId: string; platform: ListingPlatform }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [tables, setTables] = useState<(Imported & { platforms: ListingPlatform[] })[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function read() {
+    setBusy(true);
+    setError("");
+    try {
+      let res: Response;
+      if (file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        res = await fetch("/api/listing/import", { method: "POST", body: fd });
+      } else {
+        res = await fetch("/api/listing/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Couldn't read the plan.");
+      setTables((data.tables as Imported[]).map((t) => ({ ...t, productId: t.productId ?? "", platforms: [platform] })));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't read the plan.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function use() {
+    if (!tables) return;
+    setBusy(true);
+    setError("");
+    try {
+      const saved: Record<string, SavedPlan> = {};
+      let first: { productId: string; platform: ListingPlatform } | null = null;
+      for (const t of tables) {
+        if (!t.productId) continue;
+        for (const p of t.platforms) {
+          const plan: ListingPlan = { main: { note: t.mainNote || "The pack's name, size and hero ingredients readable at thumbnail size." }, slides: t.slides };
+          const r = await call<SavedPlan>("/api/listing/plan", "PUT", { productId: t.productId, platform: p, plan, replace: true });
+          saved[`${t.productId}:${p}`] = { plan: r.plan, images: {}, checks: r.checks };
+          first ??= { productId: t.productId, platform: p };
+        }
+      }
+      if (!first) throw new Error("Choose the product for at least one table.");
+      onImported(saved, first);
+      setOpen(false);
+      setTables(null);
+      setText("");
+      setFile(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save the plan.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const set = (i: number, patch: Partial<Imported & { platforms: ListingPlatform[] }>) => setTables((ts) => ts!.map((t, k) => (k === i ? { ...t, ...patch } : t)));
+
+  if (!open) {
+    return (
+      <button type="button" className="btn-secondary" onClick={() => setOpen(true)} data-testid="import-open">
+        Import your plan (table from Word, Excel, Docs or a screenshot)
+      </button>
+    );
+  }
+  return (
+    <section className="space-y-4 rounded-3xl border border-purple/30 bg-surface p-5" aria-label="Import your plan" data-testid="import-panel">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="eyebrow">Import</p>
+          <h2 className="display text-2xl">Your slide table → images</h2>
+          <p className="hint mt-1 max-w-2xl">
+            Columns like Slide No · Header · Sub header · Feature · What kind of photo · Reference. Copy the table from Word, Google Docs or Sheets and paste it here, or upload the file
+            (several products in one Word file are fine). Your wording is kept as written; the claim rules then show anything to change.
+          </p>
+        </div>
+        <button type="button" className="btn-secondary px-3 py-1.5 text-sm" onClick={() => setOpen(false)} aria-label="Close import">
+          ✕
+        </button>
+      </div>
+
+      {!tables ? (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
+          <label>
+            <span className="label">Paste the table</span>
+            <textarea className="input font-mono text-xs" rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Slide No\tHeader\tSub header\tFeature\tWhat kind of photo?\tReference ASIN\n3\tStay Full For Longer\t…"} aria-label="Paste the table" />
+          </label>
+          <div className="space-y-3">
+            <label className="block">
+              <span className="label">…or upload a file</span>
+              <input type="file" accept=".docx,.xlsx,.csv,.tsv,.txt,image/png,image/jpeg,image/webp" className="text-sm" onChange={(e) => setFile(e.target.files?.[0] ?? null)} aria-label="Plan file" />
+            </label>
+            <p className="hint">Word (.docx), Excel (.xlsx), CSV, or a screenshot of the table (PNG/JPG; read by the AI).</p>
+            <button type="button" className="btn-primary w-full" onClick={() => void read()} disabled={busy || (!file && !text.trim())}>
+              {busy ? "Reading…" : "Read the plan"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4" data-testid="import-preview">
+          {tables.map((t, i) => (
+            <div key={i} className="space-y-3 rounded-2xl border border-line p-4">
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="min-w-64 flex-1">
+                  <span className="label">{t.title ? `“${t.title}” is for` : `Table ${i + 1} is for`}</span>
+                  <select className="input" value={t.productId ?? ""} onChange={(e) => set(i, { productId: e.target.value })} aria-label={`Product for table ${i + 1}`}>
+                    <option value="">Skip this table</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <fieldset className="flex flex-wrap gap-3 text-sm">
+                  <legend className="label">Make images for</legend>
+                  {LISTING_PLATFORMS.map((p) => (
+                    <label key={p} className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={t.platforms.includes(p)}
+                        onChange={(e) => set(i, { platforms: e.target.checked ? [...t.platforms, p] : t.platforms.filter((x) => x !== p) })}
+                      />
+                      {LISTING_LABELS[p]} ({LISTING_SIZE[p]}²)
+                    </label>
+                  ))}
+                </fieldset>
+              </div>
+              {t.mainNote ? <p className="text-sm text-ink-soft">Main image: {t.mainNote}</p> : null}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[40rem] text-left text-sm">
+                  <thead className="text-xs text-ink-soft uppercase">
+                    <tr>
+                      <th className="py-1 pr-3">#</th>
+                      <th className="py-1 pr-3">Header</th>
+                      <th className="py-1 pr-3">Feature</th>
+                      <th className="py-1 pr-3">Photo</th>
+                      <th className="py-1">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {t.slides.map((s, k) => (
+                      <tr key={k} className="border-t border-line align-top">
+                        <td className="py-1.5 pr-3 text-ink-soft">{k + 2}</td>
+                        <td className="py-1.5 pr-3 font-semibold">{s.header}</td>
+                        <td className="py-1.5 pr-3">{s.feature}</td>
+                        <td className="py-1.5 pr-3 text-ink-soft">{s.scene}</td>
+                        <td className="py-1.5">
+                          <span className="chip">{SLIDE_KIND_LABELS[s.kind]}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn-primary" onClick={() => void use()} disabled={busy || !tables.some((t) => t.productId && t.platforms.length)}>
+              {busy ? "Saving…" : "Use this plan"}
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setTables(null)} disabled={busy}>
+              Read something else
+            </button>
+          </div>
+          <p className="hint">This replaces any earlier plan (and its images) for the chosen product and platforms.</p>
+        </div>
+      )}
+      {error ? (
+        <p role="alert" className="rounded-xl border border-red/30 bg-red-bg p-3 text-sm text-red">
+          {error}
+        </p>
+      ) : null}
+    </section>
   );
 }

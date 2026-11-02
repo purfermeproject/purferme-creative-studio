@@ -936,6 +936,55 @@ test("Listing images: the team's plan is loaded and checked, images are made in 
   await expect(page.getByLabel("Slide 1 header")).toHaveValue("Only Good Stuff Inside");
 });
 
+test("Listing images: import the team's slide table (paste or Word file) and use it for the chosen platforms", async ({ page }) => {
+  const JSZip = (await import("jszip")).default;
+  await signIn(page);
+  await page.goto("/listing");
+
+  // Pasted from Word / Docs / Sheets: tab-separated, with the team's column names.
+  const rows = [
+    ["Slide No", "Header", "Sub header", "Feature (technical, shown next to product)", "What kind of photo?", "Reference ASIN"],
+    ["3", "Stay Full For Longer", "Millets and oats keep hunger away till lunch", "High Fibre – 9g per 100g | Foxtail Millet + Rolled Oats", "Young professional at an office desk at 11 am, laptop open, cookie with a cup of chai", "B089X784PL (Artinci)"],
+    ["4", "Real Nuts, Real Crunch", "Almonds and cashews in every single bite", "Almonds, Cashews, Cocoa | Baked with Butter", "Close-up of a cookie being snapped in half, crumbs in mid-air", "B0D4DYRMVT (Midbreak)"],
+    ["7", "Better Than Regular Biscuits", "See why families are making the switch", "Comparison: Maida / Palm Oil / Refined Sugar / Preservatives", "PurFerme box with green ticks on the left, a plain unbranded regular biscuit pack with red crosses", "B089X784PL (Artinci)"],
+  ];
+  await page.getByTestId("import-open").click();
+  await page.getByLabel("Paste the table").fill(rows.map((r) => r.join("\t")).join("\n"));
+  await page.getByRole("button", { name: "Read the plan" }).click();
+  const preview = page.getByTestId("import-preview");
+  await expect(preview).toContainText("Real Nuts, Real Crunch");
+  await expect(preview).toContainText("Comparison table");
+  await preview.getByLabel("Product for table 1").selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
+  await preview.getByLabel(/Flipkart/).check();
+  await page.getByRole("button", { name: "Use this plan" }).click();
+  await expect(page.getByLabel("Slide 1 header")).toHaveValue("Stay Full For Longer");
+  await expect(page.getByTestId("checks-1")).toContainText("High fibre");
+  await page.getByRole("tab", { name: /Flipkart/ }).click();
+  await expect(page.getByLabel("Slide 3 header")).toHaveValue("Better Than Regular Biscuits");
+
+  // A Word file with two products' tables: each goes to its product.
+  const p = (t: string) => `<w:p><w:r><w:t>${t}</w:t></w:r></w:p>`;
+  const table = (rs: string[][]) => `<w:tbl>${rs.map((r) => `<w:tr>${r.map((c) => `<w:tc>${p(c)}</w:tc>`).join("")}</w:tr>`).join("")}</w:tbl>`;
+  const zip = new JSZip();
+  zip.file(
+    "word/document.xml",
+    `<w:document><w:body>${p("Millet &amp; Oats Breakfast Cookies (240g, 12 cookies) – B0FP51G837")}${p("Main image.")}${p("Make 12 COOKIES • 240 g readable at thumbnail size.")}${table(rows)}${p("Ragi &amp; Cocoa Peanut Butter with Jaggery (Creamy, 500g) – B0GR4T9K8J")}${table([rows[0], ["1", "Spread It Anywhere", "Toast, pancakes, oats", "Creamy Texture | Easy to Spread", "A hand spreading it on toast at breakfast", ""]])}</w:body></w:document>`,
+  );
+  await page.getByTestId("import-open").click();
+  await page.getByLabel("Plan file").setInputFiles({ name: "plan.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: await zip.generateAsync({ type: "nodebuffer" }) });
+  await page.getByRole("button", { name: "Read the plan" }).click();
+  await expect(page.getByLabel("Product for table 1")).toHaveValue(/.+/);
+  await expect(page.getByLabel("Product for table 1").locator("option:checked")).toHaveText("Breakfast Cookies, millet & oats, 240g");
+  await expect(page.getByLabel("Product for table 2").locator("option:checked")).toHaveText("Ragi & Cocoa Peanut Butter with jaggery 500g");
+  await expect(page.getByTestId("import-preview")).toContainText("Main image: Make 12 COOKIES");
+  await page.getByRole("button", { name: "Use this plan" }).click();
+  await expect(page.getByLabel("Product", { exact: true }).locator("option:checked")).toContainText("Breakfast Cookies, millet & oats, 240g");
+  await expect(page.getByLabel("Slide 1 header")).toHaveValue("Stay Full For Longer");
+  const productSelect = page.getByLabel("Product", { exact: true });
+  await productSelect.selectOption((await productSelect.locator("option", { hasText: "Ragi & Cocoa Peanut Butter" }).getAttribute("value"))!);
+  await expect(page.getByLabel("Slide 1 header")).toHaveValue("Spread It Anywhere");
+});
+
 test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {
   await signIn(page);
   await page.goto("/admin#roles");

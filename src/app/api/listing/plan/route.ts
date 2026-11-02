@@ -11,7 +11,13 @@ import { buildListingPlanPrompt } from "@/lib/prompts";
 export const maxDuration = 300;
 
 const Make = z.object({ productId: z.string().uuid(), platform: z.enum(LISTING_PLATFORMS), source: z.enum(["ai", "team"]) });
-const Save = z.object({ productId: z.string().uuid(), platform: z.enum(LISTING_PLATFORMS), plan: SavedPlanSchema });
+const Save = z.object({
+  productId: z.string().uuid(),
+  platform: z.enum(LISTING_PLATFORMS),
+  plan: SavedPlanSchema,
+  /** A newly imported plan: earlier images belonged to other slides, so they're cleared. */
+  replace: z.boolean().default(false),
+});
 
 /** Makes a plan: the team's own (from their listing analysis) or a new one written by the AI in the same format. */
 export async function POST(req: Request) {
@@ -69,7 +75,7 @@ export async function PUT(req: Request) {
   try {
     const product = await getProduct(parsed.data.productId);
     if (!product) return Response.json({ error: "That product no longer exists." }, { status: 404 });
-    const row = await savePlan(parsed.data.productId, parsed.data.platform, parsed.data.plan, user);
+    const row = await savePlan(parsed.data.productId, parsed.data.platform, parsed.data.plan, user, !parsed.data.replace);
     return Response.json({ plan: row.plan, images: row.images, checks: await checkPlan(row.plan, parsed.data.platform, product) });
   } catch (e) {
     return Response.json({ error: errorMessage(e) }, { status: 500 });
