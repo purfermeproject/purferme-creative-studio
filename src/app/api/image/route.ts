@@ -4,12 +4,14 @@ import { authErrorStatus, requireRole } from "@/auth";
 import { db, schema } from "@/db";
 import { errorMessage } from "@/lib/ai";
 import { getBrand, getProduct } from "@/lib/data";
-import { buildImagePrompt, buildImagePromptParts } from "@/lib/image-prompt";
+import { buildImagePrompt, buildImagePromptParts, buildListingScenePrompt } from "@/lib/image-prompt";
 import { defaultSpecFor, findSpec, MAX_SIDE, MIN_SIDE, ratioLabel } from "@/lib/image-specs";
 import { generateImage, loadReference, type Reference } from "@/lib/images";
 import { ConceptSchema } from "@/lib/schemas";
 import { adLayout, PACK_POSITIONS, PACK_SCALES } from "@/lib/pack-composite";
-import { PLATFORMS } from "@/lib/types";
+import { adScene } from "@/lib/ad-layout";
+import { mustShow, propsFromIngredients, sceneSpec } from "@/lib/scene-spec";
+import { PLATFORM_LABELS, PLATFORMS } from "@/lib/types";
 
 export const maxDuration = 300;
 
@@ -26,7 +28,7 @@ const Body = z.object({
    * layout = a photo plus our real pack standing on a brand panel (default; the model never sees the pack);
    * locked = the real pack placed inside the scene; none = a scene without the product. The AI never draws a pack.
    */
-  packMode: z.enum(["layout", "locked", "none"]).default("layout"),
+  packMode: z.enum(["scene", "layout", "locked", "none"]).default("scene"),
   packPosition: z.enum(PACK_POSITIONS).default("right"),
   packScale: z.enum(PACK_SCALES).default("medium"),
   /** Which real product photo to place: the pack photo (default) or one of the product's extra photos. */
@@ -97,7 +99,7 @@ export async function POST(req: Request) {
       platform: input.platform,
       creativeType: input.creativeType,
       productName: product.name,
-      packMode: packMode === "layout" ? ("none" as const) : packMode,
+      packMode: packMode === "layout" || packMode === "scene" ? ("none" as const) : packMode,
       layout: packMode === "layout" ? adLayout(spec).kind : undefined,
       packPosition: input.packPosition,
       target: { w: spec.w, h: spec.h, label: spec.label, note: spec.note },
@@ -105,16 +107,39 @@ export async function POST(req: Request) {
       style: brand0.imageStyle,
       direction: input.direction,
     };
+    // Scene: one photographed scene painted around the real pack (lower right), from the ad's own scene,
+    // with the product's ingredients as props: the approach that works for listing images.
+    const frame = input.concept.frames[Math.min(input.frameIndex, Math.max(0, input.concept.frames.length - 1))];
+    const sceneDesc = input.direction?.trim() || sceneSpec(frame?.visual || input.concept.ai_prompt).photos.join("; ");
+    const A = adScene(spec.w, spec.h);
+    const sceneArgs = {
+      description: sceneDesc,
+      props: propsFromIngredients(product.ingredients),
+      style: brand0.imageStyle,
+      layout: "ad" as const,
+      productName: product.name,
+      forAd: `${PLATFORM_LABELS[input.platform]}, ${spec.label}`,
+    };
+    if (input.preview && packMode === "scene") {
+      return Response.json({ direction: sceneDesc, rules: buildListingScenePrompt({ ...sceneArgs, inScene: true }).replace(sceneDesc, "[the scene above]") });
+    }
     if (input.preview) {
       const parts = buildImagePromptParts({ ...promptInput, packInScene: packMode === "locked" });
       return Response.json({ direction: parts.direction, rules: parts.rules });
     }
-    const prompt = buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
-    const fallbackPrompt = buildImagePrompt(promptInput);
+    const prompt = packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: true }) : buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
+    const fallbackPrompt = packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: false }) : buildImagePrompt(promptInput);
+    const tag = packMode === "layout" ? " · brand panel" : packMode === "scene" ? " · scene ad" : "";
     const withPack = packMode !== "none";
-    const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${withPack ? " · original pack" : ""}${packMode === "layout" ? " · brand panel" : ""}`;
+    const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${withPack ? " · original pack" : ""}${tag}`;
     const run = async (onStage?: (text: string) => void) => {
-      onStage?.(packMode === "layout" ? "Writing the photo brief from the ad (scene, style, where the panel goes)" : "Writing the image brief from the ad");
+      onStage?.(
+        packMode === "scene"
+          ? `Writing the scene brief from the ad: ${sceneDesc}`
+          : packMode === "layout"
+            ? "Writing the photo brief from the ad (scene, style, where the panel goes)"
+            : "Writing the image brief from the ad",
+      );
       const image = await generateImage({
         onStage,
         noWriting: input.textMode !== "ai",
@@ -128,7 +153,10 @@ export async function POST(req: Request) {
         lockedPack:
           packMode === "locked" && reference
             ? { data: reference.data, position: input.packPosition, scale: input.packScale, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
-            : null,
+            : packMode === "scene" && reference
+              ? { data: reference.data, position: A.pack.position, scale: A.pack.scale, bottom: A.pack.bottom, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
+              : null,
+        mustShow: packMode === "scene" ? mustShow(sceneDesc) : undefined,
         layoutPack:
           packMode === "layout" && reference
             ? { data: reference.data, position: input.packPosition, panel: brand0.kit.colors.primary, accent: brand0.kit.colors.accent, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
@@ -140,7 +168,7 @@ export async function POST(req: Request) {
           .set({ imageIds: sql`array_append(${schema.creatives.imageIds}, ${image.id}::uuid)`, updatedAt: new Date() })
           .where(eq(schema.creatives.id, input.creativeId));
       }
-      return { ...image, label: withPack ? `${spec.label} · original pack${packMode === "layout" ? " · brand panel" : ""}` : spec.label, usedPackPhoto: Boolean(reference), packMode };
+      return { ...image, label: withPack ? `${spec.label} · original pack${tag}` : spec.label, usedPackPhoto: Boolean(reference), packMode };
     };
     if (!input.stream) return Response.json(await run());
     // Streamed: one line per stage, then the result, so the page can show what is happening right now.

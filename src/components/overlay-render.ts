@@ -1,7 +1,7 @@
-import { adLayout } from "@/lib/ad-layout";
+import { adLayout, adScene } from "@/lib/ad-layout";
 import type { BrandKit } from "@/lib/brand-kit";
 
-export type OverlayLayout = "band" | "top" | "centre" | "clean" | "none";
+export type OverlayLayout = "band" | "top" | "centre" | "clean" | "none" | "scene";
 export type LogoCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "none";
 
 export type OverlayOptions = {
@@ -67,6 +67,10 @@ export function drawOverlay(
 ) {
   ctx.clearRect(0, 0, W, H);
   ctx.drawImage(base, 0, 0, W, H);
+  if (o.layout === "scene") {
+    drawSceneText(ctx, logo, kit, o, W, H);
+    return;
+  }
   const safe = safeArea(W, H);
   const short = Math.min(W, H);
   const hSize = Math.round(short * 0.085 * o.textScale);
@@ -188,5 +192,165 @@ export function drawOverlay(
     const lx = o.logoCorner.endsWith("left") ? safe.x + pad * 0.5 : safe.x + safe.w - lw - pad * 0.5;
     const ly = o.logoCorner.startsWith("top") ? safe.y + pad * 0.5 : safe.y + safe.h - lh - pad * 0.5;
     ctx.drawImage(logo, lx, ly, lw, lh);
+  }
+}
+
+const INK = "#2a1b38";
+const CREAM = "255,251,244";
+
+/**
+ * Wraps text into lines that each fit maxW, shrinking the size until it takes at most maxLines (long words
+ * too). Never drops words: the team's wording is shown in full, even if that means one more line.
+ */
+export function fit(ctx: CanvasRenderingContext2D, text: string, maxW: number, maxLines: number, size: number, font: (px: number) => string, minSize = size * 0.5) {
+  let px = size;
+  for (;;) {
+    ctx.font = font(px);
+    const lines = wrap(ctx, text, maxW);
+    if ((lines.length <= maxLines && lines.every((l) => ctx.measureText(l).width <= maxW)) || px <= minSize) return { lines, size: px };
+    px = Math.max(minSize, Math.floor(px * 0.92));
+  }
+}
+
+// ── Headline ──────────────────────────────────────────────────────────────────
+
+/** Header (serif, brand colour), sub-header, a hand-drawn underline and three little "spark" strokes. */
+export function headline(
+  ctx: CanvasRenderingContext2D,
+  o: { header: string; sub: string; left: number; top: number; width: number; size: number; colour: string; serif: string; sans: string; centred?: boolean; maxBottom: number; /** Extra height under the words (e.g. a button) the glow also covers. */ below?: number },
+): number {
+  ctx.textBaseline = "top";
+  // Shrink header and sub-header together until the block (with its underline) ends above maxBottom.
+  let size = o.size;
+  let hLines: string[] = [];
+  let sLines: string[] = [];
+  let subSize = 0;
+  let blockH = 0;
+  for (;;) {
+    subSize = Math.round(size * 0.46);
+    // Every word of the header and sub-header, at whatever size fits.
+    ctx.font = `800 ${size}px ${o.serif}`;
+    hLines = wrap(ctx, unquote(o.header), o.width);
+    ctx.font = `400 ${subSize}px ${o.sans}`;
+    sLines = o.sub.trim() ? wrap(ctx, unquote(o.sub), o.width * 0.95) : [];
+    blockH = hLines.length * size * 1.02 + (sLines.length ? subSize * 0.5 + sLines.length * subSize * 1.22 : 0) + subSize * 1.1;
+    if (o.top + blockH <= o.maxBottom || size <= o.size * 0.5) break;
+    size = Math.floor(size * 0.94);
+  }
+
+  // A soft cream glow behind the words keeps them readable on any photo.
+  // An ellipse fading to nothing on every side, so it never shows an edge.
+  const glowH = blockH + (o.below ?? 0);
+  const rx = o.width * 0.8;
+  const ry = glowH / 2 + size * 1.3;
+  ctx.save();
+  ctx.translate(o.left + o.width * (o.centred ? 0.5 : 0.4), o.top + glowH / 2);
+  ctx.scale(1, ry / rx);
+  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+  glow.addColorStop(0, `rgba(${CREAM},0.74)`);
+  glow.addColorStop(0.55, `rgba(${CREAM},0.5)`);
+  glow.addColorStop(1, `rgba(${CREAM},0)`);
+  ctx.fillStyle = glow;
+  ctx.fillRect(-rx, -rx, rx * 2, rx * 2);
+  ctx.restore();
+
+  const x = o.centred ? o.left + o.width / 2 : o.left;
+  ctx.textAlign = o.centred ? "center" : "left";
+  let y = o.top;
+  ctx.fillStyle = o.colour;
+  ctx.font = `800 ${size}px ${o.serif}`;
+  const firstW = ctx.measureText(hLines[0] ?? "").width;
+  for (const l of hLines) {
+    ctx.fillText(l, x, y);
+    y += size * 1.02;
+  }
+  // Sparks beside the first line.
+  const sx = o.centred ? x + firstW / 2 + size * 0.25 : o.left - size * 0.55;
+  const sy = o.top + size * 0.15;
+  ctx.strokeStyle = o.colour;
+  ctx.lineWidth = Math.max(3, size * 0.06);
+  ctx.lineCap = "round";
+  for (const [a, b, c, d] of [
+    [0, 0.1, 0.35, 0.25],
+    [-0.05, 0.45, 0.35, 0.45],
+    [0, 0.8, 0.35, 0.65],
+  ]) {
+    ctx.beginPath();
+    ctx.moveTo(sx + a * size, sy + b * size);
+    ctx.lineTo(sx + c * size, sy + d * size);
+    ctx.stroke();
+  }
+  if (sLines.length) {
+    y += subSize * 0.5;
+    ctx.fillStyle = INK;
+    ctx.font = `400 ${subSize}px ${o.sans}`;
+    for (const l of sLines) {
+      ctx.fillText(l, x, y);
+      y += subSize * 1.22;
+    }
+  }
+  // Hand-drawn underline.
+  const uw = o.width * 0.42;
+  const ux = o.centred ? x - uw / 2 : o.left + o.width * 0.1;
+  const uy = y + subSize * 0.55;
+  ctx.strokeStyle = o.colour;
+  ctx.lineWidth = Math.max(3, size * 0.055);
+  ctx.beginPath();
+  ctx.moveTo(ux, uy + size * 0.06);
+  ctx.quadraticCurveTo(ux + uw * 0.5, uy - size * 0.1, ux + uw, uy + size * 0.02);
+  ctx.stroke();
+  ctx.textAlign = "left";
+  return uy + size * 0.12;
+}
+
+/**
+ * Words for an ad made as one scene (the real pack at the lower right): the hook top left in the brand's
+ * serif with the sub-line and a hand-drawn underline, then the button, then the logo top right.
+ */
+function drawSceneText(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | null, kit: BrandKit, o: OverlayOptions, W: number, H: number) {
+  const A = adScene(W, H);
+  const serif = `"${kit.bodyFont.name}", Georgia, serif`;
+  const sans = `"${kit.headingFont.name}", sans-serif`;
+  const cSize = Math.round(Math.min(W, H) * 0.036 * o.textScale);
+  const ctaH = o.showCta && o.cta.trim() ? cSize * 2.3 : 0;
+  let y = A.header.top;
+  if (o.headline.trim() || o.sub.trim()) {
+    y = headline(ctx, {
+      header: o.headline,
+      sub: o.sub,
+      left: A.header.left,
+      top: A.header.top,
+      width: A.header.width,
+      size: Math.round(A.headerSize * o.textScale),
+      colour: kit.colors.primary,
+      serif,
+      sans,
+      maxBottom: A.maxBottom - (ctaH ? ctaH + cSize : 0),
+      below: ctaH ? ctaH + cSize * 0.6 : 0,
+    });
+  }
+  if (ctaH) {
+    ctx.font = `700 ${cSize}px ${sans}`;
+    const w = ctx.measureText(o.cta.trim()).width + cSize * 1.8;
+    const top = Math.min(y + cSize * 0.6, A.maxBottom - ctaH);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.18)";
+    ctx.shadowBlur = cSize * 0.5;
+    ctx.fillStyle = kit.colors.accent;
+    ctx.beginPath();
+    ctx.roundRect(A.header.left, top, w, ctaH, ctaH / 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(o.cta.trim(), A.header.left + w / 2, top + ctaH / 2);
+    ctx.textAlign = "left";
+  }
+  if (logo && o.logoCorner !== "none" && logo.naturalWidth) {
+    const safe = safeArea(W, H);
+    const lw = Math.round(W * 0.16);
+    const lh = Math.round((logo.naturalHeight / logo.naturalWidth) * lw);
+    ctx.drawImage(logo, W - lw - W * 0.05, safe.y + H * 0.01, lw, lh);
   }
 }

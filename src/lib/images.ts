@@ -119,6 +119,7 @@ export async function generateImage(opts: {
       data = (await layout(scene)).toString("base64");
     } else if (opts.lockedPack) {
       // Placeholder scene, but the real pack is composited exactly as it would be for a real image.
+      stage("Placing your real pack in the scene (unchanged, only scaled)");
       const scene = await sharp(Buffer.from(data, "base64")).resize(opts.target.w, opts.target.h).png().toBuffer();
       mime = "image/jpeg";
       data = (await compositePack(scene, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale, bottom: opts.lockedPack.bottom, liftBackdrop: opts.lockedPack.liftBackdrop })).data.toString("base64");

@@ -192,25 +192,30 @@ export function buildListingPhotoPrompt(opts: { description: string; shape: "wid
  * where the header and the feature list go. inScene: the pack is already in the image (paint around it);
  * otherwise leave its spot empty (it is placed afterwards).
  */
-export function buildListingScenePrompt(opts: { description: string; props: string[]; style?: ImageStyle; layout: "card" | "bar"; inScene: boolean; productName: string }): string {
+export function buildListingScenePrompt(opts: { description: string; props: string[]; style?: ImageStyle; layout: "card" | "bar" | "ad"; inScene: boolean; productName: string; forAd?: string }): string {
   const style = opts.style ?? DEFAULT_IMAGE_STYLE;
+  const side = opts.layout === "ad" ? "lower right" : "lower left";
   return [
-    "Professional product-page image for an Indian food brand on Amazon and Flipkart: one real, warm, inviting photographed scene.",
+    opts.forAd
+      ? `Professional advertising photograph for an Indian food brand (${opts.forAd}): one real, warm, inviting photographed scene.`
+      : "Professional product-page image for an Indian food brand on Amazon and Flipkart: one real, warm, inviting photographed scene.",
     opts.inScene
-      ? "The image already contains our real product pack, standing large at the lower left. Build the whole scene around it so it truly belongs: it stands on a wooden board or table that runs under it at the right height, the camera sees it front-on at its eye level, the light matches the light on the pack, with a soft contact shadow. Never cover, repaint, recolour, resize or copy it: exactly ONE pack in the whole image, and no other jar, box, pouch, packet or label anywhere."
-      : "Leave a clear spot on the wooden table at the lower left where our product pack will stand (it is added afterwards). Do NOT draw any pack, jar, box, pouch, packet or label anywhere.",
+      ? `The image already contains our real product pack, standing large at the ${side}. Build the whole scene around it so it truly belongs: it stands on a wooden board or table that runs under it at the right height, the camera sees it front-on at its eye level, the light matches the light on the pack, with a soft contact shadow. Never cover, repaint, recolour, resize or copy it: exactly ONE pack in the whole image, and no other jar, box, pouch, packet or label anywhere.`
+      : `Leave a clear spot on the wooden table at the ${side} where our product pack will stand (it is added afterwards). Do NOT draw any pack, jar, box, pouch, packet or label anywhere.`,
     `SHOW EXACTLY THIS, every part clearly visible: ${withoutPack(opts.description, opts.productName, "the product")}.`,
     opts.props.length ? `Props on the table, placed naturally around the pack (small wooden bowls or loose pieces): ${opts.props.join(", ")}.` : "",
-    opts.layout === "card"
-      ? "Composition: keep the top left (above the pack) calm and softly out of focus for a headline, and keep the right third behind the action soft and uncluttered for a feature list."
-      : "Composition: people and the action on the right half; keep the top left calm and softly out of focus for a headline, and the bottom strip of the table plain for a feature bar.",
+    opts.layout === "ad"
+      ? "Composition: people and the action at the left and in the middle, facing or leaning towards the pack; keep the top left calm and softly out of focus for a headline."
+      : opts.layout === "card"
+        ? "Composition: keep the top left (above the pack) calm and softly out of focus for a headline, and keep the right third behind the action soft and uncluttered for a feature list."
+        : "Composition: people and the action on the right half; keep the top left calm and softly out of focus for a headline, and the bottom strip of the table plain for a feature bar.",
     "Quality: crisp focus on the subject and the food, high detail, bright soft window light, warm cream and wood tones, shallow depth of field with a softly blurred background, real and appetising textures; the look of a professional commercial shoot.",
     `Photography: ${style.look}`,
     `Places: ${style.places}`,
     `People: ${style.people}`,
     `Colour and mood: ${style.mood}`,
     `Avoid: ${style.avoid}`,
-    "RULES: no written words, numbers, icons, badges, graphics or logos anywhere (they are added afterwards); no doctors or experts; nothing that isn't described.",
+    "RULES: no written words, numbers, icons, badges, graphics or logos anywhere (they are added afterwards); any phone, laptop or TV screen is dark or softly blurred with nothing readable on it (no apps, charts, icons or QR codes); no doctors or experts; nothing that isn't described.",
   ]
     .filter(Boolean)
     .join("\n");

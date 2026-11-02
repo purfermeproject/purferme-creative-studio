@@ -5,7 +5,7 @@ export const FLOW_STEPS = [
   { label: "Brief", does: "You pick the product, goal and platform." },
   { label: "Ideas", does: "AI proposes 3 different directions; you pick one." },
   { label: "Ad", does: "AI writes the hook, copy and scenes; edits save automatically." },
-  { label: "Images", does: "AI makes the photo; your real pack is placed on a brand panel, unchanged; the hook goes on top." },
+  { label: "Images", does: "AI makes one photographed scene; your real pack is placed in it, unchanged; the hook goes on top." },
   { label: "Check & approve", does: "Claims and platform rules are checked; a reviewer approves before it runs." },
 ] as const;
 

@@ -406,7 +406,7 @@ export function Workspace({
         creativeId: null,
         specId: placementSpec(brief.platform, brief.placement),
         packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
-        packMode: "layout",
+        packMode: "scene",
       });
       const withText = await withHook(image, proposalConcept(p), null);
       setProposalImages((m) => ({ ...m, [p.title]: { image, withText, busy: false, error: "" } }));
@@ -429,7 +429,7 @@ export function Workspace({
         creativeId: c.id,
         specId: placementSpec(c.platform, c.placement),
         packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
-        packMode: "layout",
+        packMode: "scene",
       }, (stage) => setFirstImage({ busy: true, error: "", stage }));
       setCreative((cur) => (cur && cur.id === c.id ? { ...cur, images: [...cur.images, image] } : cur));
       setFirstImage({ busy: true, error: "", stage: "Adding the hook, button and logo" });

@@ -3,7 +3,7 @@ import type { BrandKit } from "@/lib/brand-kit";
 import type { Slide } from "@/lib/listing-plan";
 import { sceneSpec, slideStyle } from "@/lib/scene-spec";
 import { loadBrandFont, uploadAsset } from "./fonts";
-import { unquote, wrap } from "./overlay-render";
+import { fit, headline, wrap } from "./overlay-render";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -113,102 +113,6 @@ function mark(ctx: CanvasRenderingContext2D, yes: boolean, cx: number, cy: numbe
 }
 const isYes = (v: string) => /^(✓|✔|yes|y|true)$/i.test(v.trim());
 const isNo = (v: string) => /^(✗|✘|×|x|no|n|false|-)$/i.test(v.trim());
-
-/**
- * Wraps text into lines that each fit maxW, shrinking the size until it takes at most maxLines (long words
- * too). Never drops words: the team's wording is shown in full, even if that means one more line.
- */
-export function fit(ctx: CanvasRenderingContext2D, text: string, maxW: number, maxLines: number, size: number, font: (px: number) => string, minSize = size * 0.5) {
-  let px = size;
-  for (;;) {
-    ctx.font = font(px);
-    const lines = wrap(ctx, text, maxW);
-    if ((lines.length <= maxLines && lines.every((l) => ctx.measureText(l).width <= maxW)) || px <= minSize) return { lines, size: px };
-    px = Math.max(minSize, Math.floor(px * 0.92));
-  }
-}
-
-// ── Headline ──────────────────────────────────────────────────────────────────
-
-/** Header (serif, brand colour), sub-header, a hand-drawn underline and three little "spark" strokes. */
-function headline(
-  ctx: CanvasRenderingContext2D,
-  o: { header: string; sub: string; left: number; top: number; width: number; size: number; colour: string; serif: string; sans: string; centred?: boolean; maxBottom: number },
-) {
-  ctx.textBaseline = "top";
-  // Shrink header and sub-header together until the block (with its underline) ends above maxBottom.
-  let size = o.size;
-  let hLines: string[] = [];
-  let sLines: string[] = [];
-  let subSize = 0;
-  let blockH = 0;
-  for (;;) {
-    subSize = Math.round(size * 0.46);
-    // Every word of the header and sub-header, at whatever size fits.
-    ctx.font = `800 ${size}px ${o.serif}`;
-    hLines = wrap(ctx, unquote(o.header), o.width);
-    ctx.font = `400 ${subSize}px ${o.sans}`;
-    sLines = o.sub.trim() ? wrap(ctx, unquote(o.sub), o.width * 0.95) : [];
-    blockH = hLines.length * size * 1.02 + (sLines.length ? subSize * 0.5 + sLines.length * subSize * 1.22 : 0) + subSize * 1.1;
-    if (o.top + blockH <= o.maxBottom || size <= o.size * 0.5) break;
-    size = Math.floor(size * 0.94);
-  }
-
-  // A soft cream glow behind the words keeps them readable on any photo.
-  const glow = ctx.createRadialGradient(o.left + o.width * (o.centred ? 0.5 : 0.35), o.top + blockH / 2, 0, o.left + o.width * (o.centred ? 0.5 : 0.35), o.top + blockH / 2, o.width * 0.75);
-  glow.addColorStop(0, `rgba(${CREAM},0.72)`);
-  glow.addColorStop(0.6, `rgba(${CREAM},0.45)`);
-  glow.addColorStop(1, `rgba(${CREAM},0)`);
-  ctx.fillStyle = glow;
-  ctx.fillRect(o.left - o.width * 0.3, o.top - size, o.width * 1.6, blockH + size * 2);
-
-  const x = o.centred ? o.left + o.width / 2 : o.left;
-  ctx.textAlign = o.centred ? "center" : "left";
-  let y = o.top;
-  ctx.fillStyle = o.colour;
-  ctx.font = `800 ${size}px ${o.serif}`;
-  const firstW = ctx.measureText(hLines[0] ?? "").width;
-  for (const l of hLines) {
-    ctx.fillText(l, x, y);
-    y += size * 1.02;
-  }
-  // Sparks beside the first line.
-  const sx = o.centred ? x + firstW / 2 + size * 0.25 : o.left - size * 0.55;
-  const sy = o.top + size * 0.15;
-  ctx.strokeStyle = o.colour;
-  ctx.lineWidth = Math.max(3, size * 0.06);
-  ctx.lineCap = "round";
-  for (const [a, b, c, d] of [
-    [0, 0.1, 0.35, 0.25],
-    [-0.05, 0.45, 0.35, 0.45],
-    [0, 0.8, 0.35, 0.65],
-  ]) {
-    ctx.beginPath();
-    ctx.moveTo(sx + a * size, sy + b * size);
-    ctx.lineTo(sx + c * size, sy + d * size);
-    ctx.stroke();
-  }
-  if (sLines.length) {
-    y += subSize * 0.5;
-    ctx.fillStyle = INK;
-    ctx.font = `400 ${subSize}px ${o.sans}`;
-    for (const l of sLines) {
-      ctx.fillText(l, x, y);
-      y += subSize * 1.22;
-    }
-  }
-  // Hand-drawn underline.
-  const uw = o.width * 0.42;
-  const ux = o.centred ? x - uw / 2 : o.left + o.width * 0.1;
-  const uy = y + subSize * 0.55;
-  ctx.strokeStyle = o.colour;
-  ctx.lineWidth = Math.max(3, size * 0.055);
-  ctx.beginPath();
-  ctx.moveTo(ux, uy + size * 0.06);
-  ctx.quadraticCurveTo(ux + uw * 0.5, uy - size * 0.1, ux + uw, uy + size * 0.02);
-  ctx.stroke();
-  ctx.textAlign = "left";
-}
 
 /** The feature parts to show: crossed-out items from the photo description ("No maida") first, then the feature. */
 export function featureItems(slide: Slide): string[] {

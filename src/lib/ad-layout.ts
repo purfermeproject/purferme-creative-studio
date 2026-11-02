@@ -79,3 +79,24 @@ export function comparisonLayout(size: number) {
     them: { cx: Math.round(s * 0.9), floor: Math.round(s * 0.72), maxH: Math.round(s * 0.32), maxW: Math.round(s * 0.2) },
   };
 }
+
+/**
+ * An ad made as one photographed scene: the real pack stands at the lower right (painted into the
+ * scene), the hook top left in the brand's serif with the sub-line and the button under it. Tall
+ * formats keep the words below Meta's top bar and the pack above the caption area.
+ */
+export function adScene(w: number, h: number) {
+  const tall = h / w >= 1.7;
+  const wide = w / h > 1.2;
+  const scale: "medium" | "large" = tall || wide ? "medium" : "large";
+  const bottom = tall ? 0.22 : 0.07;
+  // Same proportions as packBox(): the pack's height share for each scale.
+  const packTop = h * (1 - bottom - (scale === "large" ? 0.62 : 0.45));
+  return {
+    pack: { position: "right" as const, scale, bottom },
+    header: { left: Math.round(w * 0.065), top: Math.round(h * (tall ? 0.15 : 0.06)), width: Math.round(w * (wide ? 0.44 : 0.6)) },
+    headerSize: Math.round(Math.min(w, h) * (tall ? 0.088 : 0.078)),
+    /** The words (and button) end above the pack. */
+    maxBottom: Math.round(wide ? h * 0.92 : packTop - h * 0.015),
+  };
+}

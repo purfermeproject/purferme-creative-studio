@@ -6,6 +6,7 @@ import { loadBrandFont, uploadAsset } from "./fonts";
 import { drawOverlay, type LogoCorner, type OverlayLayout, type OverlayOptions } from "./overlay-render";
 
 const LAYOUTS: { id: OverlayLayout; label: string }[] = [
+  { id: "scene", label: "Styled header (scene ads)" },
   { id: "band", label: "Band at the bottom" },
   { id: "top", label: "Text at the top" },
   { id: "centre", label: "Big centred" },
@@ -29,12 +30,17 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-export type PackLayout = "panel" | "scene" | "none";
-export const packLayoutOf = (label?: string): PackLayout => (label?.includes("brand panel") ? "panel" : label?.includes("original pack") ? "scene" : "none");
+/** panel: pack on a brand panel; adscene: one photographed scene with the pack; scene: pack painted into the photo (older); none. */
+export type PackLayout = "panel" | "adscene" | "scene" | "none";
+export const packLayoutOf = (label?: string): PackLayout =>
+  label?.includes("brand panel") ? "panel" : label?.includes("scene ad") ? "adscene" : label?.includes("original pack") ? "scene" : "none";
 
 /** Default text options for an image: hook as the headline, at the top when the pack sits at the bottom; on a brand panel, the button goes on the panel. */
 export function defaultOverlay(kit: BrandKit, d: { headline: string; sub: string; cta: string }, pack: PackLayout): OverlayOptions {
   const packAtBottom = pack !== "none";
+  if (pack === "adscene") {
+    return { layout: "scene", headline: d.headline, sub: d.sub, cta: d.cta || "Shop now", showCta: true, logoCorner: kit.logoUrl ? "top-right" : "none", textScale: 1, bandOpacity: 0.85 };
+  }
   return {
     ctaOnPanel: pack === "panel",
     layout: packAtBottom ? "top" : "band",

@@ -52,7 +52,7 @@ export function ImageMaker({
   const [picked, setPicked] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
   const [textMode, setTextMode] = useState<"auto" | "overlay" | "ai">("auto");
-  const [packMode, setPackMode] = useState<"layout" | "locked" | "none">("layout");
+  const [packMode, setPackMode] = useState<"scene" | "layout" | "locked" | "none">("scene");
   const [packPosition, setPackPosition] = useState<"right" | "center" | "left">("right");
   const [packScale, setPackScale] = useState<"small" | "medium" | "large">("medium");
   const [photoId, setPhotoId] = useState("");
@@ -162,7 +162,7 @@ export function ImageMaker({
             const t = await addTextAutomatically({
               imageUrl: img.url,
               kit,
-              options: defaultOverlay(kit, textDefaults(frames[i]), packMode === "layout" ? "panel" : packMode === "locked" ? "scene" : "none"),
+              options: defaultOverlay(kit, textDefaults(frames[i]), packMode === "scene" ? "adscene" : packMode === "layout" ? "panel" : packMode === "locked" ? "scene" : "none"),
               label: img.label ?? "Image",
               creativeId,
               frameIndex: frames[i],
@@ -303,7 +303,7 @@ export function ImageMaker({
       </div>
       <details className="rounded-lg border border-line" data-testid="more-options">
         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
-          More options <span className="font-normal text-ink-soft">· {packMode === "layout" ? "real pack on a brand panel" : packMode === "locked" ? "real pack inside the scene" : "no pack"} · {textMode === "auto" ? "hook added automatically" : textMode === "overlay" ? "add text yourself" : "AI draws the text"}</span>
+          More options <span className="font-normal text-ink-soft">· {packMode === "scene" ? "real pack in a photographed scene" : packMode === "layout" ? "real pack on a brand panel" : packMode === "locked" ? "real pack inside the scene" : "no pack"} · {textMode === "auto" ? "hook added automatically" : textMode === "overlay" ? "add text yourself" : "AI draws the text"}</span>
         </summary>
         <div className="space-y-2 border-t border-line p-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -319,7 +319,8 @@ export function ImageMaker({
               Pack in the image
             </label>
             <select id={`pack-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packMode} onChange={(e) => setPackMode(e.target.value as typeof packMode)}>
-              <option value="layout">Pack: real pack on a brand panel (recommended)</option>
+              <option value="scene">Pack: real pack in a photographed scene (recommended)</option>
+              <option value="layout">Pack: real pack on a brand panel</option>
               <option value="locked">Pack: real pack inside the scene (AI blends it; check it)</option>
               <option value="none">No pack in this image</option>
             </select>
@@ -363,7 +364,9 @@ export function ImageMaker({
               </>
             ) : null}
           </div>
-          {packMode === "layout" ? (
+          {packMode === "scene" ? (
+            <p className="hint">One photographed scene (people and the moment on the left) with your real pack standing at the lower right, pasted in unchanged; the hook goes top left in the brand font with the button under it. Any second pack or drawn screen is checked for and removed.</p>
+          ) : packMode === "layout" ? (
             <p className="hint">The AI makes the photo only and never sees or draws a pack. Your real pack then stands on a brand-colour panel, unchanged, with the hook on top: it can&apos;t float, be copied or come out the wrong size.</p>
           ) : packMode === "locked" ? (
             <p className="hint">The AI paints the scene around your real pack. It can look natural, but check every image: it sometimes floats, is copied or is the wrong scale.</p>
@@ -534,7 +537,7 @@ export function ImageMaker({
                     Edit with words
                   </button>
                 )}
-                {img.label?.includes("brand panel") ? null : (
+                {/brand panel|scene ad/.test(img.label ?? "") ? null : (
                   // A designed layout would be cut by cropping; "Make all sizes" lays out each size properly instead.
                   <button type="button" className="text-accent hover:underline disabled:opacity-50" disabled={working === img.id} onClick={() => allSizes(img)}>
                     {working === img.id && wordsFor !== img.id ? "Resizing…" : "All sizes"}
