@@ -88,7 +88,7 @@ export function BriefPanel({
   busy: boolean;
   onPropose: () => void;
   packError: string;
-  onPackFile: (f: File | undefined) => void;
+  onPackFile: (f: File | undefined) => void | Promise<void>;
   ready: boolean;
   competitors: CompetitorOption[];
   playbooks: PlaybookOption[];
@@ -354,7 +354,7 @@ export function BriefPanel({
               <label htmlFor="photo" className="label">
                 Different pack photo <span className="font-normal text-ink-soft">(optional)</span>
               </label>
-              <input id="photo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => onPackFile(e.target.files?.[0])} />
+              <input id="photo" type="file" accept="image/*" onChange={(e) => void onPackFile(e.target.files?.[0])} />
               <p className="hint mt-1">{brief.pack ? `Using ${brief.pack.name} for this session.` : "Leave empty to use the pack photo saved in Settings."}</p>
               {packError ? <p className="mt-1 text-sm text-red">{packError}</p> : null}
             </div>

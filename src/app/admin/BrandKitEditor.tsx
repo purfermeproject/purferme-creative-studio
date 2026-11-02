@@ -1,5 +1,6 @@
 "use client";
 
+import { shrinkForUpload } from "@/components/ImageFileInput";
 import { useEffect, useState } from "react";
 import { loadBrandFont, uploadAsset } from "@/components/fonts";
 import type { BrandFont, BrandKit } from "@/lib/brand-kit";
@@ -97,7 +98,8 @@ export function BrandKitEditor({ initial }: { initial: BrandKit }) {
                   if (!f) return;
                   setLogoBusy(true);
                   try {
-                    const a = await uploadAsset(f, { kind: "logo", label: f.name }, f.name);
+                    const small = (await shrinkForUpload(f)).file;
+                    const a = await uploadAsset(small, { kind: "logo", label: f.name }, small.name);
                     setKit((k) => ({ ...k, logoUrl: a.url }));
                   } catch (x) {
                     setMsg({ ok: false, text: x instanceof Error ? x.message : "Upload failed." });

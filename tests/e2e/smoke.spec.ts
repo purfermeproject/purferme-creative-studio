@@ -985,6 +985,36 @@ test("Listing images: import the team's slide table (paste or Word file) and use
   await expect(page.getByLabel("Slide 1 header")).toHaveValue("Spread It Anywhere");
 });
 
+test("Phone-size photos (several MB) upload as product and pack photos", async ({ page }) => {
+  const sharp = (await import("sharp")).default;
+  // Like a phone photo: 4000×3000, several MB (gradients plus fine grain, as a camera produces).
+  const raw = Buffer.alloc(4000 * 3000 * 3);
+  for (let y = 0; y < 3000; y++)
+    for (let x = 0; x < 4000; x++) {
+      const i = (y * 4000 + x) * 3;
+      const grain = ((x * 7919 + y * 104729) % 23) - 11;
+      raw[i] = Math.max(0, Math.min(255, (x / 16) % 256 + grain));
+      raw[i + 1] = Math.max(0, Math.min(255, (y / 12) % 256 + grain));
+      raw[i + 2] = Math.max(0, Math.min(255, ((x + y) / 28) % 256 + grain));
+    }
+  const big = await sharp(raw, { raw: { width: 4000, height: 3000, channels: 3 } }).jpeg({ quality: 95 }).toBuffer();
+  expect(big.length).toBeGreaterThan(2 * 1024 * 1024);
+  await signIn(page);
+  await page.goto("/admin");
+  const card = page.getByTestId("product-gro");
+  await card.locator("summary").click();
+  const photos = card.getByTestId("photos-gro");
+  await photos.getByLabel("What it shows").fill("Phone photo");
+  await photos.getByLabel(/Product photo for/).setInputFiles({ name: "IMG_1234.jpg", mimeType: "image/jpeg", buffer: big });
+  await expect(photos.getByTestId("photo-note")).toContainText("Resized for upload: 4000×3000");
+  await photos.getByRole("button", { name: "Add photo" }).click();
+  await expect(photos.getByText("Photo added.")).toBeVisible({ timeout: 30_000 });
+  await card.getByLabel(/Original pack photo/).setInputFiles({ name: "pack.jpg", mimeType: "image/jpeg", buffer: big });
+  await expect(card.getByTestId("photo-note").first()).toContainText("Resized for upload");
+  await card.getByRole("button", { name: "Upload pack photo" }).click();
+  await expect(card.getByLabel("Pack image URL")).toHaveValue(/api\/assets/, { timeout: 30_000 });
+});
+
 test("Roles: a viewer can look but not create; the server refuses too", async ({ page, browser }) => {
   await signIn(page);
   await page.goto("/admin#roles");

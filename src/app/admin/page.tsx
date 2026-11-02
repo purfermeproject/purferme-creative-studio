@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ImageFileInput } from "@/components/ImageFileInput";
 import { ActionForm } from "@/components/ActionForm";
 import { BrandKitEditor } from "./BrandKitEditor";
 import { PackCropper } from "./PackCropper";
@@ -264,7 +265,7 @@ export default async function AdminPage() {
                   <label className="label" htmlFor={`file-${p.id}`}>
                     Original pack photo (placed into images unchanged; a transparent PNG cut-out works best)
                   </label>
-                  <input id={`file-${p.id}`} name="file" type="file" accept="image/*" className="text-sm" />
+                  <ImageFileInput id={`file-${p.id}`} name="file" accept="image/*" className="text-sm" />
                 </ActionForm>
                 <div className="w-full space-y-3 border-t border-line pt-4" data-testid={`photos-${p.slug}`}>
                   <p className="label">More product photos</p>
@@ -300,7 +301,7 @@ export default async function AdminPage() {
                     </label>
                     <label className="block">
                       <span className="label">Photo</span>
-                      <input name="file" type="file" accept="image/png,image/jpeg,image/webp" aria-label={`Product photo for ${p.name}`} />
+                      <ImageFileInput name="file" accept="image/*" aria-label={`Product photo for ${p.name}`} />
                     </label>
                   </ActionForm>
                 </div>

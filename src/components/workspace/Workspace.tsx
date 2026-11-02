@@ -9,6 +9,7 @@ import { applyPlatform } from "@/components/PlatformSwitch";
 import type { BrandKit } from "@/lib/brand-kit";
 import type { Term } from "@/lib/compliance";
 import { conceptToText, type ScoredConcept } from "@/lib/concepts";
+import { shrinkForUpload } from "@/components/ImageFileInput";
 import { requestImageWithStages } from "@/lib/image-client";
 import { readNdjson } from "@/lib/ndjson";
 import { PLACEMENTS } from "@/lib/placements";
@@ -307,11 +308,18 @@ export function Workspace({
     });
   }
 
-  function onPackFile(file: File | undefined) {
+  async function onPackFile(picked: File | undefined) {
     setPackError("");
-    if (!file) return setBriefPatch({ pack: null });
+    if (!picked) return setBriefPatch({ pack: null });
+    let file: File;
+    try {
+      // Phone photos are shrunk first: they travel with every request, which has a size limit.
+      file = (await shrinkForUpload(picked)).file;
+    } catch (e) {
+      return setPackError(e instanceof Error ? e.message : "That photo couldn't be read.");
+    }
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return setPackError("Use a PNG, JPG or WebP image.");
-    if (file.size > 5 * 1024 * 1024) return setPackError("That image is over 5 MB. Use a smaller photo.");
+    if (file.size > 3 * 1024 * 1024) return setPackError("That image is still over 3 MB after resizing. Use a smaller photo.");
     const reader = new FileReader();
     reader.onload = () => setBriefPatch({ pack: { mediaType: file.type as "image/png", base64: String(reader.result).split(",")[1] ?? "", name: file.name } });
     reader.readAsDataURL(file);
