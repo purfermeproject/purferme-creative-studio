@@ -1,6 +1,6 @@
 import "server-only";
 import sharp, { type OverlayOptions } from "sharp";
-import { slideLayout } from "./ad-layout";
+import { comparisonLayout } from "./ad-layout";
 import { preparePack } from "./pack-composite";
 
 /**
@@ -33,67 +33,6 @@ async function groundShadow(centreX: number, floor: number, width: number, size:
   return { input, left, top };
 }
 
-/** Lifestyle or close-up slide: band, photo fading into the brand panel, our pack standing on the panel. */
-export async function slideBase(scene: Buffer, pack: Buffer, opts: { size: number; band: string; panel: string }): Promise<Buffer> {
-  const S = opts.size;
-  const L = slideLayout(S);
-  const photo = await sharp(scene).resize(L.photo.width, L.photo.height, { fit: "cover", position: "centre" }).png().toBuffer();
-  const fade = (r: { width: number; height: number }, colour: string, down: boolean) =>
-    svg(
-      r.width,
-      r.height,
-      `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${colour}" stop-opacity="${down ? 0 : 1}"/><stop offset="1" stop-color="${colour}" stop-opacity="${down ? 1 : 0}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/>`,
-    );
-  const p = await standing(pack, L.pack.height, L.pack.maxWidth);
-  const left = S - L.pack.right - p.width;
-  const top = L.pack.floor - p.height;
-  const shadow = await groundShadow(left + p.width / 2, L.pack.floor, p.width, S);
-  return sharp({ create: { width: S, height: S, channels: 3, background: opts.band } })
-    .composite([
-      { input: photo, left: L.photo.left, top: L.photo.top },
-      { input: fade(L.fadeTop, opts.band, false), left: L.fadeTop.left, top: L.fadeTop.top },
-      { input: await sharp({ create: { width: L.band.width, height: L.photo.top, channels: 3, background: opts.band } }).png().toBuffer(), left: 0, top: 0 },
-      { input: fade(L.fadeBottom, opts.panel, true), left: L.fadeBottom.left, top: L.fadeBottom.top },
-      { input: await sharp({ create: { width: L.panel.width, height: L.panel.height, channels: 3, background: opts.panel } }).png().toBuffer(), left: 0, top: L.panel.top },
-      ...(shadow ? [shadow] : []),
-      { input: p.data, left, top },
-    ])
-    .jpeg({ quality: 92, mozjpeg: true })
-    .toBuffer();
-}
-
-/**
- * Comparison slide: our real pack and a plain, unbranded box (no logo, no words: just the category),
- * side by side under the band. The table is drawn in the browser.
- */
-export async function comparisonBase(pack: Buffer, opts: { size: number; band: string; background: string }): Promise<Buffer> {
-  const S = opts.size;
-  const L = slideLayout(S).comparison;
-  const floor = L.packs.top + L.packs.height;
-  const ours = await standing(pack, L.packs.height, S * 0.22);
-  const gw = Math.round(ours.width * 0.95);
-  const gh = Math.round(Math.min(ours.height, L.packs.height) * 0.95);
-  const generic = svg(
-    gw,
-    gh,
-    `<rect x="0" y="0" width="${gw}" height="${gh}" rx="${gw * 0.03}" fill="#c9c4bd"/><rect x="${gw * 0.1}" y="${gh * 0.12}" width="${gw * 0.8}" height="${gh * 0.38}" rx="${gw * 0.02}" fill="#b5afa7"/><rect x="${gw * 0.18}" y="${gh * 0.62}" width="${gw * 0.64}" height="${gh * 0.05}" fill="#b5afa7"/><rect x="${gw * 0.25}" y="${gh * 0.72}" width="${gw * 0.5}" height="${gh * 0.04}" fill="#b5afa7"/>`,
-  );
-  const layers: OverlayOptions[] = [];
-  for (const [cx, w] of [
-    [L.us, ours.width],
-    [L.them, gw],
-  ] as const) {
-    const sh = await groundShadow(cx, floor, w, S);
-    if (sh) layers.push(sh);
-  }
-  layers.push({ input: ours.data, left: Math.round(L.us - ours.width / 2), top: floor - ours.height });
-  layers.push({ input: generic, left: Math.round(L.them - gw / 2), top: floor - gh });
-  return sharp({ create: { width: S, height: S, channels: 3, background: opts.background } })
-    .composite([{ input: await sharp({ create: { width: S, height: slideLayout(S).band.height, channels: 3, background: opts.band } }).png().toBuffer(), left: 0, top: 0 }, ...layers])
-    .jpeg({ quality: 92, mozjpeg: true })
-    .toBuffer();
-}
-
 /**
  * Main image: the real pack on pure white, filling ~85% of the height. With a real photo of the product
  * itself (a cookie stack, a spoon of spread), it stands at the left, a little in front, as in the team's sample.
@@ -121,4 +60,91 @@ export async function mainImage(pack: Buffer, size: number, productPhoto?: Buffe
     layers.push({ input: p.data, left, top: floor - p.height });
   }
   return sharp({ create: { width: S, height: S, channels: 3, background: "#ffffff" } }).composite(layers).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+}
+
+const rounded = async (img: Buffer, w: number, h: number, r: number) =>
+  sharp(img)
+    .resize(w, h, { fit: "cover", position: "attention" })
+    .composite([{ input: svg(w, h, `<rect width="${w}" height="${h}" rx="${r}" ry="${r}" fill="#fff"/>`), blend: "dest-in" }])
+    .png()
+    .toBuffer();
+
+/** A soft drop shadow behind a rounded card at (left, top). */
+async function cardShadow(left: number, top: number, w: number, h: number, r: number, size: number): Promise<OverlayOptions | null> {
+  const blur = Math.round(size * 0.012);
+  const W = w + blur * 4;
+  const H = h + blur * 4;
+  const input = await sharp(svg(W, H, `<rect x="${blur * 2}" y="${blur * 2 + blur * 0.6}" width="${w}" height="${h}" rx="${r}" fill="black" fill-opacity="0.28"/>`)).blur(blur).png().toBuffer();
+  const l = left - blur * 2;
+  const t = top - blur * 2;
+  return l >= 0 && t >= 0 && l + W <= size && t + H <= size ? { input, left: l, top: t } : null;
+}
+
+/** Split or grid photos as rounded tiles with a white edge, in an area of the slide. */
+export async function tilesOn(base: Buffer, photos: Buffer[], area: { left: number; top: number; width: number; height: number }, size: number): Promise<Buffer> {
+  const n = Math.min(photos.length, 4);
+  const gap = Math.round(size * 0.018);
+  const cols = n === 4 ? 2 : 1;
+  const rows = n === 4 ? 2 : n;
+  const w = Math.round((area.width - gap * (cols - 1)) / cols);
+  const h = Math.round((area.height - gap * (rows - 1)) / rows);
+  const r = Math.round(size * 0.022);
+  const edge = Math.round(size * 0.006);
+  const layers: OverlayOptions[] = [];
+  for (let i = 0; i < n; i++) {
+    const left = area.left + (i % cols) * (w + gap);
+    const top = area.top + Math.floor(i / cols) * (h + gap);
+    const sh = await cardShadow(left, top, w, h, r, size);
+    if (sh) layers.push(sh);
+    layers.push({ input: svg(w, h, `<rect width="${w}" height="${h}" rx="${r}" fill="#fffdf9"/>`), left, top });
+    layers.push({ input: await rounded(photos[i], w - edge * 2, h - edge * 2, r - edge), left: left + edge, top: top + edge });
+  }
+  return sharp(base).composite(layers).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+}
+
+/** A small round photo with a cream ring (a "small callout showing …"). */
+export async function insetOn(base: Buffer, photo: Buffer, at: { left: number; top: number; d: number }): Promise<Buffer> {
+  const ring = Math.max(6, Math.round(at.d * 0.04));
+  const inner = at.d - ring * 2;
+  const round = await rounded(photo, inner, inner, inner / 2);
+  return sharp(base)
+    .composite([
+      { input: svg(at.d, at.d, `<circle cx="${at.d / 2}" cy="${at.d / 2}" r="${at.d / 2}" fill="#fffdf9"/>`), left: at.left, top: at.top },
+      { input: round, left: at.left + ring, top: at.top + ring },
+    ])
+    .jpeg({ quality: 92, mozjpeg: true })
+    .toBuffer();
+}
+
+/**
+ * Comparison scene: our real pack on the left and a plain generic container on the right (no brand; its
+ * name is written on its label by the browser), standing on the table of an AI scene with soft shadows.
+ */
+export async function comparisonScene(scene: Buffer, pack: Buffer, size: number): Promise<{ data: Buffer; generic: { shape: "jar" | "box"; labelY: number; width: number } }> {
+  const C = comparisonLayout(size);
+  const ours = await standing(pack, C.us.maxH, C.us.maxW);
+  const jar = ours.width / ours.height > 0.85;
+  const gw = Math.round(C.them.maxW);
+  const gh = Math.round(jar ? gw * 0.95 : C.them.maxH);
+  // A plain jar (lid, glass, blank label) or a plain carton, in neutral tones.
+  const generic = jar
+    ? svg(gw, gh, `<rect x="${gw * 0.08}" y="0" width="${gw * 0.84}" height="${gh * 0.2}" rx="${gw * 0.04}" fill="#f4f2ee"/><rect x="0" y="${gh * 0.16}" width="${gw}" height="${gh * 0.84}" rx="${gw * 0.08}" fill="#6b4a33"/><rect x="0" y="${gh * 0.4}" width="${gw}" height="${gh * 0.36}" fill="#f3efe7"/>`)
+    : svg(gw, gh, `<rect width="${gw}" height="${gh}" rx="${gw * 0.03}" fill="#d9d4cc"/><rect x="${gw * 0.08}" y="${gh * 0.36}" width="${gw * 0.84}" height="${gh * 0.3}" fill="#f3efe7"/>`);
+  const layers: OverlayOptions[] = [];
+  for (const [cx, w, floor] of [
+    [C.us.cx, ours.width, C.us.floor],
+    [C.them.cx, gw, C.them.floor],
+  ] as const) {
+    const sh = await groundShadow(cx, floor, w, size);
+    if (sh) layers.push(sh);
+  }
+  layers.push({ input: ours.data, left: Math.max(0, Math.round(C.us.cx - ours.width / 2)), top: C.us.floor - ours.height });
+  layers.push({ input: generic, left: Math.min(size - gw, Math.round(C.them.cx - gw / 2)), top: C.them.floor - gh });
+  const data = await sharp(await sharp(scene).resize(size, size, { fit: "cover" }).png().toBuffer())
+    .composite(layers)
+    .jpeg({ quality: 92, mozjpeg: true })
+    .toBuffer();
+  // Where the browser writes the generic name: the middle of the container's blank label.
+  const labelY = Math.round(C.them.floor - gh + gh * (jar ? 0.58 : 0.51));
+  return { data, generic: { shape: jar ? "jar" : "box", labelY, width: gw } };
 }

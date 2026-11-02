@@ -3,17 +3,18 @@ import { authErrorStatus, requireRole } from "@/auth";
 import { errorMessage, UserFacingError } from "@/lib/ai";
 import { storeAsset } from "@/lib/asset-store";
 import { getBrand, getProduct } from "@/lib/data";
-import { buildImagePrompt } from "@/lib/image-prompt";
+import { buildListingPhotoPrompt, buildListingScenePrompt } from "@/lib/image-prompt";
 import { generateImage, loadAsset, loadReference } from "@/lib/images";
-import { comparisonBase, mainImage, slideBase } from "@/lib/listing-images";
-import { LISTING_PLATFORMS, LISTING_SIZE, SLIDE_KIND_LABELS } from "@/lib/listing-plan";
+import { sceneLayout } from "@/lib/ad-layout";
+import { comparisonScene, insetOn, mainImage, tilesOn } from "@/lib/listing-images";
+import { compositePack } from "@/lib/pack-composite";
+import sharp from "sharp";
+import { mustShow, propsFromIngredients, sceneSpec, slideStyle } from "@/lib/scene-spec";
+import { LISTING_PLATFORMS, LISTING_SIZE } from "@/lib/listing-plan";
 import { checkPlan, getPlan, setSlotImage } from "@/lib/listing-store";
 
 export const maxDuration = 300;
 
-/** The header band colour (cream, like the packs) and the page behind a comparison. */
-const BAND = "#f7f3ec";
-const PAPER = "#fffdf9";
 
 const Body = z.object({
   productId: z.string().uuid(),
@@ -78,61 +79,89 @@ export async function POST(req: Request) {
         if (blocked.length) throw new UserFacingError(`Slide ${slot} can't be made yet: ${blocked.map((c) => c.text).join("; ")}. Edit the words, then try again.`);
 
         let base: Buffer;
+        let generic: { shape: "jar" | "box"; labelY: number; width: number } | null = null;
+        const spec = sceneSpec(slide.scene);
+        const layout = slideStyle(slide);
+        const L = sceneLayout(S, layout);
+        const props = propsFromIngredients(product.ingredients);
+        const packOpts = { data: pack.data, position: "left" as const, scale: L.pack.scale, bottom: L.pack.bottom, liftBackdrop: !pack.label?.includes("cropped") };
         const own = slide.kind !== "comparison" && slide.photoId ? slide.photoId : null;
         if (own && !product.photoAssetIds.includes(own)) throw new UserFacingError("The photo chosen for this slide isn't one of this product's photos any more. Pick another.");
-        if (own) {
-          stage("Using your own photo (no AI)");
-          const photo = await loadReference(`/api/assets/${own}`);
-          if (!photo) throw new UserFacingError("That photo couldn't be loaded. Upload it again in Settings → Products.");
-          stage("Placing your real pack on the brand panel (unchanged, only scaled)");
-          base = await slideBase(photo.data, pack.data, { size: S, band: BAND, panel: brand.kit.colors.primary });
-        } else if (slide.kind === "comparison") {
-          stage("Placing your real pack next to a plain, unbranded box (no competitor shown)");
-          base = await comparisonBase(pack.data, { size: S, band: BAND, background: PAPER });
-        } else {
-          stage(`Writing the photo brief: ${SLIDE_KIND_LABELS[slide.kind].toLowerCase()}`);
-          const concept = {
-            title: slide.header,
-            persona: "",
-            angle: "",
-            format: "Listing slide",
-            language: "English",
-            hook: slide.header,
-            frames: [
-              {
-                slot: `Slide ${slot}`,
-                visual: `${slide.scene}. Keep the top sixth of the frame simple (a header goes there); the main action sits in the middle.`,
-                onscreen: "",
-              },
-            ],
-            copy: {},
-            ai_prompt: slide.scene,
-            needs_real_person: false,
-            ai_label_needed: false,
-            claims: [],
-            why_it_fits: "",
-          };
-          const prompt = buildImagePrompt({
-            concept,
-            frameIndex: 0,
-            platform: platform === "flipkart" ? "flipkart" : "amazon",
-            creativeType: "Listing image",
-            productName: product.name,
-            packMode: "none",
-            layout: "bottom",
-            target: { w: S, h: S, label: "Listing slide" },
-            textMode: "overlay",
-            style: brand.imageStyle,
+        const photo = async (prompt: string, target: { w: number; h: number }, label: string, extra: Partial<Parameters<typeof generateImage>[0]> = {}) => {
+          const made = await generateImage({ prompt, target, reference: null, user, label, noWriting: true, onStage: stage, ...extra });
+          if (made.warning) send({ type: "stage", text: made.warning });
+          const bytes = await loadAsset(made.id);
+          if (!bytes) throw new UserFacingError("An image couldn't be saved. Try again.");
+          return Buffer.from(bytes.dataBase64, "base64");
+        };
+
+        if (slide.kind === "comparison") {
+          stage("Making the scene: a warm kitchen table with the ingredients as props");
+          const scene = await photo(
+            buildListingScenePrompt({
+              description: "a warm kitchen table seen from the front, the middle of the table clear and softly lit, ingredients as small props in the bottom corners",
+              props,
+              style: brand.imageStyle,
+              layout: "card",
+              inScene: false,
+              productName: product.name,
+            }),
+            { w: S, h: S },
+            `Listing slide ${slot} scene`,
+            { photoOnly: true },
+          );
+          stage("Placing your real pack next to a plain, unbranded container (no competitor shown)");
+          const c = await comparisonScene(scene, pack.data, S);
+          base = c.data;
+          generic = c.generic;
+        } else if (own) {
+          stage("Using your own photo (no AI) and placing your real pack in it");
+          const p = await loadReference(`/api/assets/${own}`);
+          if (!p) throw new UserFacingError("That photo couldn't be loaded. Upload it again in Settings → Products.");
+          base = (await compositePack(await sharp(p.data).resize(S, S, { fit: "cover", position: "attention" }).png().toBuffer(), pack.data, { w: S, h: S, position: "left", scale: L.pack.scale, bottom: L.pack.bottom })).data;
+        } else if (spec.layout === "single") {
+          stage(`Making the scene around your real pack: ${spec.photos[0]}`);
+          const args = { description: spec.photos[0], props, style: brand.imageStyle, layout, productName: product.name };
+          base = await photo(buildListingScenePrompt({ ...args, inScene: true }), { w: S, h: S }, `Listing slide ${slot}`, {
+            fallbackPrompt: buildListingScenePrompt({ ...args, inScene: false }),
+            lockedPack: packOpts,
+            mustShow: mustShow(spec.photos[0]),
           });
-          const photo = await generateImage({ prompt, target: { w: S, h: S }, reference: null, user, label: `Listing slide ${slot} photo`, photoOnly: true, noWriting: true, onStage: stage });
-          const bytes = await loadAsset(photo.id);
-          if (!bytes) throw new UserFacingError("The photo couldn't be saved. Try again.");
-          stage("Placing your real pack on the brand panel (unchanged, only scaled)");
-          base = await slideBase(Buffer.from(bytes.dataBase64, "base64"), pack.data, { size: S, band: BAND, panel: brand.kit.colors.primary });
-          if (photo.warning) send({ type: "stage", text: photo.warning });
+        } else {
+          // A split or grid: a calm scene with the pack, and each described photo as a tile beside it.
+          stage("Making the scene around your real pack");
+          const args = { description: "a warm kitchen table, softly blurred background", props, style: brand.imageStyle, layout: "bar" as const, productName: product.name };
+          const scene = await photo(buildListingScenePrompt({ ...args, inScene: true }), { w: S, h: S }, `Listing slide ${slot} scene`, {
+            fallbackPrompt: buildListingScenePrompt({ ...args, inScene: false }),
+            lockedPack: packOpts,
+          });
+          const tiles: Buffer[] = [];
+          // Each photo is made in its tile's shape (tall tiles in a 2×2 grid, wide ones stacked for a split or three).
+          const n = Math.min(spec.photos.length, 4);
+          const tileRatio = n === 4 ? L.tiles.width / 2 / (L.tiles.height / 2) : L.tiles.width / (L.tiles.height / n);
+          const shape: "wide" | "tall" | "square" = tileRatio > 1.15 ? "wide" : tileRatio < 0.87 ? "tall" : "square";
+          const gen = shape === "wide" ? { w: 1536, h: 1024 } : shape === "tall" ? { w: 1024, h: 1536 } : { w: 1024, h: 1024 };
+          for (let i = 0; i < spec.photos.length && i < 4; i++) {
+            stage(`Photo ${i + 1} of ${spec.photos.length}: ${spec.photos[i]}`);
+            tiles.push(
+              await photo(buildListingPhotoPrompt({ description: spec.photos[i], shape, style: brand.imageStyle }), gen, `Listing slide ${slot} photo ${i + 1}`, {
+                photoOnly: true,
+                mustShow: mustShow(spec.photos[i]),
+              }),
+            );
+          }
+          base = await tilesOn(scene, tiles, L.tiles, S);
+        }
+        if (spec.inset && slide.kind !== "comparison") {
+          stage(`Making the small callout photo: ${spec.inset}`);
+          const d = Math.round(S * 0.2);
+          const inset = await photo(buildListingPhotoPrompt({ description: `a close-up of ${spec.inset}, filling the frame`, shape: "square", style: brand.imageStyle, small: true }), { w: d, h: d }, `Listing slide ${slot} inset`, {
+            photoOnly: true,
+          });
+          base = await insetOn(base, inset, { left: Math.round(S * 0.4), top: Math.round(S * 0.27), d });
         }
         const a = await storeAsset({ data: base, mime: "image/jpeg", kind: "listing", label: `Listing slide ${slot} base`, user, size: { w: S, h: S } });
-        send({ type: "done", slot, image: { id: a.id, url: a.url }, final: false, band: BAND, panel: brand.kit.colors.primary });
+        send({ type: "done", slot, image: { id: a.id, url: a.url }, final: false, panel: brand.kit.colors.primary, generic });
       } catch (e) {
         send({ type: "error", message: errorMessage(e) });
       }

@@ -7,11 +7,11 @@ export { adLayout };
 
 export const PACK_POSITIONS = ["right", "center", "left"] as const;
 export type PackPosition = (typeof PACK_POSITIONS)[number];
-export const PACK_SCALES = ["small", "medium", "large"] as const;
+export const PACK_SCALES = ["small", "medium", "large", "hero"] as const;
 export type PackScale = (typeof PACK_SCALES)[number];
 
-const HEIGHT: Record<PackScale, number> = { small: 0.32, medium: 0.45, large: 0.62 };
-const WIDTH: Record<PackScale, number> = { small: 0.34, medium: 0.48, large: 0.7 };
+const HEIGHT: Record<PackScale, number> = { small: 0.32, medium: 0.45, large: 0.62, hero: 0.6 };
+const WIDTH: Record<PackScale, number> = { small: 0.34, medium: 0.48, large: 0.7, hero: 0.5 };
 
 /** The pack photo can't be used (too small, or not a readable image). */
 export class PackPhotoError extends Error {}
@@ -28,14 +28,15 @@ export async function isCutout(pack: Buffer): Promise<boolean> {
 }
 
 /** Where the pack goes for a given canvas. Tall formats keep clear of the bottom UI (Reels/Stories captions). */
-export function packBox(canvas: { w: number; h: number }, pack: { w: number; h: number }, position: PackPosition, scale: PackScale): PackBox {
+/** bottom: the gap under the pack as a share of the height (default keeps clear of Reels/Stories UI on tall formats). */
+export function packBox(canvas: { w: number; h: number }, pack: { w: number; h: number }, position: PackPosition, scale: PackScale, bottomShare?: number): PackBox {
   const maxH = canvas.h * HEIGHT[scale];
   const maxW = canvas.w * WIDTH[scale];
   const k = Math.min(maxH / pack.h, maxW / pack.w);
   const width = Math.max(1, Math.round(pack.w * k));
   const height = Math.max(1, Math.round(pack.h * k));
   const side = Math.round(canvas.w * 0.06);
-  const bottom = Math.round(canvas.h * (canvas.h / canvas.w > 1.5 ? 0.22 : 0.07));
+  const bottom = Math.round(canvas.h * (bottomShare ?? (canvas.h / canvas.w > 1.5 ? 0.22 : 0.07)));
   const left = position === "left" ? side : position === "center" ? Math.round((canvas.w - width) / 2) : canvas.w - width - side;
   return { left, top: Math.max(0, canvas.h - height - bottom), width, height };
 }
@@ -49,12 +50,12 @@ export async function compositePack(
   scene: Buffer,
   pack: Buffer,
   /** liftBackdrop: try removing a plain backdrop (off for packs cropped on purpose, whose edges are the pack). shadow: add our own soft shadow (off when the scene already has one). */
-  opts: { w: number; h: number; position?: PackPosition; scale?: PackScale; format?: "jpeg" | "png"; liftBackdrop?: boolean; shadow?: boolean },
+  opts: { w: number; h: number; position?: PackPosition; scale?: PackScale; bottom?: number; format?: "jpeg" | "png"; liftBackdrop?: boolean; shadow?: boolean },
 ): Promise<{ data: Buffer; box: PackBox; cutout: boolean; backdropRemoved: boolean }> {
   const { w, h } = opts;
   const { source, cutout, backdropRemoved } = await preparePack(pack, opts.liftBackdrop);
   const meta = await sharp(source).metadata();
-  const box = packBox({ w, h }, { w: meta.width ?? 1, h: meta.height ?? 1 }, opts.position ?? "right", opts.scale ?? "medium");
+  const box = packBox({ w, h }, { w: meta.width ?? 1, h: meta.height ?? 1 }, opts.position ?? "right", opts.scale ?? "medium", opts.bottom);
   const resized = await sharp(source).resize(box.width, box.height, { fit: "fill", kernel: "lanczos3" }).ensureAlpha().png().toBuffer();
   const shadowLayer = opts.shadow === false ? null : await dropShadow(resized, box, { w, h });
   const base = sharp(scene).resize(w, h, { fit: "cover", position: "centre" });
@@ -137,9 +138,9 @@ export function mapBoxToGeneration(target: { w: number; h: number }, gen: { w: n
  * already at its final size and place, and a mask that protects it (the model
  * may only paint where the mask is transparent).
  */
-export async function paintAroundInputs(source: Buffer, target: { w: number; h: number }, gen: { w: number; h: number }, position: PackPosition, scale: PackScale) {
+export async function paintAroundInputs(source: Buffer, target: { w: number; h: number }, gen: { w: number; h: number }, position: PackPosition, scale: PackScale, bottom?: number) {
   const meta = await sharp(source).metadata();
-  const targetBox = packBox(target, { w: meta.width ?? 1, h: meta.height ?? 1 }, position, scale);
+  const targetBox = packBox(target, { w: meta.width ?? 1, h: meta.height ?? 1 }, position, scale, bottom);
   const g = mapBoxToGeneration(target, gen, targetBox);
   const genBox = { ...g, left: Math.min(Math.max(0, g.left), gen.w - g.width), top: Math.min(Math.max(0, g.top), gen.h - g.height) };
   const packOnGen = await sharp(source).resize(genBox.width, genBox.height, { fit: "fill", kernel: "lanczos3" }).ensureAlpha().png().toBuffer();

@@ -51,29 +51,31 @@ export function adLayout(canvas: { w: number; h: number }): {
 }
 
 /**
- * A square listing slide: a header band on top, the photo in the middle fading into a brand panel, the
- * real pack standing on the panel at the right, and the feature callouts on the panel at the left.
- * A comparison slide keeps the band and puts two packs and a table below it.
+ * A listing slide in the style of the team's examples: one warm scene, the real pack large at the left,
+ * the header top left, and the feature as an icon list on a card at the right ("card") or as a pill bar
+ * along the bottom ("bar", for slides with a person, who then stands on the right).
  */
-export function slideLayout(size: number) {
+export function sceneLayout(size: number, style: "card" | "bar") {
   const s = size;
-  const band = { left: 0, top: 0, width: s, height: Math.round(s * 0.2) };
-  const photo = { left: 0, top: Math.round(s * 0.16), width: s, height: Math.round(s * 0.64) };
-  const panelTop = Math.round(s * 0.74);
   return {
-    band,
-    photo,
-    /** The photo fades into the band above and the panel below. */
-    fadeTop: { left: 0, top: photo.top, width: s, height: Math.round(s * 0.06) },
-    fadeBottom: { left: 0, top: panelTop - Math.round(s * 0.12), width: s, height: Math.round(s * 0.12) },
-    panel: { left: 0, top: panelTop, width: s, height: s - panelTop },
-    pack: { floor: Math.round(s * 0.955), height: Math.round(s * 0.46), right: Math.round(s * 0.05), maxWidth: Math.round(s * 0.4) },
-    callouts: { left: Math.round(s * 0.05), top: panelTop + Math.round(s * 0.035), width: Math.round(s * 0.5), height: s - panelTop - Math.round(s * 0.06) },
-    comparison: {
-      packs: { top: band.height + Math.round(s * 0.03), height: Math.round(s * 0.3) },
-      table: { left: Math.round(s * 0.06), top: Math.round(s * 0.6), width: Math.round(s * 0.88), height: Math.round(s * 0.36) },
-      us: Math.round(s * 0.55),
-      them: Math.round(s * 0.82),
-    },
+    header: { left: Math.round(s * 0.065), top: Math.round(s * 0.05), width: Math.round(style === "bar" ? s * 0.56 : s * 0.62) },
+    card: { left: Math.round(s * 0.62), top: Math.round(s * 0.27), width: Math.round(s * 0.335), height: Math.round(s * 0.52) },
+    bar: { left: Math.round(s * 0.05), top: Math.round(s * 0.845), width: Math.round(s * 0.9), height: Math.round(s * 0.12) },
+    /** Matches packBox() for the pack in the scene: left, "hero" (card) or "medium" (bar). */
+    pack: style === "card" ? { scale: "hero" as const, bottom: 0.07, top: Math.round(s * 0.33) } : { scale: "medium" as const, bottom: 0.19, top: Math.round(s * 0.36) },
+    /** Photos for a split or grid slide, as tiles on the right. */
+    tiles: { left: Math.round(s * 0.56), top: Math.round(s * 0.25), width: Math.round(s * 0.39), height: Math.round(s * 0.56) },
+    tip: style === "card" ? { x: Math.round(s * 0.6), y: Math.round(s * 0.84) } : { x: Math.round(s * 0.58), y: Math.round(s * 0.72) },
+  };
+}
+
+/** A comparison slide: header centred on top, our pack left, a plain generic container right, the table between. */
+export function comparisonLayout(size: number) {
+  const s = size;
+  return {
+    header: { left: Math.round(s * 0.08), top: Math.round(s * 0.05), width: Math.round(s * 0.84) },
+    table: { left: Math.round(s * 0.31), top: Math.round(s * 0.3), width: Math.round(s * 0.5), height: Math.round(s * 0.52) },
+    us: { cx: Math.round(s * 0.16), floor: Math.round(s * 0.74), maxH: Math.round(s * 0.36), maxW: Math.round(s * 0.27) },
+    them: { cx: Math.round(s * 0.9), floor: Math.round(s * 0.72), maxH: Math.round(s * 0.32), maxW: Math.round(s * 0.2) },
   };
 }

@@ -158,3 +158,60 @@ export function mockImageSvg(size: ImageSize, label: string, opts: { drawPack?: 
   const safe = label.replace(/[<>&"]/g, " ").slice(0, 80);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="#f3ede4"/>${pack}<text x="50%" y="${h - 120}" text-anchor="middle" font-family="sans-serif" font-size="34" fill="#2b1d14">${safe}</text><text x="50%" y="${h - 70}" text-anchor="middle" font-family="sans-serif" font-size="24" fill="#5e4c3f">Placeholder: add OPENAI_API_KEY for real images</text></svg>`;
 }
+
+/**
+ * One photo of a listing slide, from the team's own description. It leads with exactly what they
+ * asked for; the frame shape matches where the photo sits on the slide, so nothing gets cropped.
+ * Icons, tips and words are drawn on the slide afterwards, and the real pack stands beside it.
+ */
+export function buildListingPhotoPrompt(opts: { description: string; shape: "wide" | "tall" | "square"; style?: ImageStyle; small?: boolean }): string {
+  const style = opts.style ?? DEFAULT_IMAGE_STYLE;
+  const frame = {
+    wide: "a wide landscape frame",
+    tall: "a tall portrait frame",
+    square: "a square frame",
+  }[opts.shape];
+  return [
+    `Professional photograph for an Indian food brand's product page on Amazon and Flipkart (${opts.small ? "a small round close-up inset" : "the photo part of a designed listing image"}).`,
+    `SHOW EXACTLY THIS, with every part clearly visible: ${opts.description}.`,
+    `Framing: ${frame}. The subject sits fully inside the frame with breathing room: no cropped heads, hands or food, nothing important touching the edges.`,
+    "Quality: crisp focus on the subject, high detail, bright soft natural light, true-to-life colours, real and appetising food texture; the look of a professional commercial shoot, not a stock photo.",
+    `Photography: ${style.look}`,
+    `Places: ${style.places}`,
+    `People: ${style.people}`,
+    `Props and food: ${style.props}`,
+    `Colour and mood: ${style.mood}`,
+    `Avoid: ${style.avoid}`,
+    "RULES: no packaging of any kind (no boxes, jars, pouches, packets, wrappers, labels or logos); no written words, numbers, icons, badges or graphics; no doctors or experts; nothing that isn't in the description.",
+  ].join("\n");
+}
+
+/**
+ * A whole listing scene in the style of the team's examples: one warm, real-looking scene built around
+ * our real pack (standing large at the left), with the product's ingredients as props, and calm areas
+ * where the header and the feature list go. inScene: the pack is already in the image (paint around it);
+ * otherwise leave its spot empty (it is placed afterwards).
+ */
+export function buildListingScenePrompt(opts: { description: string; props: string[]; style?: ImageStyle; layout: "card" | "bar"; inScene: boolean; productName: string }): string {
+  const style = opts.style ?? DEFAULT_IMAGE_STYLE;
+  return [
+    "Professional product-page image for an Indian food brand on Amazon and Flipkart: one real, warm, inviting photographed scene.",
+    opts.inScene
+      ? "The image already contains our real product pack, standing large at the lower left. Build the whole scene around it so it truly belongs: it stands on a wooden board or table that runs under it at the right height, the camera sees it front-on at its eye level, the light matches the light on the pack, with a soft contact shadow. Never cover, repaint, recolour, resize or copy it: exactly ONE pack in the whole image, and no other jar, box, pouch, packet or label anywhere."
+      : "Leave a clear spot on the wooden table at the lower left where our product pack will stand (it is added afterwards). Do NOT draw any pack, jar, box, pouch, packet or label anywhere.",
+    `SHOW EXACTLY THIS, every part clearly visible: ${withoutPack(opts.description, opts.productName, "the product")}.`,
+    opts.props.length ? `Props on the table, placed naturally around the pack (small wooden bowls or loose pieces): ${opts.props.join(", ")}.` : "",
+    opts.layout === "card"
+      ? "Composition: keep the top left (above the pack) calm and softly out of focus for a headline, and keep the right third behind the action soft and uncluttered for a feature list."
+      : "Composition: people and the action on the right half; keep the top left calm and softly out of focus for a headline, and the bottom strip of the table plain for a feature bar.",
+    "Quality: crisp focus on the subject and the food, high detail, bright soft window light, warm cream and wood tones, shallow depth of field with a softly blurred background, real and appetising textures; the look of a professional commercial shoot.",
+    `Photography: ${style.look}`,
+    `Places: ${style.places}`,
+    `People: ${style.people}`,
+    `Colour and mood: ${style.mood}`,
+    `Avoid: ${style.avoid}`,
+    "RULES: no written words, numbers, icons, badges, graphics or logos anywhere (they are added afterwards); no doctors or experts; nothing that isn't described.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}

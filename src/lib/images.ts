@@ -8,7 +8,7 @@ import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
 import { compositePack as composite, layoutAd, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
-import { findInventedPacks } from "./pack-detect";
+import { findInventedPacks, findMissing } from "./pack-detect";
 
 /** Composite, turning an unusable pack photo into a message the team can act on. */
 async function compositePack(...args: Parameters<typeof composite>) {
@@ -57,7 +57,11 @@ export async function loadReference(url: string | null | undefined): Promise<Ref
 /** Generates one image, stores it, logs usage, and returns the asset id. */
 /** Centre-crop and resize to the exact platform size; JPEG keeps photos small enough to store. */
 export async function fitToSize(png: Buffer, w: number, h: number): Promise<Buffer> {
-  return sharp(png).resize(w, h, { fit: "cover", position: "centre" }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+  const m = await sharp(png).metadata();
+  // Enlarging (a 1024 px photo to a 2000 px listing) softens it: restore some crispness.
+  const scale = Math.max(w / (m.width || w), h / (m.height || h));
+  const img = sharp(png).resize(w, h, { fit: "cover", position: "centre", kernel: "lanczos3" });
+  return (scale > 1.3 ? img.sharpen({ sigma: 0.9, m1: 0.6, m2: 2 }) : img).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
 }
 
 export async function generateImage(opts: {
@@ -68,13 +72,15 @@ export async function generateImage(opts: {
   label: string;
   frameIndex?: number | null;
   /** Composite this original pack photo into the scene (the model never draws the pack). */
-  lockedPack?: { data: Buffer; position: PackPosition; scale: PackScale; assetId?: string | null; liftBackdrop?: boolean } | null;
+  lockedPack?: { data: Buffer; position: PackPosition; scale: PackScale; bottom?: number; assetId?: string | null; liftBackdrop?: boolean } | null;
   /** With a locked pack: `prompt` paints the scene around the real pack; this one is for the older "leave a spot, paste after" method if that fails. */
   fallbackPrompt?: string;
   /** Designed layout: a photo with no pack, then our real pack standing on a brand panel (the model never sees the pack). */
   layoutPack?: { data: Buffer; position: PackPosition; panel: string; accent: string; assetId?: string | null; liftBackdrop?: boolean } | null;
   /** A photo that our real pack is placed beside later (listing slides): checked for invented packaging like a layout photo. */
   photoOnly?: boolean;
+  /** What the photo must visibly show (from the team's description): checked, and the photo made again once if any is missing. */
+  mustShow?: string[];
   /** The prompt forbids added words (real text goes on afterwards): check the photo for any. */
   noWriting?: boolean;
   /** Called at each stage, so the team (and the server log) can see what is happening. */
@@ -104,7 +110,7 @@ export async function generateImage(opts: {
   // With an OpenAI key, images are always real, even while text generation is in mock mode.
   if (isMock() && !process.env.OPENAI_API_KEY) {
     mime = "image/svg+xml";
-    data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label, { drawPack: !opts.lockedPack && !opts.layoutPack })).toString("base64");
+    data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label, { drawPack: !opts.lockedPack && !opts.layoutPack && !opts.photoOnly })).toString("base64");
     model = "mock";
     stage("Sample mode: using a placeholder photo instead of AI");
     if (opts.layoutPack) {
@@ -115,7 +121,7 @@ export async function generateImage(opts: {
       // Placeholder scene, but the real pack is composited exactly as it would be for a real image.
       const scene = await sharp(Buffer.from(data, "base64")).resize(opts.target.w, opts.target.h).png().toBuffer();
       mime = "image/jpeg";
-      data = (await compositePack(scene, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale, liftBackdrop: opts.lockedPack.liftBackdrop })).data.toString("base64");
+      data = (await compositePack(scene, opts.lockedPack.data, { ...opts.target, position: opts.lockedPack.position, scale: opts.lockedPack.scale, bottom: opts.lockedPack.bottom, liftBackdrop: opts.lockedPack.liftBackdrop })).data.toString("base64");
     }
   } else {
     const openai = getClient();
@@ -145,7 +151,7 @@ export async function generateImage(opts: {
           try {
             const prepared = await preparePack(opts.lockedPack.data, opts.lockedPack.liftBackdrop);
             const [gw, gh] = size.split("x").map(Number);
-            const inputs = await paintAroundInputs(prepared.source, opts.target, { w: gw, h: gh }, opts.lockedPack.position, opts.lockedPack.scale);
+            const inputs = await paintAroundInputs(prepared.source, opts.target, { w: gw, h: gh }, opts.lockedPack.position, opts.lockedPack.scale, opts.lockedPack.bottom);
             res = await openai.images.edit({
               model: IMAGE_MODEL,
               prompt,
@@ -184,6 +190,7 @@ export async function generateImage(opts: {
           ...opts.target,
           position: opts.lockedPack.position,
           scale: opts.lockedPack.scale,
+          bottom: opts.lockedPack.bottom,
           liftBackdrop: opts.lockedPack.liftBackdrop,
           shadow: !paintedAround,
         });
@@ -211,18 +218,39 @@ export async function generateImage(opts: {
           );
           if ((await findInventedPacks(made.image, null, opts.user, check)).length) warning = "The AI may have drawn packaging or text in the photo. Check the image, then make another.";
         }
+        if (opts.mustShow?.length) {
+          stage("Checking the photo shows everything described");
+          const missing = await findMissing(made.image, opts.mustShow, opts.user);
+          if (missing.length) {
+            stage(`Missing: ${missing.join("; ")}. Making the photo again`);
+            made = await once(`${opts.prompt}\n\nIMPORTANT: a previous attempt did not clearly show: ${missing.join("; ")}. The photo MUST clearly show every one of these.`, undefined);
+            const still = await findMissing(made.image, opts.mustShow, opts.user);
+            if (still.length) warning = `The photo may not clearly show: ${still.join("; ")}. Check it, then make it again or use your own photo.`;
+          }
+        }
         if (opts.layoutPack) made = { image: await layout(made.image), box: null };
       } else if (opts.lockedPack) {
         // The model sometimes invents a second pack (e.g. in someone's hand). Check, and redo once if so.
-        stage("Checking for any extra pack the AI drew");
-        let invented = await findInventedPacks(made.image, made.box, opts.user);
+        stage(opts.noWriting ? "Checking for any extra pack or text the AI drew" : "Checking for any extra pack the AI drew");
+        const packCheck = { checkWriting: opts.noWriting };
+        let invented = await findInventedPacks(made.image, made.box, opts.user, packCheck);
         if (invented.length) {
           stage(`Found ${invented.join("; ")}: making it again without showing the AI your pack`);
           const fix = `\n\nIMPORTANT: a previous attempt wrongly showed ${invented.join("; ")}. Show NO other jar, box, pouch, packet, bottle or label anywhere, and nobody holds any container; hands may only hold food, a spoon, toast or a cup.`;
           // Second try without showing the model our pack at all, so it has nothing to copy.
           made = await once(opts.prompt + fix, opts.fallbackPrompt ? opts.fallbackPrompt + fix : undefined, !opts.fallbackPrompt);
-          invented = await findInventedPacks(made.image, made.box, opts.user);
+          invented = await findInventedPacks(made.image, made.box, opts.user, packCheck);
           if (invented.length) warning = `The AI may have added packaging that isn't ours (${invented.join("; ")}). Check the image, then make another or use Edit with words to remove it.`;
+        }
+        if (opts.mustShow?.length) {
+          stage("Checking the scene shows everything described");
+          const missing = await findMissing(made.image, opts.mustShow, opts.user);
+          if (missing.length) {
+            stage(`Missing: ${missing.join("; ")}. Making the scene again`);
+            made = await once(`${opts.prompt}\n\nIMPORTANT: a previous attempt did not clearly show: ${missing.join("; ")}. The scene MUST clearly show every one of these.`, opts.fallbackPrompt);
+            const still = await findMissing(made.image, opts.mustShow, opts.user);
+            if (still.length) warning = `The scene may not clearly show: ${still.join("; ")}. Check it, then make it again or use your own photo.`;
+          }
         }
       }
       mime = "image/jpeg";

@@ -126,3 +126,33 @@ Also list any written words, numbers, notes, signs or labels visible anywhere in
     return [];
   }
 }
+
+const MatchSchema = z.object({
+  items: z.array(z.object({ item: z.string(), visible: z.boolean().describe("True only if it is clearly visible and recognisable") })),
+});
+
+/**
+ * Which of the things a photo must show are missing (people, actions, objects, setting), so a photo
+ * that doesn't match the team's description can be made again. Empty in mock mode or on error.
+ */
+export async function findMissing(image: Buffer, mustShow: string[], user: string): Promise<string[]> {
+  if (!mustShow.length || isMock() || (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY)) return [];
+  try {
+    const small = await sharp(image).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+    const r = await structuredCall({
+      schema: MatchSchema,
+      prompt: `Check this photo against what it was meant to show. For each item below, say whether it is clearly visible and recognisable in the photo. Be strict: a vague or partly hidden match is not visible.
+${mustShow.map((m, i) => `${i + 1}. ${m}`).join("\n")}
+Return one entry per item, in the same order and wording.`,
+      image: { mediaType: "image/jpeg", base64: small.toString("base64") },
+      maxTokens: 1200,
+      effort: "low",
+      meta: { user, kind: "photo-match" },
+      mock: () => ({ items: mustShow.map((item) => ({ item, visible: true })) }),
+    });
+    return r.items.filter((x) => !x.visible).map((x) => x.item);
+  } catch (e) {
+    console.error("photo match check failed", e);
+    return [];
+  }
+}

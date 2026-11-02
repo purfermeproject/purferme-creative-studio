@@ -5,6 +5,7 @@ import { finishSlide } from "@/components/listing-render";
 import type { BrandKit } from "@/lib/brand-kit";
 import { LISTING_LABELS, LISTING_PLATFORMS, LISTING_SIZE, SLIDE_KIND_LABELS, SLIDE_KINDS, type ListingPlan, type ListingPlatform, type Slide, type SlideCheck } from "@/lib/listing-plan";
 import { readNdjson } from "@/lib/ndjson";
+import { sceneSpec } from "@/lib/scene-spec";
 import { can } from "@/lib/roles";
 import type { Role } from "@/lib/types";
 
@@ -220,11 +221,15 @@ function PlanEditor({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ productId: product.id, platform, slot, productPhotoId: slot === "main" && photoId ? photoId : null }),
       });
-      const done = await readNdjson<{ image: { id: string; url: string }; final: boolean; panel?: string }>(res, () => {}, add);
+      const done = await readNdjson<{ image: { id: string; url: string }; final: boolean; panel?: string; generic?: { shape: "jar" | "box"; labelY: number; width: number } | null }>(
+        res,
+        () => {},
+        add,
+      );
       let url = done.image.url;
       if (!done.final && slot !== "main") {
         add("Adding the header, sub-header and feature in your brand fonts");
-        const fin = await finishSlide({ baseUrl: done.image.url, kit, slide: plan.slides[slot - 1], slot, panel: done.panel ?? kit.colors.primary });
+        const fin = await finishSlide({ baseUrl: done.image.url, kit, slide: plan.slides[slot - 1], slot, panel: done.panel ?? kit.colors.primary, generic: done.generic });
         await call("/api/listing/attach", "POST", { productId: product.id, platform, slot: id, assetId: fin.id });
         url = fin.url;
       }
@@ -375,10 +380,11 @@ function PlanEditor({
                       <p className="hint">Your photo is used as it is (no AI), with the header above and your real pack on the panel.</p>
                     ) : (
                       <label className="block">
-                        <span className="label">What the AI photo shows: who, where, doing what</span>
+                        <span className="label">What the photo shows (as your team wrote it)</span>
                         <textarea className="input" rows={2} value={s.scene} disabled={!canEdit} onChange={(e) => setSlide(i, { scene: e.target.value })} />
                       </label>
                     )}
+                    <SceneSummary scene={s.scene} ownPhoto={Boolean(s.photoId)} />
                     {!product.photos.length ? (
                       <p className="hint">Real photos beat AI: add lifestyle shots (a tiffin, a desk with chai, a kitchen) under More product photos in Settings → Products, then pick one here.</p>
                     ) : null}
@@ -666,5 +672,43 @@ function ImportPanel({
         </p>
       ) : null}
     </section>
+  );
+}
+
+/** What the slide will contain, read from the team's description, so they can see it was understood. */
+function SceneSummary({ scene, ownPhoto }: { scene: string; ownPhoto: boolean }) {
+  const spec = sceneSpec(scene);
+  const photos = ownPhoto
+    ? "your photo"
+    : spec.layout === "split"
+      ? `2 photos side by side: ${spec.photos.map((p) => `“${p}”`).join(" | ")}`
+      : spec.layout === "grid"
+        ? `${spec.photos.length} photos in a grid: ${spec.photos.join(" · ")}`
+        : `1 photo: “${spec.photos[0]}”`;
+  const drawn = [
+    spec.crossed.length ? `crossed-out ${spec.crossed.join(", ")}` : "",
+    spec.tip ? `the tip “${spec.tip}”` : "",
+    spec.inset && !ownPhoto ? `a small round photo of ${spec.inset}` : "",
+  ].filter(Boolean);
+  return (
+    <div className="space-y-1.5 rounded-xl bg-surface-2 p-3 text-xs" data-testid="scene-summary">
+      <p>
+        <span className="font-semibold">This slide: </span>
+        {photos}
+        {drawn.length ? (
+          <>
+            {" "}
+            · <span className="font-semibold">drawn exactly:</span> {drawn.join(" · ")}
+          </>
+        ) : null}{" "}
+        · your real pack in the scene.
+      </p>
+      {spec.packInHands && !ownPhoto ? (
+        <p className="text-amber">
+          Someone holds, reads or scans the pack here. AI can&apos;t put your real pack in their hands (it would invent one), so the scene shows the moment and your real pack stands
+          in it. For this exact shot, upload a real photo and pick it above.
+        </p>
+      ) : null}
+    </div>
   );
 }
