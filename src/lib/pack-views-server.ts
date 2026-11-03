@@ -64,3 +64,27 @@ export async function choosePackViews(
     return fallback;
   }
 }
+
+/** The pack's side photos by side (the main pack photo stands in for the front when there is no front view). */
+export async function loadPackViews(
+  photoAssetIds: string[],
+  main: { data: Buffer; mime: string; name: string; label?: string },
+  mainAssetId: string | null,
+): Promise<Map<PackView, { ref: { data: Buffer; mime: string; name: string; label?: string }; assetId: string | null }>> {
+  const { db, schema } = await import("@/db");
+  const { inArray } = await import("drizzle-orm");
+  const { viewOf } = await import("./pack-views");
+  const byView = new Map<PackView, { ref: { data: Buffer; mime: string; name: string; label?: string }; assetId: string | null }>();
+  if (photoAssetIds.length) {
+    const rows = await db
+      .select({ id: schema.assets.id, label: schema.assets.label, mime: schema.assets.mime, data: schema.assets.dataBase64 })
+      .from(schema.assets)
+      .where(inArray(schema.assets.id, photoAssetIds));
+    for (const r of rows) {
+      const v = viewOf(r.label);
+      if (v && !byView.has(v)) byView.set(v, { ref: { data: Buffer.from(r.data, "base64"), mime: r.mime, name: v.replace(/\W+/g, "-"), label: r.label }, assetId: r.id });
+    }
+  }
+  if (!byView.has("front")) byView.set("front", { ref: main, assetId: mainAssetId });
+  return byView;
+}

@@ -493,6 +493,8 @@ test("Edit with words, All sizes and Compare", async ({ page }) => {
   const ws = await develop(page, { type: "Static image ad (4:5)", placement: "Instagram Feed post" });
   // AI edits are only for scene-only images; images with our real pack can't be redrawn.
   await moreOptions(ws);
+  // A designed ad always has the pack; scene-only images use another text option.
+  await ws.getByLabel("Text on image").first().selectOption("overlay");
   await ws.getByLabel("Pack in the image").selectOption("none");
   await makeImage(ws);
   const gallery = ws.getByTestId("image-gallery");
@@ -550,6 +552,9 @@ test("Original pack is placed unchanged, and images with it can't be AI-edited",
   await moreOptions(ws);
   // By default the AI fits the pack into the scene; the exact pasted pack is one choice away.
   await expect(ws.getByLabel("Pack in the image")).toHaveValue("ai");
+  // A designed ad is the default; the exact pasted pack goes with text added by the app.
+  await expect(ws.getByLabel("Text on image").first()).toHaveValue("designed");
+  await ws.getByLabel("Text on image").first().selectOption("overlay");
   await ws.getByLabel("Pack in the image").selectOption("scene");
   await makeImage(ws);
   await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack · scene ad");
@@ -565,7 +570,7 @@ test("Original pack is placed unchanged, and images with it can't be AI-edited",
   expect((await res.json()).error).toContain("real pack");
 });
 
-test("Proposals show the real pack; a proposal image (with its hook) carries into the ad; the first image can be automatic, with its hook", async ({ page }) => {
+test("Proposals show the real pack; a proposal image (a designed ad) carries into the ad; the first image can be automatic and designed", async ({ page }) => {
   await signIn(page);
   await page.goto("/create");
   await fillBrief(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
@@ -577,17 +582,16 @@ test("Proposals show the real pack; a proposal image (with its hook) carries int
   await expect(first.getByTestId("proposal-image")).toBeVisible({ timeout: 60_000 });
   await first.getByRole("button", { name: /^Develop as/ }).click();
   const ws = page.getByTestId("workspace-creative");
-  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(2, { timeout: 60_000 });
-  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · pack from your photo");
-  await expect(ws.getByTestId("image-dims").nth(1)).toContainText("with text");
+  // A proposal image is one finished, designed ad (its words are drawn by the AI and read back).
+  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1, { timeout: 60_000 });
+  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · pack from your photo · designed");
   await expect(page.getByTestId("creative-preview").locator("img")).toHaveCount(1);
   await page.reload();
-  await expect(page.getByTestId("workspace-creative").getByTestId("image-gallery").locator("img")).toHaveCount(2);
+  await expect(page.getByTestId("workspace-creative").getByTestId("image-gallery").locator("img")).toHaveCount(1);
 
   const auto = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", autoImage: true });
-  await expect(auto.getByTestId("image-gallery").locator("img")).toHaveCount(2, { timeout: 60_000 });
-  await expect(auto.getByTestId("image-dims").first()).toContainText("pack from your photo");
-  await expect(auto.getByTestId("image-dims").nth(1)).toContainText("with text");
+  await expect(auto.getByTestId("image-gallery").locator("img")).toHaveCount(1, { timeout: 60_000 });
+  await expect(auto.getByTestId("image-dims").first()).toContainText("pack from your photo · designed");
 });
 
 test("A pack photo on a plain backdrop is cut out automatically on upload, with the original kept", async ({ page }) => {
@@ -822,6 +826,8 @@ test("No pack photo, no pack: the app asks for the real photo instead of letting
   await expect(ws.getByRole("alert")).toContainText("no pack photo for");
   await expect(ws.getByTestId("image-gallery")).toHaveCount(0);
   await moreOptions(ws);
+  // A designed ad always has the pack; scene-only images use another text option.
+  await ws.getByLabel("Text on image").first().selectOption("overlay");
   await ws.getByLabel("Pack in the image").selectOption("none");
   await makeImage(ws);
   await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1);
@@ -836,6 +842,9 @@ test("Image prompts: the brand image style is used, and the team can see and edi
   await expect(style.getByText("Image style saved.")).toBeVisible();
 
   const ws = await develop(page, { type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  // The photo prompt (a designed ad picks its own setting per image instead of one fixed place).
+  await moreOptions(ws);
+  await ws.getByLabel("Text on image").first().selectOption("auto");
   const editor = ws.getByTestId("prompt-editor");
   await editor.getByRole("button", { name: /Prompt/ }).click();
   const direction = editor.getByLabel(/What the picture shows/);

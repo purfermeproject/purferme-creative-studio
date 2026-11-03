@@ -5,6 +5,8 @@ import { storeAsset } from "@/lib/asset-store";
 import { getBrand, getProduct } from "@/lib/data";
 import { buildListingPhotoPrompt, buildListingScenePrompt } from "@/lib/image-prompt";
 import { generateImage, loadAsset, loadReference } from "@/lib/images";
+import { buildDesignedPrompt, designWords, specFromSlide } from "@/lib/designed-ad";
+import { choosePackViews, loadPackViews } from "@/lib/pack-views-server";
 import { sceneLayout } from "@/lib/ad-layout";
 import { comparisonScene, insetOn, mainImage, tilesOn } from "@/lib/listing-images";
 import { compositePack } from "@/lib/pack-composite";
@@ -23,6 +25,8 @@ const Body = z.object({
   slot: z.union([z.literal("main"), z.number().int().min(1).max(10)]),
   /** Main image only: a real photo of the product itself to stand beside the pack. */
   productPhotoId: z.string().uuid().nullable().optional(),
+  /** A finished, designed slide (the AI lays out the words, callouts or table and the pack), each slide in its own setting. */
+  designed: z.boolean().default(false),
 });
 
 /**
@@ -77,6 +81,49 @@ export async function POST(req: Request) {
         const checks = (await checkPlan(row.plan, platform, product))[slot - 1];
         const blocked = checks.checks.filter((c) => c.level === "block");
         if (blocked.length) throw new UserFacingError(`Slide ${slot} can't be made yet: ${blocked.map((c) => c.text).join("; ")}. Edit the words, then try again.`);
+
+        if (parsed.data.designed && !(slide.kind !== "comparison" && slide.photoId)) {
+          // Each slide in its own world: settings already used by the earlier slides are skipped.
+          const used: string[] = [];
+          for (let i = 0; i < slot - 1; i++) used.push(specFromSlide(row.plan.slides[i], used).setting.key);
+          const design = specFromSlide(slide, used);
+          const packAssetId = /^\/api\/assets\/([0-9a-f-]{36})$/i.exec(product.packImageUrl ?? "")?.[1] ?? null;
+          const byView = await loadPackViews(product.photoAssetIds, pack, packAssetId);
+          const pick = await choosePackViews(`${slide.scene}. ${slide.header}`, [...byView.keys()], user, { hook: slide.header, productName: product.name });
+          const refs = pick.views.map((v) => byView.get(v)!.ref);
+          stage(`Setting and feeling: ${design.setting.place}; ${design.setting.mood}`);
+          stage(`Designing slide ${slot}: “${design.headline}”${design.callouts.length ? `, callouts: ${design.callouts.map((c) => c.label).join(", ")}` : ""}${design.table ? `, a comparison table` : ""}`);
+          if (byView.size > 1) stage(`Using your pack photos: ${pick.views.join(" + ")}`);
+          const made = await generateImage({
+            prompt: buildDesignedPrompt(design, {
+              productName: product.name,
+              brandName: "Puŕ Fermé",
+              primary: brand.kit.colors.primary,
+              accent: brand.kit.colors.accent,
+              w: S,
+              h: S,
+              forWhat: `a ${platform === "amazon" ? "Amazon" : platform === "flipkart" ? "Flipkart" : "marketplace"} listing image`,
+              props: propsFromIngredients(product.ingredients),
+              views: byView.size > 1 ? pick.views : undefined,
+              packAction: pick.action,
+              look: brand.imageStyle.look,
+              people: brand.imageStyle.people,
+              avoid: brand.imageStyle.avoid,
+            }),
+            target: { w: S, h: S },
+            reference: refs[0],
+            moreReferences: refs.slice(1),
+            designedWords: designWords(design),
+            user,
+            label: `Listing slide ${slot} · designed`,
+            onStage: stage,
+          });
+          if (made.warning) send({ type: "stage", text: made.warning });
+          await setSlotImage(productId, platform, String(slot), made.id);
+          send({ type: "done", slot, image: { id: made.id, url: made.url }, final: true });
+          controller.close();
+          return;
+        }
 
         let base: Buffer;
         let generic: { shape: "jar" | "box"; labelY: number; width: number } | null = null;

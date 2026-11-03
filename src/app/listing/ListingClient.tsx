@@ -188,6 +188,8 @@ function PlanEditor({
   const [stages, setStages] = useState<Record<string, string[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [photoId, setPhotoId] = useState(product.photos[0]?.id ?? "");
+  /** designed = the AI lays out each slide like a finished brand post, each in its own setting; clean = photo + words added by the app. */
+  const [look, setLook] = useState<"designed" | "clean">("designed");
   const S = LISTING_SIZE[platform];
 
   const setSlide = (i: number, patch: Partial<Slide>) => {
@@ -219,7 +221,7 @@ function PlanEditor({
       const res = await fetch("/api/listing/slide", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ productId: product.id, platform, slot, productPhotoId: slot === "main" && photoId ? photoId : null }),
+        body: JSON.stringify({ productId: product.id, platform, slot, productPhotoId: slot === "main" && photoId ? photoId : null, designed: look === "designed" }),
       });
       const done = await readNdjson<{ image: { id: string; url: string }; final: boolean; panel?: string; generic?: { shape: "jar" | "box"; labelY: number; width: number } | null }>(
         res,
@@ -274,6 +276,13 @@ function PlanEditor({
         <button type="button" className="btn-secondary px-3 py-1.5 text-sm" onClick={onReplan} disabled={!!working || replanning || !canRun}>
           {replanning ? "Planning…" : "New AI plan"}
         </button>
+        <label className="sr-only" htmlFor="listing-look">
+          Look of the slides
+        </label>
+        <select id="listing-look" className="input w-auto py-1.5 text-sm" value={look} onChange={(e) => setLook(e.target.value as typeof look)}>
+          <option value="designed">Look: designed by AI, each slide its own setting</option>
+          <option value="clean">Look: clean photo, words added by the app</option>
+        </select>
         <button type="button" className="btn-primary px-3 py-1.5 text-sm" onClick={() => void makeAll()} disabled={!!working || !canRun}>
           Make all images
         </button>

@@ -32,7 +32,6 @@ import { ProposalVisual, sketchRatio } from "./ProposalVisual";
 import type { MadeImage } from "@/components/ImageMaker";
 import { findPlacement } from "@/lib/placements";
 import type { Concept } from "@/lib/schemas";
-import { addTextAutomatically, defaultOverlay, packLayoutOf } from "@/components/OverlayEditor";
 import { useAutosave, type SaveState } from "./useAutosave";
 import { ValidationPanel } from "./ValidationPanel";
 
@@ -356,27 +355,7 @@ export function Workspace({
     return { id: data.id, url: data.url, label: data.label, frameIndex: 0 };
   }
 
-  /** The same image with the hook, CTA and logo on it (the pack sits at the bottom, so the text goes on top). Null if it can't be drawn. */
-  async function withHook(image: MadeImage, concept: Pick<Concept, "hook" | "frames" | "copy">, creativeId: string | null): Promise<MadeImage | null> {
-    const onscreen = concept.frames[0]?.onscreen;
-    try {
-      const t = await addTextAutomatically({
-        imageUrl: image.url,
-        kit,
-        options: defaultOverlay(
-          kit,
-          { headline: concept.hook || onscreen || "", sub: concept.copy.headline && concept.copy.headline !== (concept.hook || onscreen) ? concept.copy.headline : "", cta: concept.copy.cta || "Shop now" },
-          packLayoutOf(image.label),
-        ),
-        label: image.label ?? "Image",
-        creativeId,
-        frameIndex: 0,
-      });
-      return { ...t, frameIndex: 0 };
-    } catch {
-      return null;
-    }
-  }
+
 
   const proposalConcept = (p: Proposal): Concept => ({
     title: p.title,
@@ -407,9 +386,10 @@ export function Workspace({
         specId: placementSpec(brief.platform, brief.placement),
         packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
         packMode: "ai",
+        // A finished, designed ad: the AI lays out the headline, callouts and the pack (every word read back).
+        textMode: "designed",
       });
-      const withText = await withHook(image, proposalConcept(p), null);
-      setProposalImages((m) => ({ ...m, [p.title]: { image, withText, busy: false, error: "" } }));
+      setProposalImages((m) => ({ ...m, [p.title]: { image, withText: null, busy: false, error: "" } }));
     } catch (e) {
       setProposalImages((m) => ({ ...m, [p.title]: { image: null, busy: false, error: e instanceof Error ? e.message : "Couldn't make the image." } }));
     }
@@ -430,11 +410,9 @@ export function Workspace({
         specId: placementSpec(c.platform, c.placement),
         packImage: brief.pack ? { mediaType: brief.pack.mediaType, base64: brief.pack.base64 } : null,
         packMode: "ai",
+        textMode: "designed",
       }, (stage) => setFirstImage({ busy: true, error: "", stage }));
       setCreative((cur) => (cur && cur.id === c.id ? { ...cur, images: [...cur.images, image] } : cur));
-      setFirstImage({ busy: true, error: "", stage: "Adding the hook, button and logo" });
-      const withText = await withHook(image, snapshotToConcept(c.snapshot), c.id);
-      if (withText) setCreative((cur) => (cur && cur.id === c.id ? { ...cur, images: [...cur.images, withText] } : cur));
       setFirstImage({ busy: false, error: "" });
     } catch (e) {
       setFirstImage({ busy: false, error: e instanceof Error ? e.message : "Couldn't make the first image." });

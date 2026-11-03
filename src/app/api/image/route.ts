@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authErrorStatus, requireRole } from "@/auth";
 import { db, schema } from "@/db";
 import { errorMessage } from "@/lib/ai";
-import { getBrand, getProduct } from "@/lib/data";
+import { getBrand, getProduct, getTerms } from "@/lib/data";
 import { buildImagePrompt, buildImagePromptParts, buildListingScenePrompt } from "@/lib/image-prompt";
 import { defaultSpecFor, findSpec, generationSizeFor, MAX_SIDE, MIN_SIDE, ratioLabel } from "@/lib/image-specs";
 import { generateImage, loadReference, type Reference } from "@/lib/images";
@@ -13,6 +13,9 @@ import { adScene } from "@/lib/ad-layout";
 import { mustShow, propsFromIngredients, sceneSpec } from "@/lib/scene-spec";
 import { PLATFORM_LABELS, PLATFORMS } from "@/lib/types";
 import { inArray } from "drizzle-orm";
+import { buildDesignedPrompt, designWords, type DesignSpec } from "@/lib/designed-ad";
+import { planDesign } from "@/lib/designed-ad-server";
+import { scan } from "@/lib/compliance";
 import { viewOf, VIEW_NAMES, type PackView } from "@/lib/pack-views";
 import { choosePackViews } from "@/lib/pack-views-server";
 
@@ -26,7 +29,8 @@ const Body = z.object({
   frameIndex: z.number().int().min(0).max(10).default(0),
   creativeId: z.string().uuid().nullable().optional(),
   specId: z.string().max(40).nullable().optional(),
-  textMode: z.enum(["overlay", "ai"]).default("overlay"),
+  /** designed = the AI lays out the whole ad (headline, sub-line, callouts, the pack) like a finished brand post; every word is read back. */
+  textMode: z.enum(["overlay", "ai", "designed"]).default("overlay"),
   /**
    * ai = the AI draws our pack into the scene from the pack photo, adapting angle, light and hands (default; checked against the real pack);
    * scene = one scene painted around our real pack, pasted in unchanged at the lower right;
@@ -72,7 +76,7 @@ export async function POST(req: Request) {
       return Response.json({ error: `${product.name} is on ${product.status}: ${product.statusReason || "no reason given"}` }, { status: 409 });
     }
     const reference: Reference =
-      input.packMode === "none"
+      input.packMode === "none" && input.textMode !== "designed"
         ? null
         : input.photoId && product.photoAssetIds.includes(input.photoId)
           ? await loadReference(`/api/assets/${input.photoId}`)
@@ -81,13 +85,15 @@ export async function POST(req: Request) {
             : await loadReference(product.packImageUrl);
     // Without a pack photo there is nothing to lock; fall back to describing the pack.
     // Only real product photos are used: no photo on file means no pack image, never an AI-drawn one.
-    if (input.packMode !== "none" && !reference) {
+    if ((input.packMode !== "none" || input.textMode === "designed") && !reference) {
       return Response.json(
         { error: `There's no pack photo for ${product.name} yet, so the AI would have to invent one. Add your real pack photo in Tools → Settings → Products (it's placed into images unchanged), or choose “No pack in this image”.`, code: "no-pack-photo" },
         { status: 400 },
       );
     }
-    const packMode = input.packMode;
+    // A designed ad always has the real pack in it, drawn by the AI from the pack photos.
+    const designed = input.textMode === "designed";
+    const packMode = designed ? ("ai" as const) : input.packMode;
     const packAssetId =
       input.photoId && product.photoAssetIds.includes(input.photoId)
         ? input.photoId
@@ -108,7 +114,7 @@ export async function POST(req: Request) {
       layout: packMode === "layout" ? adLayout(spec).kind : undefined,
       packPosition: input.packPosition,
       target: { w: spec.w, h: spec.h, label: spec.label, note: spec.note },
-      textMode: input.textMode,
+      textMode: input.textMode === "designed" ? ("ai" as const) : input.textMode,
       style: brand0.imageStyle,
       direction: input.direction,
     };
@@ -161,6 +167,12 @@ export async function POST(req: Request) {
       packAction: packAction || undefined,
       trim,
     };
+    if (input.preview && designed) {
+      return Response.json({
+        direction: sceneDesc,
+        rules: "When the image is made, the hook and the product's approved claims are turned into a headline, a sub-line and 2–4 callouts (or a comparison table); every word is checked against your compliance terms first, drawn by the AI in your brand colours with your real pack as the hero, then read back and made again if any word is wrong, missing or added.",
+      });
+    }
     if (input.preview && (packMode === "scene" || packMode === "ai")) {
       const full = buildListingScenePrompt(packMode === "ai" ? aiArgs : { ...sceneArgs, inScene: true });
       return Response.json({ direction: sceneDesc, rules: full.split("\n").filter((l) => !l.startsWith("SHOW EXACTLY THIS")).join("\n") });
@@ -169,15 +181,50 @@ export async function POST(req: Request) {
       const parts = buildImagePromptParts({ ...promptInput, packInScene: packMode === "locked" });
       return Response.json({ direction: parts.direction, rules: parts.rules });
     }
-    const prompt = packMode === "ai" ? buildListingScenePrompt(aiArgs) : packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: true }) : buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
+    let design: DesignSpec | null = null;
+    if (designed) {
+      design = await planDesign(
+        { hook: input.concept.hook, angle: input.concept.angle, headline: input.concept.copy.headline, body: input.concept.copy.body, scene: sceneDesc },
+        product,
+        user,
+        input.frameIndex,
+      );
+      design.cta = input.concept.copy.cta || "Shop now";
+      // Every word the AI will draw goes through the compliance terms first.
+      const terms = await getTerms();
+      const red = scan(designWords(design).join("\n"), input.platform, product.slug, terms).hits.filter((h) => h.severity === "red");
+      if (red.length) {
+        return Response.json({ error: `These words can't go on the image: ${red.map((h) => `${h.matches.join(", ")} (${h.label})`).join("; ")}. Edit the ad's words, then try again.` }, { status: 400 });
+      }
+    }
+    const prompt = design
+      ? buildDesignedPrompt(design, {
+          productName: product.name,
+          brandName: "Puŕ Fermé",
+          primary: brand0.kit.colors.primary,
+          accent: brand0.kit.colors.accent,
+          w: spec.w,
+          h: spec.h,
+          forWhat: `${PLATFORM_LABELS[input.platform]}, ${spec.label}`,
+          props: propsFromIngredients(product.ingredients),
+          views: packRefs.length ? packRefs.map((p) => p.view) : undefined,
+          packAction: packAction || undefined,
+          trim,
+          look: brand0.imageStyle.look,
+          people: brand0.imageStyle.people,
+          avoid: brand0.imageStyle.avoid,
+        })
+      : packMode === "ai" ? buildListingScenePrompt(aiArgs) : packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: true }) : buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
     const fallbackPrompt = packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: false }) : buildImagePrompt(promptInput);
-    const tag = packMode === "layout" ? " · brand panel" : packMode === "scene" || packMode === "ai" ? " · scene ad" : "";
+    const tag = designed ? " · designed" : packMode === "layout" ? " · brand panel" : packMode === "scene" || packMode === "ai" ? " · scene ad" : "";
     const withPack = packMode !== "none";
     const packTag = packMode === "ai" ? " · pack from your photo" : withPack ? " · original pack" : "";
     const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${packTag}${tag}`;
     const run = async (onStage?: (text: string) => void) => {
       if (packAction) onStage?.(`How the pack is used: ${packAction}`);
       if (packRefs.length) onStage?.(`Using your pack photos: ${packRefs.map((p) => VIEW_NAMES[p.view].replace(/ \(.*\)$/, "").toLowerCase()).join(" + ")}${viewWhy ? ` (${viewWhy})` : ""}`);
+      if (design) onStage?.(`Setting and feeling: ${design.setting.place}; ${design.setting.mood}`);
+      if (design) onStage?.(`Designing it: “${design.headline}”${design.sub ? ` / “${design.sub}”` : ""}${design.callouts.length ? `, callouts: ${design.callouts.map((c) => c.label).join(", ")}` : ""}${design.table ? `, a comparison table (${design.table.rows.length} rows)` : ""}; words checked against your compliance terms`);
       onStage?.(
         packMode === "scene" || packMode === "ai"
           ? `Writing the scene brief from the ad: ${sceneDesc}`
@@ -187,7 +234,8 @@ export async function POST(req: Request) {
       );
       const image = await generateImage({
         onStage,
-        noWriting: input.textMode !== "ai",
+        noWriting: input.textMode === "overlay",
+        designedWords: design ? designWords(design) : undefined,
         prompt,
         target: { w: spec.w, h: spec.h },
         reference: packMode === "ai" ? (packRefs[0]?.ref ?? reference) : null,
@@ -204,7 +252,7 @@ export async function POST(req: Request) {
             : packMode === "scene" && reference
               ? { data: reference.data, position: A.pack.position, scale: A.pack.scale, bottom: A.pack.bottom, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
               : null,
-        mustShow: packMode === "scene" || packMode === "ai" ? mustShow(sceneDesc) : undefined,
+        mustShow: !designed && (packMode === "scene" || packMode === "ai") ? mustShow(sceneDesc) : undefined,
         layoutPack:
           packMode === "layout" && reference
             ? { data: reference.data, position: input.packPosition, panel: brand0.kit.colors.primary, accent: brand0.kit.colors.accent, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }

@@ -51,7 +51,7 @@ export function ImageMaker({
   const [working, setWorking] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [comparing, setComparing] = useState(false);
-  const [textMode, setTextMode] = useState<"auto" | "overlay" | "ai">("auto");
+  const [textMode, setTextMode] = useState<"designed" | "auto" | "overlay" | "ai">("designed");
   const [packMode, setPackMode] = useState<"ai" | "scene" | "layout" | "locked" | "none">("ai");
   const [packPosition, setPackPosition] = useState<"right" | "center" | "left">("right");
   const [packScale, setPackScale] = useState<"small" | "medium" | "large">("medium");
@@ -93,7 +93,7 @@ export function ImageMaker({
     creativeId: creativeId ?? null,
     packImage: packImage ?? null,
     specId: spec ?? (specId === CUSTOM ? null : specId),
-    textMode: textMode === "ai" ? "ai" : "overlay",
+    textMode: textMode === "ai" || textMode === "designed" ? textMode : "overlay",
     packMode,
     packPosition,
     packScale,
@@ -305,14 +305,15 @@ export function ImageMaker({
       </div>
       <details className="rounded-lg border border-line" data-testid="more-options">
         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">
-          More options <span className="font-normal text-ink-soft">· {packMode === "ai" ? "AI fits your pack into the scene" : packMode === "scene" ? "exact pack pasted into a scene" : packMode === "layout" ? "real pack on a brand panel" : packMode === "locked" ? "real pack inside the scene" : "no pack"} · {textMode === "auto" ? "hook added automatically" : textMode === "overlay" ? "add text yourself" : "AI draws the text"}</span>
+          More options <span className="font-normal text-ink-soft">· {packMode === "ai" ? "AI fits your pack into the scene" : packMode === "scene" ? "exact pack pasted into a scene" : packMode === "layout" ? "real pack on a brand panel" : packMode === "locked" ? "real pack inside the scene" : "no pack"} · {textMode === "designed" ? "designed ad" : textMode === "auto" ? "hook added automatically" : textMode === "overlay" ? "add text yourself" : "AI draws the text"}</span>
         </summary>
         <div className="space-y-2 border-t border-line p-3">
           <div className="flex flex-wrap items-center gap-2">
             <label htmlFor={`text-${concept.title}`} className="sr-only">
               Text on image
             </label>
-            <select id={`text-${concept.title}`} className="input w-auto py-1.5 text-sm" value={textMode} onChange={(e) => setTextMode(e.target.value as "overlay" | "ai")}>
+            <select id={`text-${concept.title}`} className="input w-auto py-1.5 text-sm" value={textMode} onChange={(e) => setTextMode(e.target.value as typeof textMode)}>
+              <option value="designed">Designed: AI lays out headline, callouts and pack (recommended)</option>
               <option value="auto">Text: add the hook and logo automatically</option>
               <option value="overlay">Text: I&apos;ll add it after</option>
               <option value="ai">Text: AI draws it in the image</option>
@@ -320,7 +321,7 @@ export function ImageMaker({
             <label htmlFor={`pack-${concept.title}`} className="sr-only">
               Pack in the image
             </label>
-            <select id={`pack-${concept.title}`} className="input w-auto py-1.5 text-sm" value={packMode} onChange={(e) => setPackMode(e.target.value as typeof packMode)}>
+            <select id={`pack-${concept.title}`} className="input w-auto py-1.5 text-sm" disabled={textMode === "designed"} value={packMode} onChange={(e) => setPackMode(e.target.value as typeof packMode)}>
               <option value="ai">Pack: AI fits your pack into the scene (recommended)</option>
               <option value="scene">Pack: your exact pack pasted into a scene</option>
               <option value="layout">Pack: real pack on a brand panel</option>
@@ -367,7 +368,9 @@ export function ImageMaker({
               </>
             ) : null}
           </div>
-          {packMode === "ai" ? (
+          {textMode === "designed" ? (
+            <p className="hint">A finished ad like your examples: a big headline with hand-drawn accents, a sub-line, 2–4 callouts with icons (or a comparison table) taken only from the product&apos;s approved claims, and your real pack as the hero (drawn from your pack photos). Every word is checked against your compliance terms first, then read back from the image; it&apos;s made again if a word is misspelled, missing, repeated or added.</p>
+          ) : packMode === "ai" ? (
             <p className="hint">Like a normal AI photo: the AI gets your pack photo and draws it into the moment (held in a hand, on the table at an angle, with the scene&apos;s light and shadows). Each image is then compared with your real pack (name, logo, colours, only one pack) and made again if it differs. Small print can still drift, so check the pack before you use it.</p>
           ) : packMode === "scene" ? (
             <p className="hint">One photographed scene (people and the moment on the left) with your real pack standing at the lower right, pasted in unchanged; the hook goes top left in the brand font with the button under it. Any second pack or drawn screen is checked for and removed.</p>

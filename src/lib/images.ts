@@ -8,6 +8,7 @@ import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
 import { compositePack as composite, layoutAd, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
+import { checkDesignText } from "./designed-ad-server";
 import { checkPackMatch, detectPackBox, findInventedPacks, findMissing, type Box } from "./pack-detect";
 
 /** Composite, turning an unusable pack photo into a message the team can act on. */
@@ -101,6 +102,8 @@ export async function generateImage(opts: {
   layoutPack?: { data: Buffer; position: PackPosition; panel: string; accent: string; assetId?: string | null; liftBackdrop?: boolean } | null;
   /** The AI draws our pack (sent as `reference`) into the scene, adapting it to the moment; checked against the real pack. */
   adaptPack?: { assetId?: string | null } | null;
+  /** A designed image (the AI draws the words too): every word it must draw, read back and checked. */
+  designedWords?: string[];
   /** A photo that our real pack is placed beside later (listing slides): checked for invented packaging like a layout photo. */
   photoOnly?: boolean;
   /** What the photo must visibly show (from the team's description): checked, and the photo made again once if any is missing. */
@@ -214,7 +217,8 @@ export async function generateImage(opts: {
         // An AI-drawn pack can sit near an edge that trimming to the platform size would cut: find it first.
         const [rw, rh] = size.split("x").map(Number);
         const trims = Math.abs(rw / rh - opts.target.w / opts.target.h) > 0.02;
-        const keep = opts.adaptPack && trims ? await detectPackBox(raw, opts.user) : null;
+        // A designed image is centred as the prompt said (moving the cut could clip the headline).
+        const keep = opts.adaptPack && trims && !opts.designedWords ? await detectPackBox(raw, opts.user) : null;
         const fitted = await fitToSize(raw, opts.target.w, opts.target.h, keep);
         if (!opts.lockedPack) return { image: fitted, box: null };
         // Always put our original pack pixels back on top, so the pack is exactly the photo even if the model drifted.
@@ -240,7 +244,25 @@ export async function generateImage(opts: {
             : "AI is making the photo",
       );
       let made = await once(opts.prompt, opts.fallbackPrompt);
-      if (opts.adaptPack && opts.reference) {
+      if (opts.designedWords && opts.reference) {
+        // A designed image: check the pack and every word, and make it again (up to twice) with the fixes.
+        const refs = [opts.reference.data, ...(opts.moreReferences ?? []).map((r) => r.data)];
+        const review = async () => {
+          stage("Reading every word on the image and comparing the pack with your real pack");
+          const [pack, text] = await Promise.all([checkPackMatch(made.image, refs, opts.user, {}), checkDesignText(made.image, opts.designedWords!, opts.user)]);
+          return [...pack, ...text];
+        };
+        let problems = await review();
+        for (let attempt = 0; attempt < 2 && problems.length; attempt++) {
+          stage(`Found: ${problems.join("; ")}. Making it again`);
+          made = await once(
+            `${opts.prompt}\n\nIMPORTANT: a previous attempt got this wrong: ${problems.join("; ")}. Draw every listed word exactly once and spelled exactly, add no other words, and show exactly ONE pack copied exactly from the attached photo.`,
+            undefined,
+          );
+          problems = await review();
+        }
+        if (problems.length) warning = `Check before using: ${problems.join("; ")}. Make another, or use Edit with words to fix it.`;
+      } else if (opts.adaptPack && opts.reference) {
         // The AI drew our pack itself: compare it with the real pack, and make it again once if it differs.
         stage("Comparing the pack in the image with your real pack (name, logo, colours, one pack only)");
         const check = { checkWriting: opts.noWriting };
