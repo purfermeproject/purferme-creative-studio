@@ -19,6 +19,8 @@ import { detectPackBox } from "@/lib/pack-detect";
 import { savePackCrop } from "@/lib/pack-source";
 import { isCutout } from "@/lib/pack-composite";
 import sharp from "sharp";
+import { PACK_VIEWS, viewFromFilename, viewLabel, type PackView } from "@/lib/pack-views";
+import { classifyPackView } from "@/lib/pack-views-server";
 
 /** Product photos are placed into images unchanged, so they need to be big enough to look sharp. */
 async function photoProblem(file: File): Promise<string | null> {
@@ -391,6 +393,53 @@ export async function uploadProductPhoto(_: ActionState, fd: FormData): Promise<
     return ok("Photo added.");
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Couldn't add the photo.");
+  }
+}
+
+/**
+ * One photo of the pack from some side (several are sent one after another from the browser). The side
+ * comes from the team's choice, else the file name, else the AI looking at it.
+ */
+export async function uploadPackView(_: ActionState, fd: FormData): Promise<ActionState> {
+  try {
+    const { user } = await requireRole("settings");
+    const id = String(fd.get("id") ?? "");
+    const file = fd.get("file");
+    if (!(file instanceof File) || file.size === 0) return fail("Choose a photo first.");
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return fail("Use a PNG, JPG or WebP photo.");
+    if (file.size > 5 * 1024 * 1024) return fail("Photos must be under 5 MB.");
+    const problem = await photoProblem(file);
+    if (problem) return fail(problem);
+    const [product] = await db.select({ ids: schema.products.photoAssetIds }).from(schema.products).where(eq(schema.products.id, id));
+    if (!product) return fail("That product no longer exists.");
+    if (product.ids.length >= 12) return fail("A product can have up to 12 photos. Remove one first.");
+    const data = Buffer.from(await file.arrayBuffer());
+    const chosen = String(fd.get("view") ?? "auto");
+    const view: PackView = (PACK_VIEWS as readonly string[]).includes(chosen) ? (chosen as PackView) : (viewFromFilename(file.name) ?? (await classifyPackView(data, user)) ?? "front");
+    const asset = await storeAsset({ data, mime: file.type, kind: "product-photo", label: viewLabel(view), user });
+    await db.update(schema.products).set({ photoAssetIds: [...product.ids, asset.id], updatedAt: new Date() }).where(eq(schema.products.id, id));
+    refresh();
+    return ok(`Added: ${view}.`);
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Couldn't add the photo.");
+  }
+}
+
+/** Corrects which side a pack photo shows. */
+export async function setPackView(_: ActionState, fd: FormData): Promise<ActionState> {
+  try {
+    await requireRole("settings");
+    const id = String(fd.get("id") ?? "");
+    const assetId = String(fd.get("assetId") ?? "");
+    const view = String(fd.get("view") ?? "");
+    if (!(PACK_VIEWS as readonly string[]).includes(view)) return fail("Choose a side.");
+    const [product] = await db.select({ ids: schema.products.photoAssetIds }).from(schema.products).where(eq(schema.products.id, id));
+    if (!product?.ids.includes(assetId)) return fail("That photo isn't one of this product's photos.");
+    await db.update(schema.assets).set({ label: viewLabel(view as PackView) }).where(eq(schema.assets.id, assetId));
+    refresh();
+    return ok("Saved.");
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Couldn't save.");
   }
 }
 

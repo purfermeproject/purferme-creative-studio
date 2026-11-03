@@ -68,6 +68,8 @@ export async function generateImage(opts: {
   prompt: string;
   target: { w: number; h: number };
   reference: Reference;
+  /** More photos sent with the reference (the same pack from other sides). */
+  moreReferences?: NonNullable<Reference>[];
   user: string;
   label: string;
   frameIndex?: number | null;
@@ -136,7 +138,9 @@ export async function generateImage(opts: {
         openai.images.edit({
           model: IMAGE_MODEL,
           prompt: opts.prompt,
-          image: [await toFile(ref!.data, `${ref!.name}.${ref!.mime.split("/")[1] ?? "png"}`, { type: ref!.mime })],
+          image: await Promise.all(
+            [ref!, ...(opts.lockedPack ? [] : (opts.moreReferences ?? []))].map((r, i) => toFile(r.data, `${i + 1}-${r.name}.${r.mime.split("/")[1] ?? "png"}`, { type: r.mime })),
+          ),
           // Only the gpt-image-1 family accepts input_fidelity; newer models keep the reference faithfully by default.
           ...(withFidelity ? { input_fidelity: "high" as const } : {}),
           size,
@@ -215,14 +219,14 @@ export async function generateImage(opts: {
         // The AI drew our pack itself: compare it with the real pack, and make it again once if it differs.
         stage("Comparing the pack in the image with your real pack (name, logo, colours, one pack only)");
         const check = { checkWriting: opts.noWriting };
-        let problems = await checkPackMatch(made.image, opts.reference.data, opts.user, check);
+        let problems = await checkPackMatch(made.image, [opts.reference.data, ...(opts.moreReferences ?? []).map((r) => r.data)], opts.user, check);
         if (problems.length) {
           stage(`Found: ${problems.join("; ")}. Making the image again`);
           made = await once(
             `${opts.prompt}\n\nIMPORTANT: a previous attempt got this wrong: ${problems.join("; ")}. Show exactly ONE pack, an exact copy of the attached pack photo (same name, words, logo, colours and shape), fully in the picture and resting on something or held.`,
             undefined,
           );
-          problems = await checkPackMatch(made.image, opts.reference.data, opts.user, check);
+          problems = await checkPackMatch(made.image, [opts.reference.data, ...(opts.moreReferences ?? []).map((r) => r.data)], opts.user, check);
           if (problems.length) warning = `Check the pack closely: ${problems.join("; ")}. Make another, or choose “your exact pack pasted in” under More options.`;
         }
         if (opts.mustShow?.length) {
@@ -231,7 +235,7 @@ export async function generateImage(opts: {
           if (missing.length && !problems.length) {
             stage(`Missing: ${missing.join("; ")}. Making the image again`);
             made = await once(`${opts.prompt}\n\nIMPORTANT: a previous attempt did not clearly show: ${missing.join("; ")}. The image MUST clearly show every one of these.`, undefined);
-            const after = await checkPackMatch(made.image, opts.reference.data, opts.user, check);
+            const after = await checkPackMatch(made.image, [opts.reference.data, ...(opts.moreReferences ?? []).map((r) => r.data)], opts.user, check);
             if (after.length) warning = `Check the pack closely: ${after.join("; ")}. Make another, or choose “your exact pack pasted in” under More options.`;
           } else if (missing.length) {
             warning = `${warning} It may also not clearly show: ${missing.join("; ")}.`.trim();

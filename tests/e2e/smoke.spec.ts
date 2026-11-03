@@ -990,6 +990,39 @@ test("Listing images: import the team's slide table (paste or Word file) and use
   await expect(page.getByLabel("Slide 1 header")).toHaveValue("Spread It Anywhere");
 });
 
+test("Pack from every side: several photos upload at once, each gets its side, and images use the sides that suit the scene", async ({ page }) => {
+  const sharp = (await import("sharp")).default;
+  const side = (r: number, g: number, b: number) => sharp({ create: { width: 400, height: 560, channels: 3, background: { r, g, b } } }).jpeg().toBuffer();
+  await signIn(page);
+  await page.goto("/admin");
+  const card = page.getByTestId("product-bfast");
+  await card.locator("summary").click();
+  const views = card.getByTestId("pack-views-bfast");
+  await views.getByLabel(/Pack photos from every side/).setInputFiles([
+    { name: "box-front.jpg", mimeType: "image/jpeg", buffer: await side(90, 40, 120) },
+    { name: "box-back.jpg", mimeType: "image/jpeg", buffer: await side(240, 230, 210) },
+    { name: "box-3-4.jpg", mimeType: "image/jpeg", buffer: await side(120, 60, 140) },
+  ]);
+  await views.getByRole("button", { name: "Upload 3 photos" }).click();
+  await expect(views.getByTestId("pack-views-log").locator("li")).toHaveCount(3, { timeout: 30_000 });
+  await expect(views.getByTestId("pack-views-log")).toContainText("box-back.jpg: Added: back.");
+  await expect(views.getByTestId("pack-view")).toHaveCount(3);
+  await expect(views.getByLabel("Side shown").nth(2)).toHaveValue("angle");
+  // The side can be corrected.
+  await views.getByTestId("pack-view").nth(0).getByLabel("Side shown").selectOption("top");
+  await views.getByTestId("pack-view").nth(0).getByRole("button", { name: "Save side" }).click();
+  await expect(views.getByTestId("pack-view").nth(0).getByText("Saved.")).toBeVisible();
+  await views.getByTestId("pack-view").nth(0).getByLabel("Side shown").selectOption("front");
+  await views.getByTestId("pack-view").nth(0).getByRole("button", { name: "Save side" }).click();
+
+  const ws = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
+  await makeImage(ws);
+  await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(1, { timeout: 60_000 });
+  const trail = ws.getByTestId("image-trail").first();
+  await trail.locator("summary").click();
+  await expect(trail).toContainText("Using your pack photos: front");
+});
+
 test("Phone-size photos (several MB) upload as product and pack photos", async ({ page }) => {
   const sharp = (await import("sharp")).default;
   // Like a phone photo: 4000×3000, several MB (gradients plus fine grain, as a camera produces).

@@ -204,6 +204,8 @@ export function buildListingScenePrompt(opts: {
   aiPack?: boolean;
   /** With aiPack: what the attached photo shows when it's one of the product's other photos (not the pack). */
   photoShows?: string;
+  /** With aiPack: the attached photos are our one pack from these sides, in this order (the first is the side to show). */
+  views?: string[];
 }): string {
   const style = opts.style ?? DEFAULT_IMAGE_STYLE;
   const side = opts.layout === "ad" ? "lower right" : "lower left";
@@ -212,7 +214,9 @@ export function buildListingScenePrompt(opts: {
       `Professional advertising photograph for an Indian food brand${opts.forAd ? ` (${opts.forAd})` : ""}: one real, warm, inviting photographed scene.`,
       opts.photoShows
         ? `The attached photo is our real product (${opts.productName}): ${opts.photoShows}. Put it into the scene naturally, exactly as it looks in the photo, as the hero of the picture, with the scene's own light, shadows and perspective, clearly visible and in sharp focus.`
-        : `The attached photo is our real product pack (${opts.productName}). Put exactly ONE of it into the scene, naturally, as the hero of the picture: held in a hand, standing on the table at a slight angle, or being opened, whichever fits the moment. It takes the scene's own light, shadows and reflections and the camera's perspective, at a believable real-world size next to hands, cups and plates, clearly visible, in sharp focus and never cut off by the edge of the picture.`,
+        : opts.views && opts.views.length > 1
+          ? `The ${opts.views.length} attached photos all show our ONE real product pack (${opts.productName}) from different sides: ${opts.views.map((v, i) => `photo ${i + 1} = ${v}`).join(", ")}. Use them together to understand its true 3D shape and every printed side, then put exactly ONE pack into the scene, showing mostly ${({ angle: "its front and one side (a 3/4 view)", open: "it opened, with the product showing" } as Record<string, string>)[opts.views[0]] ?? `its ${opts.views[0]}`}, naturally, as the hero of the picture: held in a hand, standing on the table, or being opened, whichever fits the moment. It takes the scene's own light, shadows and reflections and the camera's perspective, at a believable real-world size next to hands, cups and plates, clearly visible, in sharp focus and never cut off by the edge of the picture.`
+          : `The attached photo is our real product pack (${opts.productName}). Put exactly ONE of it into the scene, naturally, as the hero of the picture: held in a hand, standing on the table at a slight angle, or being opened, whichever fits the moment. It takes the scene's own light, shadows and reflections and the camera's perspective, at a believable real-world size next to hands, cups and plates, clearly visible, in sharp focus and never cut off by the edge of the picture.`,
       "Copy the pack's design exactly: the same shape and proportions, the same colours, the same logo, brand name and illustrations, and every printed word spelled exactly the same. Do not redesign, simplify, translate, mirror or add anything to it. No other pack, jar, box, pouch, packet or label anywhere in the picture.",
       `SHOW EXACTLY THIS, every part clearly visible: ${opts.description.trim()}.`,
       opts.props.length ? `Props, placed naturally (small wooden bowls or loose pieces): ${opts.props.join(", ")}.` : "",

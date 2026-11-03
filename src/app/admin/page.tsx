@@ -3,6 +3,8 @@ import { ImageFileInput } from "@/components/ImageFileInput";
 import { ActionForm } from "@/components/ActionForm";
 import { BrandKitEditor } from "./BrandKitEditor";
 import { PackCropper } from "./PackCropper";
+import { PackViewsUploader } from "./PackViewsUploader";
+import { PACK_VIEWS, VIEW_NAMES, viewOf } from "@/lib/pack-views";
 import { getAllPlatformRules, getBrand, getProducts, getTerms } from "@/lib/data";
 import { PLATFORMS, PLATFORM_LABELS, PRODUCT_STATUSES, ROLES } from "@/lib/types";
 import { asc } from "drizzle-orm";
@@ -29,6 +31,7 @@ import {
   saveTerm,
   saveThresholds,
   uploadPackImage,
+  setPackView,
 } from "./actions";
 
 export const metadata = { title: "Settings · Puŕ Fermé Creative Studio" };
@@ -267,12 +270,44 @@ export default async function AdminPage() {
                   </label>
                   <ImageFileInput id={`file-${p.id}`} name="file" accept="image/*" className="text-sm" />
                 </ActionForm>
+                <div className="w-full space-y-3 border-t border-line pt-4" data-testid={`pack-views-${p.slug}`}>
+                  <p className="label">Pack from every side</p>
+                  <p className="hint">Upload the box from the front, back, sides, top, at an angle and open (several at once is fine). Each image then uses the sides that suit its scene: the back when someone reads the ingredients, an angle when it&apos;s in someone&apos;s hand, the top for a flat lay.</p>
+                  {p.photoAssetIds.some((aid) => viewOf(photoInfo.get(aid)?.label)) ? (
+                    <ul className="flex flex-wrap gap-3">
+                      {p.photoAssetIds
+                        .filter((aid) => viewOf(photoInfo.get(aid)?.label))
+                        .map((aid) => (
+                          <li key={aid} className="w-32 space-y-1 text-xs" data-testid="pack-view">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={`/api/assets/${aid}`} alt={photoInfo.get(aid)?.label} className="h-28 w-28 rounded-lg border border-line bg-surface-2 object-contain" />
+                            <ActionForm action={setPackView} submitLabel="Save side" submitClassName="text-xs font-semibold text-purple underline" className="space-y-1">
+                              <input type="hidden" name="id" value={p.id} />
+                              <input type="hidden" name="assetId" value={aid} />
+                              <select name="view" className="input px-1 py-1 text-xs" defaultValue={viewOf(photoInfo.get(aid)?.label) ?? "front"} aria-label="Side shown">
+                                {PACK_VIEWS.map((v) => (
+                                  <option key={v} value={v}>
+                                    {VIEW_NAMES[v]}
+                                  </option>
+                                ))}
+                              </select>
+                            </ActionForm>
+                            <ActionForm action={removeProductPhoto} submitLabel="Remove" submitClassName="text-xs font-semibold text-red underline">
+                              <input type="hidden" name="id" value={p.id} />
+                              <input type="hidden" name="assetId" value={aid} />
+                            </ActionForm>
+                          </li>
+                        ))}
+                    </ul>
+                  ) : null}
+                  <PackViewsUploader productId={p.id} productName={p.name} />
+                </div>
                 <div className="w-full space-y-3 border-t border-line pt-4" data-testid={`photos-${p.slug}`}>
                   <p className="label">More product photos</p>
                   <p className="hint">Back of pack, product out of the pack, jar open, and real lifestyle shots (a tiffin, a desk with chai, a family kitchen). Images can place any of these unchanged, and Listing images can use a lifestyle shot as a slide&apos;s photo instead of AI.</p>
-                  {p.photoAssetIds.length ? (
+                  {p.photoAssetIds.some((aid) => !viewOf(photoInfo.get(aid)?.label)) ? (
                     <ul className="flex flex-wrap gap-3">
-                      {p.photoAssetIds.map((aid) => (
+                      {p.photoAssetIds.filter((aid) => !viewOf(photoInfo.get(aid)?.label)).map((aid) => (
                         <li key={aid} className="w-28 space-y-1 text-xs">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={`/api/assets/${aid}`} alt={photoInfo.get(aid)?.label || "Product photo"} className="h-28 w-28 rounded-lg border border-line bg-surface-2 object-contain" />

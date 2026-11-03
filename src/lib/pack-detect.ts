@@ -140,14 +140,21 @@ const PackMatchSchema = z.object({
  * difference (a second pack, a misspelled name, a changed logo, a floating or cut-off pack).
  * Empty in mock mode, without a key, or on error, so a failed check never blocks an image.
  */
-export async function checkPackMatch(image: Buffer, pack: Buffer, user: string, opts: { checkWriting?: boolean } = {}): Promise<string[]> {
+export async function checkPackMatch(image: Buffer, packs: Buffer[], user: string, opts: { checkWriting?: boolean } = {}): Promise<string[]> {
   if (isMock() || (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY)) return [];
   try {
     const H = 1024;
     const ad = await sharp(image).resize({ height: H }).jpeg({ quality: 88 }).toBuffer();
     const adW = (await sharp(ad).metadata()).width ?? H;
-    const ref = await sharp(pack).rotate().flatten({ background: "#ffffff" }).resize(Math.round(H * 0.6), H, { fit: "contain", background: "#ffffff" }).png().toBuffer();
+    // Our pack on the left: one photo, or up to three sides stacked.
     const refW = Math.round(H * 0.6);
+    const shown = packs.slice(0, 3);
+    const cellH = Math.floor(H / shown.length);
+    const cells = await Promise.all(shown.map((p) => sharp(p).rotate().flatten({ background: "#ffffff" }).resize(refW, cellH, { fit: "contain", background: "#ffffff" }).png().toBuffer()));
+    const ref = await sharp({ create: { width: refW, height: H, channels: 3, background: "#ffffff" } })
+      .composite(cells.map((c, i) => ({ input: c, left: 0, top: i * cellH })))
+      .png()
+      .toBuffer();
     const gap = 24;
     const pair = await sharp({ create: { width: refW + gap + adW, height: H, channels: 3, background: "#ffffff" } })
       .composite([
@@ -158,9 +165,9 @@ export async function checkPackMatch(image: Buffer, pack: Buffer, user: string, 
       .toBuffer();
     const r = await structuredCall({
       schema: PackMatchSchema,
-      prompt: `On the LEFT is our real product pack. On the RIGHT is an advertising photo in which an AI drew that pack into a scene.
+      prompt: `On the LEFT is our real product pack${shown.length > 1 ? ` (${shown.length} photos of the same one pack from different sides)` : ""}. On the RIGHT is an advertising photo in which an AI drew that pack into a scene.
 1. Count how many packs, boxes, jars, pouches or packets are in the ad on the right (copies of ours or any other). There should be exactly 1.
-2. Compare the pack in the ad with our real pack, closely: brand name and every printed word (spelling), logo, colours, illustrations, shape and proportions. Angle, light, shadow and a hand holding it are fine and expected. List every real difference, and also say if the pack is cut off by the edge, too small or blurred to read, or floats unnaturally instead of resting on something or being held.
+2. Compare the pack in the ad with our real pack, closely (whichever side of it the ad shows): brand name and every printed word (spelling), logo, colours, illustrations, shape and proportions. Angle, light, shadow and a hand holding it are fine and expected. List every real difference, and also say if the pack is cut off by the edge, too small or blurred to read, or floats unnaturally instead of resting on something or being held.
 3. List any written words or numbers in the ad that are not printed on the pack.`,
       image: { mediaType: "image/jpeg", base64: pair.toString("base64") },
       maxTokens: 1500,

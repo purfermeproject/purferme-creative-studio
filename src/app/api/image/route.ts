@@ -12,6 +12,9 @@ import { adLayout, PACK_POSITIONS, PACK_SCALES } from "@/lib/pack-composite";
 import { adScene } from "@/lib/ad-layout";
 import { mustShow, propsFromIngredients, sceneSpec } from "@/lib/scene-spec";
 import { PLATFORM_LABELS, PLATFORMS } from "@/lib/types";
+import { inArray } from "drizzle-orm";
+import { viewOf, VIEW_NAMES, type PackView } from "@/lib/pack-views";
+import { choosePackViews } from "@/lib/pack-views-server";
 
 export const maxDuration = 300;
 
@@ -123,7 +126,33 @@ export async function POST(req: Request) {
       forAd: `${PLATFORM_LABELS[input.platform]}, ${spec.label}`,
     };
     const extraPhoto = Boolean(input.photoId && product.photoAssetIds.includes(input.photoId));
-    const aiArgs = { ...sceneArgs, inScene: true, aiPack: true, photoShows: extraPhoto ? reference?.label || "a photo of the product" : undefined };
+    // Photos of the pack from every side: the sides that suit this scene are sent, best first.
+    let packRefs: { view: PackView; ref: NonNullable<Reference>; assetId: string | null }[] = [];
+    let viewWhy = "";
+    if (packMode === "ai" && reference && !extraPhoto && product.photoAssetIds.length) {
+      const rows = await db
+        .select({ id: schema.assets.id, label: schema.assets.label, mime: schema.assets.mime, data: schema.assets.dataBase64 })
+        .from(schema.assets)
+        .where(inArray(schema.assets.id, product.photoAssetIds));
+      const byView = new Map<PackView, { ref: NonNullable<Reference>; assetId: string | null }>();
+      for (const r of rows) {
+        const v = viewOf(r.label);
+        if (v && !byView.has(v)) byView.set(v, { ref: { data: Buffer.from(r.data, "base64"), mime: r.mime, name: v.replace(/\W+/g, "-"), label: r.label }, assetId: r.id });
+      }
+      if (byView.size) {
+        if (!byView.has("front")) byView.set("front", { ref: reference, assetId: packAssetId });
+        const pick = await choosePackViews(sceneDesc, [...byView.keys()], user);
+        packRefs = pick.views.map((v) => ({ view: v, ...byView.get(v)! }));
+        viewWhy = pick.why;
+      }
+    }
+    const aiArgs = {
+      ...sceneArgs,
+      inScene: true,
+      aiPack: true,
+      photoShows: extraPhoto ? reference?.label || "a photo of the product" : undefined,
+      views: packRefs.length ? packRefs.map((p) => p.view) : undefined,
+    };
     if (input.preview && (packMode === "scene" || packMode === "ai")) {
       const full = buildListingScenePrompt(packMode === "ai" ? aiArgs : { ...sceneArgs, inScene: true });
       return Response.json({ direction: sceneDesc, rules: full.split("\n").filter((l) => !l.startsWith("SHOW EXACTLY THIS")).join("\n") });
@@ -139,6 +168,7 @@ export async function POST(req: Request) {
     const packTag = packMode === "ai" ? " · pack from your photo" : withPack ? " · original pack" : "";
     const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${packTag}${tag}`;
     const run = async (onStage?: (text: string) => void) => {
+      if (packRefs.length) onStage?.(`Using your pack photos: ${packRefs.map((p) => VIEW_NAMES[p.view].replace(/ \(.*\)$/, "").toLowerCase()).join(" + ")}${viewWhy ? ` (${viewWhy})` : ""}`);
       onStage?.(
         packMode === "scene" || packMode === "ai"
           ? `Writing the scene brief from the ad: ${sceneDesc}`
@@ -151,7 +181,8 @@ export async function POST(req: Request) {
         noWriting: input.textMode !== "ai",
         prompt,
         target: { w: spec.w, h: spec.h },
-        reference: packMode === "ai" ? reference : null,
+        reference: packMode === "ai" ? (packRefs[0]?.ref ?? reference) : null,
+        moreReferences: packRefs.slice(1).map((p) => p.ref),
         // Compared with the real pack only when the pack itself was sent (an extra photo, e.g. loose cookies, isn't a pack).
         adaptPack: packMode === "ai" && reference && !extraPhoto ? { assetId: packAssetId } : null,
         fallbackPrompt: packMode === "ai" ? undefined : fallbackPrompt,
