@@ -227,7 +227,7 @@ export function buildListingScenePrompt(opts: {
       "Copy the pack's design exactly: the same shape and proportions, the same colours, the same logo, brand name and illustrations, and every printed word spelled exactly the same. Do not redesign, simplify, translate, mirror or add anything to it. No other pack, jar, box, pouch, packet or label anywhere in the picture.",
       `SHOW EXACTLY THIS, every part clearly visible: ${opts.description.trim()}.`,
       opts.props.length ? `Props, placed naturally (small wooden bowls or loose pieces): ${opts.props.join(", ")}.` : "",
-      "Composition: the people, the moment and our pack fill the frame naturally, with the pack in the right half or the centre; keep the top left calm and softly out of focus for a headline.",
+      "Composition: the people, the moment and our pack fill the frame naturally, with the pack in the right half or the centre; keep the top quarter of the picture calm and simple (a headline goes there) and the bottom-left corner clear of the pack, faces and hands (a button goes there).",
       opts.trim && opts.trim.sides > 0.02
         ? `Framing: about ${Math.round(opts.trim.sides * 100)}% of the picture will be cut off at BOTH the left and right edges, so keep the pack, the faces and the hands well inside the middle ${Math.round((1 - 2 * opts.trim.sides) * 100 - 6)}% of the width; nothing important near the sides.`
         : opts.trim && opts.trim.topBottom > 0.02
@@ -239,7 +239,7 @@ export function buildListingScenePrompt(opts: {
       `People: ${style.people}`,
       `Colour and mood: ${style.mood}`,
       `Avoid: ${style.avoid}`,
-      "RULES: apart from what is printed on our pack, no written words, numbers, icons, badges, graphics or logos anywhere (they are added afterwards); any phone, laptop or TV screen is dark or softly blurred with nothing readable on it (no apps, charts, icons or QR codes); no doctors or experts; nothing that isn't described.",
+      "RULES: apart from what is printed on our pack, no written words, numbers, icons, badges, graphics or logos anywhere (they are added afterwards); no phone, tablet or laptop in the picture unless the scene names one, and then its screen is switched off and black (never an app, chart, icon, QR code or anything readable on it); no doctors or experts; nothing that isn't described.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -254,7 +254,7 @@ export function buildListingScenePrompt(opts: {
     `SHOW EXACTLY THIS, every part clearly visible: ${withoutPack(opts.description, opts.productName, "the product")}.`,
     opts.props.length ? `Props on the table, placed naturally around the pack (small wooden bowls or loose pieces): ${opts.props.join(", ")}.` : "",
     opts.layout === "ad"
-      ? "Composition: people and the action at the left and in the middle, facing or leaning towards the pack; keep the top left calm and softly out of focus for a headline."
+      ? "Composition: people and the action at the left and in the middle, facing or leaning towards the pack; keep the top quarter calm and simple for a headline and the bottom-left corner clear for a button."
       : opts.layout === "card"
         ? "Composition: keep the top left (above the pack) calm and softly out of focus for a headline, and keep the right third behind the action soft and uncluttered for a feature list."
         : "Composition: people and the action on the right half; keep the top left calm and softly out of focus for a headline, and the bottom strip of the table plain for a feature bar.",
@@ -264,7 +264,7 @@ export function buildListingScenePrompt(opts: {
     `People: ${style.people}`,
     `Colour and mood: ${style.mood}`,
     `Avoid: ${style.avoid}`,
-    "RULES: no written words, numbers, icons, badges, graphics or logos anywhere (they are added afterwards); any phone, laptop or TV screen is dark or softly blurred with nothing readable on it (no apps, charts, icons or QR codes); no doctors or experts; nothing that isn't described.",
+    "RULES: no written words, numbers, icons, badges, graphics or logos anywhere (they are added afterwards); no phone, tablet or laptop in the picture unless the scene names one, and then its screen is switched off and black (never an app, chart, icon, QR code or anything readable on it); no doctors or experts; nothing that isn't described.",
   ]
     .filter(Boolean)
     .join("\n");

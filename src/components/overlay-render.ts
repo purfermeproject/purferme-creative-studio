@@ -1,4 +1,4 @@
-import { adLayout, adScene } from "@/lib/ad-layout";
+import { adLayout } from "@/lib/ad-layout";
 import type { BrandKit } from "@/lib/brand-kit";
 
 export type OverlayLayout = "band" | "top" | "centre" | "clean" | "none" | "scene";
@@ -271,8 +271,8 @@ export function headline(
     // A soft dark shade from the top edge, fading out below the words: keeps white words readable, faces stay clear.
     const bottom = o.top + glowH + size * 2.2;
     const shade = ctx.createLinearGradient(0, 0, 0, bottom);
-    shade.addColorStop(0, "rgba(18,10,6,0.55)");
-    shade.addColorStop(0.55, "rgba(18,10,6,0.32)");
+    shade.addColorStop(0, "rgba(18,10,6,0.62)");
+    shade.addColorStop(0.6, "rgba(18,10,6,0.38)");
     shade.addColorStop(1, "rgba(18,10,6,0)");
     ctx.fillStyle = shade;
     ctx.fillRect(0, 0, ctx.canvas.width, bottom);
@@ -369,58 +369,94 @@ export function headline(
   return uy + size * 0.12;
 }
 
+/** Where the words of a scene ad go: logo and hook at the top, the button at the bottom left (above Meta's caption area on Reels/Stories). */
+export function sceneTextLayout(W: number, H: number) {
+  const tall = H / W >= 1.7;
+  const short = Math.min(W, H);
+  const left = Math.round(W * 0.07);
+  const top = Math.round(H * (tall ? 0.15 : 0.055));
+  const cSize = Math.round(short * (tall ? 0.044 : 0.04));
+  const ctaH = Math.round(cSize * 2.5);
+  return {
+    left,
+    top,
+    width: Math.round(W * 0.82),
+    hookSize: Math.round(short * (tall ? 0.084 : 0.072)),
+    /** The hook block ends here at the latest. */
+    hookBottom: Math.round(top + H * (tall ? 0.2 : 0.26)),
+    logoW: Math.round(W * (tall ? 0.22 : 0.18)),
+    cSize,
+    ctaH,
+    ctaTop: Math.round(H * (tall ? 0.79 : 0.945) - ctaH),
+  };
+}
+
 /**
- * Words for an ad made as one scene (the real pack at the lower right): the hook top left in the brand's
- * serif with the sub-line and a hand-drawn underline, then the button, then the logo top right.
+ * Words for an ad made as one scene: logo top left, the hook under it in the brand's serif (white on a soft
+ * shade over busy photos, dark ink on calm light ones), and a clear button at the bottom left.
  */
 function drawSceneText(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | null, kit: BrandKit, o: OverlayOptions, W: number, H: number) {
-  const A = adScene(W, H);
+  const L = sceneTextLayout(W, H);
   const serif = `"${kit.bodyFont.name}", Georgia, serif`;
   const sans = `"${kit.headingFont.name}", sans-serif`;
-  const cSize = Math.round(Math.min(W, H) * 0.036 * o.textScale);
-  const ctaH = o.showCta && o.cta.trim() ? cSize * 2.3 : 0;
-  let y = A.header.top;
   const choice = o.textColour ?? "auto";
-  const tone = choice === "auto" ? pickTone(ctx, { left: A.header.left, top: A.header.top, width: A.header.width, height: Math.max(1, A.maxBottom - A.header.top) }) : choice;
+  const tone = choice === "auto" ? pickTone(ctx, { left: L.left, top: L.top, width: L.width, height: Math.max(1, L.hookBottom - L.top) }) : choice;
+  let top = L.top;
+  if (logo && o.logoCorner !== "none" && logo.naturalWidth) {
+    const lh = Math.round((logo.naturalHeight / logo.naturalWidth) * L.logoW);
+    ctx.save();
+    if (tone === "white") {
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = L.logoW * 0.06;
+    }
+    ctx.drawImage(logo, L.left, top, L.logoW, lh);
+    ctx.restore();
+    top += lh + Math.round(H * 0.02);
+  }
   if (o.headline.trim() || o.sub.trim()) {
-    y = headline(ctx, {
+    headline(ctx, {
       header: o.headline,
       sub: o.sub,
-      left: A.header.left,
-      top: A.header.top,
-      width: A.header.width,
-      size: Math.round(A.headerSize * o.textScale),
+      left: L.left,
+      top,
+      width: L.width,
+      size: Math.round(L.hookSize * o.textScale),
       colour: tone === "white" ? "#ffffff" : tone === "brand" ? kit.colors.primary : INK,
       serif,
       sans,
-      maxBottom: A.maxBottom - (ctaH ? ctaH + cSize : 0),
-      below: ctaH ? ctaH + cSize * 0.6 : 0,
+      maxBottom: L.hookBottom,
       tone: tone === "white" ? "white" : "cream",
       plain: true,
     });
   }
-  if (ctaH) {
+  const cta = o.cta.trim();
+  if (o.showCta && cta) {
+    const cSize = Math.round(L.cSize * Math.min(1.2, o.textScale));
+    const ctaH = Math.round(cSize * 2.5);
+    const label = `${cta}  →`;
     ctx.font = `700 ${cSize}px ${sans}`;
-    const w = ctx.measureText(o.cta.trim()).width + cSize * 1.8;
-    const top = Math.min(y + cSize * 0.6, A.maxBottom - ctaH);
+    const w = Math.max(ctx.measureText(label).width + cSize * 2.4, W * 0.36);
+    const y = L.ctaTop + (L.ctaH - ctaH);
     ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.18)";
-    ctx.shadowBlur = cSize * 0.5;
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = cSize * 0.8;
+    ctx.shadowOffsetY = cSize * 0.12;
     ctx.fillStyle = kit.colors.accent;
     ctx.beginPath();
-    ctx.roundRect(A.header.left, top, w, ctaH, ctaH / 2);
+    ctx.roundRect(L.left, y, w, ctaH, ctaH / 2);
     ctx.fill();
     ctx.restore();
+    // A thin white edge keeps the button visible on photos the same colour as it.
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = Math.max(2, cSize * 0.08);
+    ctx.beginPath();
+    ctx.roundRect(L.left, y, w, ctaH, ctaH / 2);
+    ctx.stroke();
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(o.cta.trim(), A.header.left + w / 2, top + ctaH / 2);
+    ctx.fillText(label, L.left + w / 2, y + ctaH / 2 + cSize * 0.04);
     ctx.textAlign = "left";
-  }
-  if (logo && o.logoCorner !== "none" && logo.naturalWidth) {
-    const safe = safeArea(W, H);
-    const lw = Math.round(W * 0.16);
-    const lh = Math.round((logo.naturalHeight / logo.naturalWidth) * lw);
-    ctx.drawImage(logo, W - lw - W * 0.05, safe.y + H * 0.01, lw, lh);
+    ctx.textBaseline = "top";
   }
 }

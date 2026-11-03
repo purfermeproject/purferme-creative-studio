@@ -38,7 +38,8 @@ describe("AI-fitted pack prompt", () => {
   });
   it("keeps the scene as written and room for the headline", () => {
     expect(p).toContain("SHOW EXACTLY THIS, every part clearly visible: a girl dipping a Breakfast Cookies cookie in chai.");
-    expect(p).toMatch(/top left calm/);
+    expect(p).toMatch(/top quarter of the picture calm/);
+    expect(p).toMatch(/bottom-left corner clear/);
     expect(p).toMatch(/apart from what is printed on our pack/);
   });
 });

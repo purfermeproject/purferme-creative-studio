@@ -365,7 +365,7 @@ export function Workspace({
         kit,
         options: defaultOverlay(
           kit,
-          { headline: onscreen || concept.hook, sub: concept.copy.headline && concept.copy.headline !== (onscreen || concept.hook) ? concept.copy.headline : "", cta: concept.copy.cta || "Shop now" },
+          { headline: concept.hook || onscreen || "", sub: concept.copy.headline && concept.copy.headline !== (concept.hook || onscreen) ? concept.copy.headline : "", cta: concept.copy.cta || "Shop now" },
           packLayoutOf(image.label),
         ),
         label: image.label ?? "Image",

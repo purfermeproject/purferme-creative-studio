@@ -189,9 +189,11 @@ export function ImageMaker({
   /** The words for a scene's image: its on-screen line (the hook on scene 1), headline as the sub-line, and the CTA. */
   function textDefaults(frameIndex: number) {
     const onscreen = concept.frames[frameIndex]?.onscreen;
+    // The first image carries the ad's hook (a frame's on-screen line can be a video direction like "flip it").
+    const headline = (frameIndex === 0 ? concept.hook : "") || onscreen || concept.copy.headline || concept.hook;
     return {
-      headline: onscreen || (frameIndex === 0 ? concept.hook : "") || concept.copy.headline || concept.hook,
-      sub: concept.copy.headline && concept.copy.headline !== onscreen ? concept.copy.headline : "",
+      headline,
+      sub: concept.copy.headline && concept.copy.headline !== headline ? concept.copy.headline : "",
       cta: concept.copy.cta || "Shop now",
     };
   }
