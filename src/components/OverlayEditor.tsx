@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { BrandKit } from "@/lib/brand-kit";
 import { loadBrandFont, uploadAsset } from "./fonts";
-import { drawOverlay, type LogoCorner, type OverlayLayout, type OverlayOptions } from "./overlay-render";
+import { drawOverlay, type LogoCorner, type OverlayLayout, type OverlayOptions, type TextColour } from "./overlay-render";
 
 const LAYOUTS: { id: OverlayLayout; label: string }[] = [
   { id: "scene", label: "Styled header (scene ads)" },
@@ -197,6 +197,19 @@ export function OverlayEditor({
                 ))}
               </select>
             </div>
+            {o.layout === "scene" ? (
+              <div>
+                <label className="label" htmlFor="ov-colour">
+                  Text colour
+                </label>
+                <select id="ov-colour" className="input" value={o.textColour ?? "auto"} onChange={(e) => set("textColour", e.target.value as TextColour)}>
+                  <option value="auto">Auto: follows the photo</option>
+                  <option value="white">White (soft shade behind)</option>
+                  <option value="dark">Dark</option>
+                  <option value="brand">Brand colour</option>
+                </select>
+              </div>
+            ) : null}
             <div>
               <label className="label" htmlFor="ov-headline">
                 Headline

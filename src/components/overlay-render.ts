@@ -15,7 +15,32 @@ export type OverlayOptions = {
   bandOpacity: number; // 0–1
   /** Designed layout (photo + brand panel with the pack): the button sits on the panel, beside the pack. */
   ctaOnPanel?: boolean;
+  /** Scene ads: auto picks white or dark from the photo behind the words; brand = the brand's main colour. */
+  textColour?: TextColour;
 };
+
+export type TextColour = "auto" | "white" | "dark" | "brand";
+
+/** White text when the photo behind the words is dark or busy (faces, a room); dark ink only on a calm, light area. */
+export function pickTone(ctx: CanvasRenderingContext2D, r: { left: number; top: number; width: number; height: number }): "white" | "dark" {
+  try {
+    const d = ctx.getImageData(Math.max(0, r.left), Math.max(0, r.top), Math.max(1, r.width), Math.max(1, r.height)).data;
+    let n = 0;
+    let sum = 0;
+    let sq = 0;
+    for (let i = 0; i < d.length; i += 4 * 7) {
+      const l = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+      sum += l;
+      sq += l * l;
+      n++;
+    }
+    const mean = sum / n;
+    const sd = Math.sqrt(Math.max(0, sq / n - mean * mean));
+    return mean > 0.7 && sd < 0.16 ? "dark" : "white";
+  } catch {
+    return "white";
+  }
+}
 
 /** Areas platforms cover with their own UI (fractions of height). Reels/Stories hide top 14% and bottom 20%. */
 export function safeArea(w: number, h: number) {
@@ -217,7 +242,9 @@ export function fit(ctx: CanvasRenderingContext2D, text: string, maxW: number, m
 /** Header (serif, brand colour), sub-header, a hand-drawn underline and three little "spark" strokes. */
 export function headline(
   ctx: CanvasRenderingContext2D,
-  o: { header: string; sub: string; left: number; top: number; width: number; size: number; colour: string; serif: string; sans: string; centred?: boolean; maxBottom: number; /** Extra height under the words (e.g. a button) the glow also covers. */ below?: number },
+  o: { header: string; sub: string; left: number; top: number; width: number; size: number; colour: string; serif: string; sans: string; centred?: boolean; maxBottom: number; /** Extra height under the words (e.g. a button) the glow also covers. */ below?: number;
+    /** white = white words on a soft dark shade from the top (no haze over faces); default = a cream glow. */ tone?: "white" | "cream";
+    /** Leave out the sparks and the hand-drawn underline (cleaner, for ads). */ plain?: boolean },
 ): number {
   ctx.textBaseline = "top";
   // Shrink header and sub-header together until the block (with its underline) ends above maxBottom.
@@ -238,9 +265,21 @@ export function headline(
     size = Math.floor(size * 0.94);
   }
 
+  const glowH = blockH + (o.below ?? 0);
+  const white = o.tone === "white";
+  if (white) {
+    // A soft dark shade from the top edge, fading out below the words: keeps white words readable, faces stay clear.
+    const bottom = o.top + glowH + size * 2.2;
+    const shade = ctx.createLinearGradient(0, 0, 0, bottom);
+    shade.addColorStop(0, "rgba(18,10,6,0.55)");
+    shade.addColorStop(0.55, "rgba(18,10,6,0.32)");
+    shade.addColorStop(1, "rgba(18,10,6,0)");
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, 0, ctx.canvas.width, bottom);
+  }
   // A soft cream glow behind the words keeps them readable on any photo.
   // An ellipse fading to nothing on every side, so it never shows an edge.
-  const glowH = blockH + (o.below ?? 0);
+  if (!white) {
   const rx = o.width * 0.8;
   const ry = glowH / 2 + size * 1.3;
   ctx.save();
@@ -253,16 +292,43 @@ export function headline(
   ctx.fillStyle = glow;
   ctx.fillRect(-rx, -rx, rx * 2, rx * 2);
   ctx.restore();
+  }
 
   const x = o.centred ? o.left + o.width / 2 : o.left;
   ctx.textAlign = o.centred ? "center" : "left";
   let y = o.top;
+  ctx.save();
+  if (white) {
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = size * 0.25;
+    ctx.shadowOffsetY = size * 0.04;
+  }
   ctx.fillStyle = o.colour;
   ctx.font = `800 ${size}px ${o.serif}`;
   const firstW = ctx.measureText(hLines[0] ?? "").width;
   for (const l of hLines) {
     ctx.fillText(l, x, y);
     y += size * 1.02;
+  }
+  ctx.restore();
+  if (o.plain) {
+    if (sLines.length) {
+      y += subSize * 0.5;
+      ctx.save();
+      if (white) {
+        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowBlur = subSize * 0.3;
+      }
+      ctx.fillStyle = white ? "rgba(255,255,255,0.92)" : INK;
+      ctx.font = `500 ${subSize}px ${o.sans}`;
+      for (const l of sLines) {
+        ctx.fillText(l, x, y);
+        y += subSize * 1.22;
+      }
+      ctx.restore();
+    }
+    ctx.textAlign = "left";
+    return y + subSize * 0.2;
   }
   // Sparks beside the first line.
   const sx = o.centred ? x + firstW / 2 + size * 0.25 : o.left - size * 0.55;
@@ -314,6 +380,8 @@ function drawSceneText(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | n
   const cSize = Math.round(Math.min(W, H) * 0.036 * o.textScale);
   const ctaH = o.showCta && o.cta.trim() ? cSize * 2.3 : 0;
   let y = A.header.top;
+  const choice = o.textColour ?? "auto";
+  const tone = choice === "auto" ? pickTone(ctx, { left: A.header.left, top: A.header.top, width: A.header.width, height: Math.max(1, A.maxBottom - A.header.top) }) : choice;
   if (o.headline.trim() || o.sub.trim()) {
     y = headline(ctx, {
       header: o.headline,
@@ -322,11 +390,13 @@ function drawSceneText(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | n
       top: A.header.top,
       width: A.header.width,
       size: Math.round(A.headerSize * o.textScale),
-      colour: kit.colors.primary,
+      colour: tone === "white" ? "#ffffff" : tone === "brand" ? kit.colors.primary : INK,
       serif,
       sans,
       maxBottom: A.maxBottom - (ctaH ? ctaH + cSize : 0),
       below: ctaH ? ctaH + cSize * 0.6 : 0,
+      tone: tone === "white" ? "white" : "cream",
+      plain: true,
     });
   }
   if (ctaH) {

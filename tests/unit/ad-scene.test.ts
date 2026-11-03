@@ -26,3 +26,19 @@ describe("ad scene prompt", () => {
     expect(p).toContain("a mother handing a child a cookie");
   });
 });
+
+describe("AI-fitted pack prompt", () => {
+  const p = buildListingScenePrompt({ description: "a girl dipping a Breakfast Cookies cookie in chai", props: [], style: DEFAULT_IMAGE_STYLE, layout: "ad", inScene: true, aiPack: true, productName: "Breakfast Cookies", forAd: "Instagram, Feed 4:5" });
+  it("lets the pack adapt to the scene but keeps its design and a single pack", () => {
+    expect(p).toContain("attached photo is our real product pack");
+    expect(p).toMatch(/held in a hand/);
+    expect(p).toContain("exactly ONE of it");
+    expect(p).toMatch(/every printed word spelled exactly the same/);
+    expect(p).not.toContain("already contains our real product pack");
+  });
+  it("keeps the scene as written and room for the headline", () => {
+    expect(p).toContain("SHOW EXACTLY THIS, every part clearly visible: a girl dipping a Breakfast Cookies cookie in chai.");
+    expect(p).toMatch(/top left calm/);
+    expect(p).toMatch(/apart from what is printed on our pack/);
+  });
+});

@@ -192,9 +192,42 @@ export function buildListingPhotoPrompt(opts: { description: string; shape: "wid
  * where the header and the feature list go. inScene: the pack is already in the image (paint around it);
  * otherwise leave its spot empty (it is placed afterwards).
  */
-export function buildListingScenePrompt(opts: { description: string; props: string[]; style?: ImageStyle; layout: "card" | "bar" | "ad"; inScene: boolean; productName: string; forAd?: string }): string {
+export function buildListingScenePrompt(opts: {
+  description: string;
+  props: string[];
+  style?: ImageStyle;
+  layout: "card" | "bar" | "ad";
+  inScene: boolean;
+  productName: string;
+  forAd?: string;
+  /** The AI draws our pack into the scene from the attached pack photo, adapting angle, light and hands to the moment. */
+  aiPack?: boolean;
+  /** With aiPack: what the attached photo shows when it's one of the product's other photos (not the pack). */
+  photoShows?: string;
+}): string {
   const style = opts.style ?? DEFAULT_IMAGE_STYLE;
   const side = opts.layout === "ad" ? "lower right" : "lower left";
+  if (opts.aiPack) {
+    return [
+      `Professional advertising photograph for an Indian food brand${opts.forAd ? ` (${opts.forAd})` : ""}: one real, warm, inviting photographed scene.`,
+      opts.photoShows
+        ? `The attached photo is our real product (${opts.productName}): ${opts.photoShows}. Put it into the scene naturally, exactly as it looks in the photo, as the hero of the picture, with the scene's own light, shadows and perspective, clearly visible and in sharp focus.`
+        : `The attached photo is our real product pack (${opts.productName}). Put exactly ONE of it into the scene, naturally, as the hero of the picture: held in a hand, standing on the table at a slight angle, or being opened, whichever fits the moment. It takes the scene's own light, shadows and reflections and the camera's perspective, at a believable real-world size next to hands, cups and plates, clearly visible, in sharp focus and never cut off by the edge of the picture.`,
+      "Copy the pack's design exactly: the same shape and proportions, the same colours, the same logo, brand name and illustrations, and every printed word spelled exactly the same. Do not redesign, simplify, translate, mirror or add anything to it. No other pack, jar, box, pouch, packet or label anywhere in the picture.",
+      `SHOW EXACTLY THIS, every part clearly visible: ${opts.description.trim()}.`,
+      opts.props.length ? `Props, placed naturally (small wooden bowls or loose pieces): ${opts.props.join(", ")}.` : "",
+      "Composition: the people, the moment and our pack fill the frame naturally, with the pack in the right half or the centre; keep the top left calm and softly out of focus for a headline.",
+      "Quality: crisp focus on the pack, the people and the food, high detail, bright soft natural light, shallow depth of field with a softly blurred background, real and appetising textures; the look of a professional commercial shoot.",
+      `Photography: ${style.look}`,
+      `Places: ${style.places}`,
+      `People: ${style.people}`,
+      `Colour and mood: ${style.mood}`,
+      `Avoid: ${style.avoid}`,
+      "RULES: apart from what is printed on our pack, no written words, numbers, icons, badges, graphics or logos anywhere (they are added afterwards); any phone, laptop or TV screen is dark or softly blurred with nothing readable on it (no apps, charts, icons or QR codes); no doctors or experts; nothing that isn't described.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
   return [
     opts.forAd
       ? `Professional advertising photograph for an Indian food brand (${opts.forAd}): one real, warm, inviting photographed scene.`

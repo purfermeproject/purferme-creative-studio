@@ -447,7 +447,7 @@ test("By default a new image gets the hook, CTA and logo added straight away", a
   // Every image says how it was made, step by step.
   const trail = ws.getByTestId("image-trail").first();
   await trail.locator("summary").click();
-  await expect(trail).toContainText("Placing your real pack in the scene");
+  await expect(trail).toContainText("draws your pack into the scene from your pack photo");
   await expect(ws.getByTestId("image-trail").nth(1)).toContainText("Added the hook, button and logo");
   await expect(page.getByTestId("flow").locator("[aria-current=step]")).toContainText("Check & approve");
   await expect(ws.getByTestId("image-dims").nth(1)).toContainText("with text");
@@ -548,14 +548,16 @@ test("Original pack is placed unchanged, and images with it can't be AI-edited",
 
   const ws = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", type: "Static image ad (4:5)", placement: "Instagram Feed post" });
   await moreOptions(ws);
-  await expect(ws.getByLabel("Pack in the image")).toHaveValue("scene");
+  // By default the AI fits the pack into the scene; the exact pasted pack is one choice away.
+  await expect(ws.getByLabel("Pack in the image")).toHaveValue("ai");
+  await ws.getByLabel("Pack in the image").selectOption("scene");
   await makeImage(ws);
   await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack · scene ad");
   // A designed layout is never cropped into other sizes (that would cut the panel); Make all sizes lays each one out.
   await expect(ws.getByRole("button", { name: "All sizes" })).toHaveCount(0);
   await expect(ws.getByRole("button", { name: "Edit with words" })).toHaveCount(0);
   await moreOptions(ws);
-  await expect(ws.getByLabel("Pack in the image").locator("option")).toHaveText(["Pack: real pack in a photographed scene (recommended)", "Pack: real pack on a brand panel", "Pack: real pack inside the scene (AI blends it; check it)", "No pack in this image"]);
+  await expect(ws.getByLabel("Pack in the image").locator("option")).toHaveText(["Pack: AI fits your pack into the scene (recommended)", "Pack: your exact pack pasted into a scene", "Pack: real pack on a brand panel", "Pack: real pack inside the scene (AI blends it; check it)", "No pack in this image"]);
   // The server refuses too.
   const assetUrl = await ws.getByTestId("image-gallery").locator("img").first().getAttribute("src");
   const res = await page.request.post("/api/image/edit", { data: { assetId: assetUrl!.split("/").pop(), instruction: "make it warmer" } });
@@ -576,7 +578,7 @@ test("Proposals show the real pack; a proposal image (with its hook) carries int
   await first.getByRole("button", { name: /^Develop as/ }).click();
   const ws = page.getByTestId("workspace-creative");
   await expect(ws.getByTestId("image-gallery").locator("img")).toHaveCount(2, { timeout: 60_000 });
-  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · original pack");
+  await expect(ws.getByTestId("image-dims").first()).toContainText("1080×1350 · Feed 4:5 · pack from your photo");
   await expect(ws.getByTestId("image-dims").nth(1)).toContainText("with text");
   await expect(page.getByTestId("creative-preview").locator("img")).toHaveCount(1);
   await page.reload();
@@ -584,7 +586,7 @@ test("Proposals show the real pack; a proposal image (with its hook) carries int
 
   const auto = await develop(page, { product: "Breakfast Cookies, millet & oats, 240g", autoImage: true });
   await expect(auto.getByTestId("image-gallery").locator("img")).toHaveCount(2, { timeout: 60_000 });
-  await expect(auto.getByTestId("image-dims").first()).toContainText("original pack");
+  await expect(auto.getByTestId("image-dims").first()).toContainText("pack from your photo");
   await expect(auto.getByTestId("image-dims").nth(1)).toContainText("with text");
 });
 
@@ -643,7 +645,7 @@ test("Extra product photos can be placed instead of the pack", async ({ page }) 
   await moreOptions(ws);
   await ws.getByLabel("Which product photo").selectOption({ label: "Photo: Cookies out of the pack" });
   await makeImage(ws);
-  await expect(ws.getByTestId("image-dims").first()).toContainText("original pack");
+  await expect(ws.getByTestId("image-dims").first()).toContainText("pack from your photo");
 });
 
 test("Competitors: found automatically for a product category, broken down, and used in a brief", async ({ page }) => {
@@ -842,7 +844,7 @@ test("Image prompts: the brand image style is used, and the team can see and edi
   const appScene = await direction.inputValue();
   await editor.getByText("Rules always added").click();
   await expect(editor).toContainText("Places: Mumbai local trains, office pantries and balconies at golden hour");
-  await expect(editor).toContainText("exactly ONE pack");
+  await expect(editor).toContainText("exactly ONE of it");
   await direction.fill("A commuter on a Mumbai local at 8am, window light, holding a steel tumbler of chai");
   await editor.getByRole("button", { name: "Use this for the next images" }).click();
   await expect(editor.getByRole("button", { name: /Prompt/ })).toContainText("edited");

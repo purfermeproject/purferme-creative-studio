@@ -25,10 +25,12 @@ const Body = z.object({
   specId: z.string().max(40).nullable().optional(),
   textMode: z.enum(["overlay", "ai"]).default("overlay"),
   /**
-   * layout = a photo plus our real pack standing on a brand panel (default; the model never sees the pack);
-   * locked = the real pack placed inside the scene; none = a scene without the product. The AI never draws a pack.
+   * ai = the AI draws our pack into the scene from the pack photo, adapting angle, light and hands (default; checked against the real pack);
+   * scene = one scene painted around our real pack, pasted in unchanged at the lower right;
+   * layout = a photo plus our real pack standing on a brand panel; locked = the real pack placed inside the scene
+   * at a chosen spot; none = a scene without the product.
    */
-  packMode: z.enum(["scene", "layout", "locked", "none"]).default("scene"),
+  packMode: z.enum(["ai", "scene", "layout", "locked", "none"]).default("ai"),
   packPosition: z.enum(PACK_POSITIONS).default("right"),
   packScale: z.enum(PACK_SCALES).default("medium"),
   /** Which real product photo to place: the pack photo (default) or one of the product's extra photos. */
@@ -99,7 +101,7 @@ export async function POST(req: Request) {
       platform: input.platform,
       creativeType: input.creativeType,
       productName: product.name,
-      packMode: packMode === "layout" || packMode === "scene" ? ("none" as const) : packMode,
+      packMode: packMode === "layout" || packMode === "scene" || packMode === "ai" ? ("none" as const) : packMode,
       layout: packMode === "layout" ? adLayout(spec).kind : undefined,
       packPosition: input.packPosition,
       target: { w: spec.w, h: spec.h, label: spec.label, note: spec.note },
@@ -120,21 +122,25 @@ export async function POST(req: Request) {
       productName: product.name,
       forAd: `${PLATFORM_LABELS[input.platform]}, ${spec.label}`,
     };
-    if (input.preview && packMode === "scene") {
-      return Response.json({ direction: sceneDesc, rules: buildListingScenePrompt({ ...sceneArgs, inScene: true }).replace(sceneDesc, "[the scene above]") });
+    const extraPhoto = Boolean(input.photoId && product.photoAssetIds.includes(input.photoId));
+    const aiArgs = { ...sceneArgs, inScene: true, aiPack: true, photoShows: extraPhoto ? reference?.label || "a photo of the product" : undefined };
+    if (input.preview && (packMode === "scene" || packMode === "ai")) {
+      const full = buildListingScenePrompt(packMode === "ai" ? aiArgs : { ...sceneArgs, inScene: true });
+      return Response.json({ direction: sceneDesc, rules: full.split("\n").filter((l) => !l.startsWith("SHOW EXACTLY THIS")).join("\n") });
     }
     if (input.preview) {
       const parts = buildImagePromptParts({ ...promptInput, packInScene: packMode === "locked" });
       return Response.json({ direction: parts.direction, rules: parts.rules });
     }
-    const prompt = packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: true }) : buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
+    const prompt = packMode === "ai" ? buildListingScenePrompt(aiArgs) : packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: true }) : buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
     const fallbackPrompt = packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: false }) : buildImagePrompt(promptInput);
-    const tag = packMode === "layout" ? " · brand panel" : packMode === "scene" ? " · scene ad" : "";
+    const tag = packMode === "layout" ? " · brand panel" : packMode === "scene" || packMode === "ai" ? " · scene ad" : "";
     const withPack = packMode !== "none";
-    const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${withPack ? " · original pack" : ""}${tag}`;
+    const packTag = packMode === "ai" ? " · pack from your photo" : withPack ? " · original pack" : "";
+    const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${packTag}${tag}`;
     const run = async (onStage?: (text: string) => void) => {
       onStage?.(
-        packMode === "scene"
+        packMode === "scene" || packMode === "ai"
           ? `Writing the scene brief from the ad: ${sceneDesc}`
           : packMode === "layout"
             ? "Writing the photo brief from the ad (scene, style, where the panel goes)"
@@ -145,8 +151,10 @@ export async function POST(req: Request) {
         noWriting: input.textMode !== "ai",
         prompt,
         target: { w: spec.w, h: spec.h },
-        reference: null,
-        fallbackPrompt,
+        reference: packMode === "ai" ? reference : null,
+        // Compared with the real pack only when the pack itself was sent (an extra photo, e.g. loose cookies, isn't a pack).
+        adaptPack: packMode === "ai" && reference && !extraPhoto ? { assetId: packAssetId } : null,
+        fallbackPrompt: packMode === "ai" ? undefined : fallbackPrompt,
         user,
         label,
         frameIndex: input.frameIndex,
@@ -156,7 +164,7 @@ export async function POST(req: Request) {
             : packMode === "scene" && reference
               ? { data: reference.data, position: A.pack.position, scale: A.pack.scale, bottom: A.pack.bottom, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
               : null,
-        mustShow: packMode === "scene" ? mustShow(sceneDesc) : undefined,
+        mustShow: packMode === "scene" || packMode === "ai" ? mustShow(sceneDesc) : undefined,
         layoutPack:
           packMode === "layout" && reference
             ? { data: reference.data, position: input.packPosition, panel: brand0.kit.colors.primary, accent: brand0.kit.colors.accent, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
@@ -168,7 +176,7 @@ export async function POST(req: Request) {
           .set({ imageIds: sql`array_append(${schema.creatives.imageIds}, ${image.id}::uuid)`, updatedAt: new Date() })
           .where(eq(schema.creatives.id, input.creativeId));
       }
-      return { ...image, label: withPack ? `${spec.label} · original pack${tag}` : spec.label, usedPackPhoto: Boolean(reference), packMode };
+      return { ...image, label: `${spec.label}${packTag}${tag}`, usedPackPhoto: Boolean(reference), packMode };
     };
     if (!input.stream) return Response.json(await run());
     // Streamed: one line per stage, then the result, so the page can show what is happening right now.

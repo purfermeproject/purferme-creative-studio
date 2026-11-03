@@ -8,7 +8,7 @@ import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
 import { compositePack as composite, layoutAd, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
-import { findInventedPacks, findMissing } from "./pack-detect";
+import { checkPackMatch, findInventedPacks, findMissing } from "./pack-detect";
 
 /** Composite, turning an unusable pack photo into a message the team can act on. */
 async function compositePack(...args: Parameters<typeof composite>) {
@@ -77,6 +77,8 @@ export async function generateImage(opts: {
   fallbackPrompt?: string;
   /** Designed layout: a photo with no pack, then our real pack standing on a brand panel (the model never sees the pack). */
   layoutPack?: { data: Buffer; position: PackPosition; panel: string; accent: string; assetId?: string | null; liftBackdrop?: boolean } | null;
+  /** The AI draws our pack (sent as `reference`) into the scene, adapting it to the moment; checked against the real pack. */
+  adaptPack?: { assetId?: string | null } | null;
   /** A photo that our real pack is placed beside later (listing slides): checked for invented packaging like a layout photo. */
   photoOnly?: boolean;
   /** What the photo must visibly show (from the team's description): checked, and the photo made again once if any is missing. */
@@ -113,6 +115,7 @@ export async function generateImage(opts: {
     data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label, { drawPack: !opts.lockedPack && !opts.layoutPack && !opts.photoOnly })).toString("base64");
     model = "mock";
     stage("Sample mode: using a placeholder photo instead of AI");
+    if (opts.adaptPack) stage("With a real key, the AI draws your pack into the scene from your pack photo, then it is compared with your real pack");
     if (opts.layoutPack) {
       const scene = await sharp(Buffer.from(data, "base64")).resize(opts.target.w, opts.target.h).png().toBuffer();
       mime = "image/jpeg";
@@ -201,12 +204,40 @@ export async function generateImage(opts: {
       stage(
         opts.layoutPack
           ? "AI is making the photo (it never sees or draws your pack)"
+          : opts.adaptPack
+            ? "AI is making the scene and drawing your pack into it from your pack photo"
           : opts.lockedPack
             ? "AI is painting the scene around your real pack"
             : "AI is making the photo",
       );
       let made = await once(opts.prompt, opts.fallbackPrompt);
-      if (opts.layoutPack || opts.photoOnly) {
+      if (opts.adaptPack && opts.reference) {
+        // The AI drew our pack itself: compare it with the real pack, and make it again once if it differs.
+        stage("Comparing the pack in the image with your real pack (name, logo, colours, one pack only)");
+        const check = { checkWriting: opts.noWriting };
+        let problems = await checkPackMatch(made.image, opts.reference.data, opts.user, check);
+        if (problems.length) {
+          stage(`Found: ${problems.join("; ")}. Making the image again`);
+          made = await once(
+            `${opts.prompt}\n\nIMPORTANT: a previous attempt got this wrong: ${problems.join("; ")}. Show exactly ONE pack, an exact copy of the attached pack photo (same name, words, logo, colours and shape), fully in the picture and resting on something or held.`,
+            undefined,
+          );
+          problems = await checkPackMatch(made.image, opts.reference.data, opts.user, check);
+          if (problems.length) warning = `Check the pack closely: ${problems.join("; ")}. Make another, or choose “your exact pack pasted in” under More options.`;
+        }
+        if (opts.mustShow?.length) {
+          stage("Checking the image shows everything described");
+          const missing = await findMissing(made.image, opts.mustShow, opts.user);
+          if (missing.length && !problems.length) {
+            stage(`Missing: ${missing.join("; ")}. Making the image again`);
+            made = await once(`${opts.prompt}\n\nIMPORTANT: a previous attempt did not clearly show: ${missing.join("; ")}. The image MUST clearly show every one of these.`, undefined);
+            const after = await checkPackMatch(made.image, opts.reference.data, opts.user, check);
+            if (after.length) warning = `Check the pack closely: ${after.join("; ")}. Make another, or choose “your exact pack pasted in” under More options.`;
+          } else if (missing.length) {
+            warning = `${warning} It may also not clearly show: ${missing.join("; ")}.`.trim();
+          }
+        }
+      } else if (opts.layoutPack || opts.photoOnly) {
         // The photo must not contain any packaging of its own; redo once if the model drew some anyway.
         stage(opts.noWriting ? "Checking the photo for any packaging or text the AI drew" : "Checking the photo for any packaging the AI drew");
         const check = { checkWriting: opts.noWriting };
@@ -286,7 +317,7 @@ export async function generateImage(opts: {
     prompt: opts.prompt,
     model,
     size: opts.target,
-    sourceAssetIds: opts.lockedPack?.assetId ? [opts.lockedPack.assetId] : opts.layoutPack?.assetId ? [opts.layoutPack.assetId] : [],
+    sourceAssetIds: opts.lockedPack?.assetId ? [opts.lockedPack.assetId] : opts.adaptPack?.assetId ? [opts.adaptPack.assetId] : opts.layoutPack?.assetId ? [opts.layoutPack.assetId] : [],
   });
   await db.insert(schema.generationLogs).values({
     user: opts.user,
@@ -309,7 +340,8 @@ export async function loadAsset(id: string) {
 export async function editImage(opts: { assetId: string; instruction: string; user: string; creativeId?: string | null }) {
   const a = await loadAsset(opts.assetId);
   if (!a || !a.mime.startsWith("image/")) throw new UserFacingError("That image no longer exists.");
-  const lockedPack = a.sourceAssetIds.length > 0 || a.label.includes("original pack");
+  // An AI-fitted pack was drawn by the AI already, so editing it with words is fine.
+  const lockedPack = !a.label.includes("pack from your photo") && (a.sourceAssetIds.length > 0 || a.label.includes("original pack"));
   if (lockedPack) {
     // An AI edit redraws the whole picture, including our real pack, so it isn't allowed.
     throw new UserFacingError("This image has your real pack in it, and an AI edit would redraw the pack. Make a new image instead (you can change the scene in Edit first).");

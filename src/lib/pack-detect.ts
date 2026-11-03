@@ -127,6 +127,58 @@ Also list any written words, numbers, notes, signs or labels visible anywhere in
   }
 }
 
+const PackMatchSchema = z.object({
+  count: z.number().int().describe("How many copies of our pack (or any pack, box, jar, pouch or packet) are in the AD on the right"),
+  problems: z
+    .array(z.string())
+    .describe("Each way the pack in the ad differs from our real pack on the left: wrong or misspelled brand name or words, different logo, colours, illustration, shape or proportions, mirrored, cut off by the edge, too small to read, blurred, or floating unnaturally. Empty if it matches."),
+  writing: z.array(z.string()).describe("Any written words or numbers in the ad that are NOT printed on the pack (signs, notes, screens)"),
+});
+
+/**
+ * For an ad where the AI drew our pack from the pack photo: compares the two side by side and lists every
+ * difference (a second pack, a misspelled name, a changed logo, a floating or cut-off pack).
+ * Empty in mock mode, without a key, or on error, so a failed check never blocks an image.
+ */
+export async function checkPackMatch(image: Buffer, pack: Buffer, user: string, opts: { checkWriting?: boolean } = {}): Promise<string[]> {
+  if (isMock() || (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY)) return [];
+  try {
+    const H = 1024;
+    const ad = await sharp(image).resize({ height: H }).jpeg({ quality: 88 }).toBuffer();
+    const adW = (await sharp(ad).metadata()).width ?? H;
+    const ref = await sharp(pack).rotate().flatten({ background: "#ffffff" }).resize(Math.round(H * 0.6), H, { fit: "contain", background: "#ffffff" }).png().toBuffer();
+    const refW = Math.round(H * 0.6);
+    const gap = 24;
+    const pair = await sharp({ create: { width: refW + gap + adW, height: H, channels: 3, background: "#ffffff" } })
+      .composite([
+        { input: ref, left: 0, top: 0 },
+        { input: ad, left: refW + gap, top: 0 },
+      ])
+      .jpeg({ quality: 88 })
+      .toBuffer();
+    const r = await structuredCall({
+      schema: PackMatchSchema,
+      prompt: `On the LEFT is our real product pack. On the RIGHT is an advertising photo in which an AI drew that pack into a scene.
+1. Count how many packs, boxes, jars, pouches or packets are in the ad on the right (copies of ours or any other). There should be exactly 1.
+2. Compare the pack in the ad with our real pack, closely: brand name and every printed word (spelling), logo, colours, illustrations, shape and proportions. Angle, light, shadow and a hand holding it are fine and expected. List every real difference, and also say if the pack is cut off by the edge, too small or blurred to read, or floats unnaturally instead of resting on something or being held.
+3. List any written words or numbers in the ad that are not printed on the pack.`,
+      image: { mediaType: "image/jpeg", base64: pair.toString("base64") },
+      maxTokens: 1500,
+      effort: "low",
+      meta: { user, kind: "pack-match" },
+      mock: () => ({ count: 1, problems: [], writing: [] }),
+    });
+    return [
+      ...(r.count > 1 ? [`${r.count} packs instead of one`] : r.count < 1 ? ["no pack visible"] : []),
+      ...r.problems,
+      ...(opts.checkWriting ? r.writing.map((w) => `written text “${w}”`) : []),
+    ].filter(Boolean);
+  } catch (e) {
+    console.error("pack match check failed", e);
+    return [];
+  }
+}
+
 const MatchSchema = z.object({
   items: z.array(z.object({ item: z.string(), visible: z.boolean().describe("True only if it is clearly visible and recognisable") })),
 });

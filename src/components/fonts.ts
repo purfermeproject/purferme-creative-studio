@@ -27,7 +27,9 @@ export function loadBrandFont(font: BrandFont): Promise<void> {
             link.onerror = r;
           });
         }
-        await Promise.all([document.fonts.load(`700 48px "${font.name}"`), document.fonts.load(`400 24px "${font.name}"`)]);
+        // Every weight the canvas draws with (hook 800, button 700, sub-line 500, body 400), so nothing falls back to Georgia.
+        await Promise.all(["400", "500", "700", "800"].map((w) => document.fonts.load(`${w} 48px "${font.name}"`)));
+        await document.fonts.ready;
       }
     })().catch(() => undefined);
     loaded.set(key, p);
