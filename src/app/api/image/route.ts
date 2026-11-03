@@ -252,7 +252,7 @@ export async function POST(req: Request) {
             : packMode === "scene" && reference
               ? { data: reference.data, position: A.pack.position, scale: A.pack.scale, bottom: A.pack.bottom, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }
               : null,
-        mustShow: !designed && (packMode === "scene" || packMode === "ai") ? mustShow(sceneDesc) : undefined,
+        mustShow: packMode === "scene" || packMode === "ai" ? mustShow(sceneDesc) : undefined,
         layoutPack:
           packMode === "layout" && reference
             ? { data: reference.data, position: input.packPosition, panel: brand0.kit.colors.primary, accent: brand0.kit.colors.accent, assetId: packAssetId, liftBackdrop: !reference.label?.includes("cropped") }

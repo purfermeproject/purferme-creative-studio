@@ -36,7 +36,7 @@ export async function planDesign(
   seed = 0,
 ): Promise<DesignSpec> {
   const fromClaims = product.greenClaims.slice(0, 4);
-  const setting = pickSetting(`${c.scene} ${c.hook} ${c.angle}`, [], seedOf(c.hook) + seed);
+  const setting = pickSetting(c.scene, `${c.hook} ${c.angle}`, [], seedOf(c.hook) + seed);
   const fallback: DesignSpec = {
     headline: c.hook.trim(),
     sub: c.headline && c.headline !== c.hook ? c.headline : "",

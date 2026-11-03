@@ -10,32 +10,40 @@ export type DesignLayout = "callouts-left" | "callouts-both" | "comparison" | "b
 /** Where an image happens and how it feels: every image in a set gets its own. */
 export type Setting = { key: string; place: string; light: string; surface: string; mood: string; colours: string };
 
-export const SETTINGS: (Setting & { fits: RegExp })[] = [
-  { key: "grandma-kitchen", place: "a traditional Indian home kitchen with brass and steel utensils on open shelves", light: "soft early-morning sun through a window, gentle haze", surface: "a worn wooden kitchen table", mood: "nostalgia and warmth, like grandma's recipes", colours: "warm honey, cream and brass", fits: /\b(grand|nani|dadi|tradition|recipe|jaggery|natural|old|heritage)/i },
-  { key: "farm", place: "a millet field with ripe golden stalks and a farmer's hut far behind", light: "golden-hour sun low in the sky, long soft shadows", surface: "a rustic wooden plank on hay", mood: "pride and trust in where food comes from", colours: "golden wheat, sky blue and green", fits: /\b(farm|field|grow|grew|source|trace|origin|seed|harvest|millet)/i },
-  { key: "school-morning", place: "a bright family dining room on a busy school morning, a school bag on a chair", light: "crisp bright daylight", surface: "a white dining table with a steel tiffin box", mood: "a happy, rushed morning: kids who actually finish their breakfast", colours: "fresh white, sunny yellow and soft blue", fits: /\b(kid|child|school|tiffin|lunch ?box|son|daughter|mom|mother|parent)/i },
-  { key: "office", place: "a modern office desk at 11 am, a laptop with its screen off, a notebook and a mug", light: "cool clean window light", surface: "a light oak desk", mood: "a focused break that keeps you going", colours: "cool grey, white and a touch of green from a desk plant", fits: /\b(office|desk|work|meeting|11 ?am|3 ?pm|snack|hunger|full|energy|focus)/i },
-  { key: "chai-balcony", place: "a cosy home balcony with potted plants and fairy lights at dusk", light: "warm evening light with a soft orange sky", surface: "a small cane side table with a cup of cutting chai", mood: "an unhurried evening moment for yourself", colours: "dusky orange, plum and green", fits: /\b(chai|tea|evening|relax|me ?time|dunk|dip)/i },
-  { key: "gym", place: "a bright home workout corner with a yoga mat and dumbbells", light: "fresh morning daylight", surface: "a wooden bench", mood: "energy and feeling good about what you eat", colours: "fresh mint, white and charcoal", fits: /\b(gym|workout|fit|protein|run|yoga|active|sport)/i },
-  { key: "hostel", place: "a student hostel room with fairy lights, books and posters", light: "a warm desk lamp at night", surface: "a study desk with books", mood: "comfort and a taste of home when you're away", colours: "warm lamp amber, deep blue and plum", fits: /\b(hostel|college|student|study|exam|night|away from home)/i },
-  { key: "festive", place: "a home decorated for a festival with marigold garlands and diyas", light: "warm glowing diya light and soft bokeh", surface: "a festive table with a brass plate", mood: "joy and sharing with family", colours: "marigold orange, deep red and gold", fits: /\b(gift|festiv|diwali|celebrat|share|sharing|family|together|rakhi|present)/i },
-  { key: "picnic", place: "a green park with trees, a picnic on the grass", light: "dappled afternoon sunlight through leaves", surface: "a checked picnic mat", mood: "carefree fun outdoors", colours: "leaf green, sky blue and red check", fits: /\b(travel|trip|picnic|outdoor|park|on the go|road|journey)/i },
-  { key: "studio-nuts", place: "a clean food-photography set with ingredients arranged around", light: "soft directional studio light with a gentle shadow", surface: "a dark walnut board", mood: "craving: rich, crunchy, real ingredients up close", colours: "deep chocolate brown, cream and caramel", fits: /\b(nut|almond|cashew|crunch|cocoa|chocolate|butter|ingredient|inside|real)/i },
-  { key: "bright-kitchen", place: "a modern bright Indian kitchen with marble counters and a window", light: "soft natural daylight", surface: "a white marble counter", mood: "clean, honest everyday goodness", colours: "white, pale sage and wood", fits: /\b(no |zero|maida|palm|sugar|clean|honest|good stuff|preservative|better than|compare|regular)/i },
-  { key: "living-room", place: "a cosy living room with a sofa, cushions and a rug", light: "warm afternoon light", surface: "a low wooden coffee table", mood: "a shared, happy snack moment at home", colours: "terracotta, cream and teal", fits: /\b(home|sofa|weekend|movie|binge|friends)/i },
+/** where = the place a description names (it wins); fits = the story or theme of the image. */
+export const SETTINGS: (Setting & { where: RegExp; fits: RegExp })[] = [
+  { key: "grandma-kitchen", place: "a traditional Indian home kitchen with brass and steel utensils on open shelves", light: "soft early-morning sun through a window, gentle haze", surface: "a worn wooden kitchen table", mood: "nostalgia and warmth, like grandma's recipes", colours: "warm honey, cream and brass", where: /\b(traditional kitchen|grand(ma|mother)'?s? kitchen|nani|dadi)(s|es)?\b/i, fits: /\b(grand|nani|dadi|tradition|recipe|jaggery|heritage|nostalgi)/i },
+  { key: "farm", place: "a millet field with ripe golden stalks and a farmer's hut far behind", light: "golden-hour sun low in the sky, long soft shadows", surface: "a rustic wooden plank on hay", mood: "pride and trust in where food comes from", colours: "golden wheat, sky blue and green", where: /\b(farm|field|village|crop|harvest)(s|es)?\b/i, fits: /\b(farm|field|grow|grew|trace|origin|harvest|where it)/i },
+  { key: "school-morning", place: "a bright family dining room on a busy school morning, a school bag on a chair", light: "crisp bright daylight", surface: "a white dining table with a steel tiffin box", mood: "a happy, rushed morning: kids who actually finish their breakfast", colours: "fresh white, sunny yellow and soft blue", where: /\b(school|tiffin|lunch ?box|dining (room|table)|breakfast table)(s|es)?\b/i, fits: /\b(kid|child|school|tiffin|lunch ?box|son|daughter|mom|mother|parent)/i },
+  { key: "office", place: "a modern office desk at 11 am, a laptop with its screen off, a notebook and a mug", light: "cool clean window light", surface: "a light oak desk", mood: "a focused break that keeps you going", colours: "cool grey, white and a touch of green from a desk plant", where: /\b(office|desk|laptop|workplace|cubicle|meeting|co-?working)(s|es)?\b/i, fits: /\b(office|desk|work|meeting|11 ?am|3 ?pm|snack|hunger|full|energy|focus)/i },
+  { key: "chai-balcony", place: "a cosy home balcony with potted plants and fairy lights at dusk", light: "warm evening light with a soft orange sky", surface: "a small cane side table with a cup of cutting chai", mood: "an unhurried evening moment for yourself", colours: "dusky orange, plum and green", where: /\b(balcony|terrace|veranda|porch)(s|es)?\b/i, fits: /\b(chai|tea|evening|relax|me ?time|dunk|dip)/i },
+  { key: "gym", place: "a bright home workout corner with a yoga mat and dumbbells", light: "fresh morning daylight", surface: "a wooden bench", mood: "energy and feeling good about what you eat", colours: "fresh mint, white and charcoal", where: /\b(gym|workout|yoga mat|treadmill)(s|es)?\b/i, fits: /\b(gym|workout|fit|protein|run|yoga|active|sport)/i },
+  { key: "hostel", place: "a student hostel room with fairy lights, books and posters", light: "a warm desk lamp at night", surface: "a study desk with books", mood: "comfort and a taste of home when you're away", colours: "warm lamp amber, deep blue and plum", where: /\b(hostel|dorm|pg room|college room|study table)(s|es)?\b/i, fits: /\b(hostel|college|student|study|exam|night|away from home)/i },
+  { key: "festive", place: "a home decorated for a festival with marigold garlands and diyas", light: "warm glowing diya light and soft bokeh", surface: "a festive table with a brass plate", mood: "joy and sharing with family", colours: "marigold orange, deep red and gold", where: /\b(diwali|festival|diya|puja|rakhi|marigold)(s|es)?\b/i, fits: /\b(gift|festiv|diwali|celebrat|share|sharing|family|together|rakhi|present)/i },
+  { key: "picnic", place: "a green park with trees, a picnic on the grass", light: "dappled afternoon sunlight through leaves", surface: "a checked picnic mat", mood: "carefree fun outdoors", colours: "leaf green, sky blue and red check", where: /\b(park|picnic|garden|lawn|outdoors)(s|es)?\b/i, fits: /\b(travel|trip|picnic|outdoor|park|on the go|road|journey)/i },
+  { key: "studio-nuts", place: "a clean food-photography set with ingredients arranged around", light: "soft directional studio light with a gentle shadow", surface: "a dark walnut board", mood: "craving: rich, crunchy, real ingredients up close", colours: "deep chocolate brown, cream and caramel", where: /\b(close-?up|macro|studio|flat ?lay)(s|es)?\b/i, fits: /\b(nut|almond|cashew|crunch|cocoa|chocolate|butter)/i },
+  { key: "bright-kitchen", place: "a modern bright Indian kitchen with marble counters and a window", light: "soft natural daylight", surface: "a white marble counter", mood: "clean, honest everyday goodness", colours: "white, pale sage and wood", where: /\b(kitchen|counter|marble)(s|es)?\b/i, fits: /\b(no |zero|maida|palm|sugar|clean|honest|good stuff|preservative|better than|compare|regular)/i },
+  { key: "living-room", place: "a cosy living room with a sofa, cushions and a rug", light: "warm afternoon light", surface: "a low wooden coffee table", mood: "a shared, happy snack moment at home", colours: "terracotta, cream and teal", where: /\b(living room|sofa|couch|tv|movie night)(s|es)?\b/i, fits: /\b(home|sofa|weekend|movie|binge|friends)/i },
 ];
 
+const strip = ({ where: _w, fits: _f, ...x }: (typeof SETTINGS)[number]): Setting => (void _w, void _f, x);
+
 /**
- * The setting that fits this image's story best, not already used by the other images in the set. With no
- * clear fit, the seed spreads images across different settings.
+ * The world an image happens in. The team's description comes first: if it names a place ("an office desk at
+ * 11 am"), that place is used, always. Otherwise the image's theme picks a setting not already used by the
+ * other images in the set, and with no clear fit the seed spreads images across different ones.
  */
-export function pickSetting(text: string, used: string[] = [], seed = 0): Setting {
+export function pickSetting(scene: string, theme = "", used: string[] = [], seed = 0): Setting {
+  const named = SETTINGS.find((x) => x.where.test(scene));
+  if (named) return strip(named);
   const free = SETTINGS.filter((x) => !used.includes(x.key));
   const pool = free.length ? free : SETTINGS;
-  const fit = pool.find((x) => x.fits.test(text));
-  const { fits: _fits, ...chosen } = fit ?? pool[Math.abs(seed) % pool.length];
-  void _fits;
-  return chosen;
+  const fit = pool.find((x) => x.fits.test(scene)) ?? pool.find((x) => x.fits.test(theme)) ?? pool[Math.abs(seed) % pool.length];
+  // A described place the library doesn't know (a train, a café…): keep it, and borrow only light and feeling.
+  if (/\b(room|street|café|cafe|shop|market|terrace|bedroom|classroom|car|train|bus|beach|mountain|lake|temple|stadium|bakery|store|in a|at a|on a)\b/i.test(scene)) {
+    return { ...strip(fit), key: `own-${fit.key}`, place: "exactly the place the description says", surface: "the surface the description says (else a table that suits the place)" };
+  }
+  return strip(fit);
 }
 
 /** A small stable number from text (so the same ad keeps its setting, and different ads get different ones). */
@@ -102,7 +110,7 @@ export function specFromSlide(
   /** Settings the earlier slides of the stack already use, so this one gets its own. */
   used: string[] = [],
 ): DesignSpec {
-  const setting = pickSetting(`${slide.scene} ${slide.header} ${slide.sub} ${slide.feature}`, used, seedOf(slide.header) + used.length);
+  const setting = pickSetting(slide.scene, `${slide.header} ${slide.sub}`, used, seedOf(slide.header) + used.length);
   const parts = slide.feature
     .split("|")
     .map((p) => p.trim())
@@ -186,8 +194,8 @@ export function buildDesignedPrompt(spec: DesignSpec, o: DesignPromptOpts): stri
     spec.cta ? `- A rounded ${o.accent} button with white bold text near the bottom left: ${q(spec.cta)}` : "",
     "",
     `PACK: ${packLine} Show exactly ONE pack, large and in sharp focus as the hero, standing on ${spec.setting.surface}${o.packAction ? ` (${o.packAction})` : ""}, slightly turned so it looks real, lit by the same light as the scene, with a soft shadow. Copy its design exactly: the same shape and proportions, colours, logo, brand name, illustrations and every printed word spelled exactly the same. Do not redesign, simplify, mirror or add anything to it. No other pack, box, jar or packet anywhere.`,
-    `SCENE: ${spec.scene}. ${people ? "Real Indian people, candid and natural, behind or beside the pack, never covering it or the text; their faces and body language carry the feeling below. " : ""}`,
-    `SETTING (this image's own world; make it clearly different from a generic beige studio): ${spec.setting.place}; ${spec.setting.light}; the pack and props on ${spec.setting.surface}; the background softly out of focus${o.props.length ? `; small real props: ${o.props.join(", ")}` : ""}.`,
+    `SCENE (the most important part: show exactly this, as the team wrote it, every person, object and place in it): ${spec.scene}. ${people ? "Real Indian people, candid and natural, behind or beside the pack, never covering it or the text; their faces and body language carry the feeling below. " : ""}`,
+    `SETTING (this image's own world, matching the scene above; never a generic beige studio): ${spec.setting.place}; ${spec.setting.light}; the pack and props on ${spec.setting.surface}; the background softly out of focus${o.props.length ? `; small real props: ${o.props.join(", ")}` : ""}.`,
     `EMOTION: ${spec.setting.mood}. Colour palette: ${spec.setting.colours} (the headline stays plum so it reads; the callout pills stay soft cream).`,
     o.trim && o.trim.sides > 0.02
       ? `FRAMING: about ${Math.round(o.trim.sides * 100)}% of the picture is cut off at the left and right edges, so keep all text, the pack and faces inside the middle ${Math.round((1 - 2 * o.trim.sides) * 100 - 6)}% of the width.`

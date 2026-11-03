@@ -114,6 +114,8 @@ export async function POST(req: Request) {
             reference: refs[0],
             moreReferences: refs.slice(1),
             designedWords: designWords(design),
+            // The team's description: every part of it must be in the picture.
+            mustShow: mustShow(slide.scene),
             user,
             label: `Listing slide ${slot} · designed`,
             onStage: stage,

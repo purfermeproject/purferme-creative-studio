@@ -248,9 +248,13 @@ export async function generateImage(opts: {
         // A designed image: check the pack and every word, and make it again (up to twice) with the fixes.
         const refs = [opts.reference.data, ...(opts.moreReferences ?? []).map((r) => r.data)];
         const review = async () => {
-          stage("Reading every word on the image and comparing the pack with your real pack");
-          const [pack, text] = await Promise.all([checkPackMatch(made.image, refs, opts.user, {}), checkDesignText(made.image, opts.designedWords!, opts.user)]);
-          return [...pack, ...text];
+          stage("Reading every word, comparing the pack with your real pack, and checking the scene matches the description");
+          const [pack, text, missing] = await Promise.all([
+            checkPackMatch(made.image, refs, opts.user, {}),
+            checkDesignText(made.image, opts.designedWords!, opts.user),
+            opts.mustShow?.length ? findMissing(made.image, opts.mustShow, opts.user) : Promise.resolve([]),
+          ]);
+          return [...pack, ...text, ...missing.map((m) => `the scene doesn't clearly show ${m}`)];
         };
         let problems = await review();
         for (let attempt = 0; attempt < 2 && problems.length; attempt++) {
