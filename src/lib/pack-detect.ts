@@ -167,7 +167,7 @@ export async function checkPackMatch(image: Buffer, packs: Buffer[], user: strin
       schema: PackMatchSchema,
       prompt: `On the LEFT is our real product pack${shown.length > 1 ? ` (${shown.length} photos of the same one pack from different sides)` : ""}. On the RIGHT is an advertising photo in which an AI drew that pack into a scene.
 1. Count how many packs, boxes, jars, pouches or packets are in the ad on the right (copies of ours or any other). There should be exactly 1.
-2. Compare the pack in the ad with our real pack, closely (whichever side of it the ad shows): brand name and every printed word (spelling), logo, colours, illustrations, shape and proportions. Angle, light, shadow and a hand holding it are fine and expected. List every real difference, and also say if the pack is cut off by the edge, too small or blurred to read, or floats unnaturally instead of resting on something or being held.
+2. Compare the pack in the ad with our real pack, closely (whichever side of it the ad shows): brand name and every printed word (spelling), logo, colours, illustrations, shape and proportions. Angle, light, shadow and a hand holding it are fine and expected. List every real difference, and also say if the pack is cut off by the edge, too small or blurred to read, floats unnaturally instead of resting on something or being held, or looks pasted in (perfectly flat and square to the camera, lit differently from the room, with nobody touching or using it).
 3. List any written words or numbers in the ad that are not printed on the pack.`,
       image: { mediaType: "image/jpeg", base64: pair.toString("base64") },
       maxTokens: 1500,

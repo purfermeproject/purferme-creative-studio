@@ -53,3 +53,18 @@ export function pickViewsByRules(scene: string, available: PackView[]): PackView
   if (want.length < 2) add("angle");
   return want.slice(0, 3);
 }
+
+/**
+ * How the person in the scene uses the pack, so it is part of the moment instead of a product shot standing
+ * beside it (used without an AI, and as the AI's fallback).
+ */
+export function packActionByRules(scene: string, hook = ""): string {
+  const s = `${scene} ${hook}`.toLowerCase();
+  if (/\b(gift|present|wrap|ribbon|surprise|secret santa)/.test(s))
+    return "the pack is the gift: the person is wrapping it or tying a ribbon round it, or holds it out to give it, both hands on it, turned at an angle so its front still reads";
+  if (/\b(ingredient|nutrition|label|read(s|ing)?\b|check)/.test(s)) return "the person holds the pack up and turns it to read it, the pack at an angle, close to the camera";
+  if (/\b(open|unbox|unwrap|tear|first bite|takes? (one|a cookie|out))/.test(s)) return "the person has just opened the pack and is taking a cookie out of it, the open pack in one hand";
+  if (/\b(chai|tea|coffee|dip|breakfast|snack|bite|eat)/.test(s)) return "the pack is open on the table within reach, turned at an angle, and the person holds a cookie taken from it";
+  if (/\b(bag|tiffin|office|desk|commute|travel|hostel|college|school)/.test(s)) return "the person is putting the pack into a bag or tiffin, or taking it out, holding it at an angle";
+  return "the person holds the pack in one hand at a natural angle while doing what the scene describes";
+}

@@ -206,6 +206,10 @@ export function buildListingScenePrompt(opts: {
   photoShows?: string;
   /** With aiPack: the attached photos are our one pack from these sides, in this order (the first is the side to show). */
   views?: string[];
+  /** With aiPack: what the person does with the pack in this moment. */
+  packAction?: string;
+  /** Share of each edge that will be cut off to reach the platform size (0–0.5). */
+  trim?: { sides: number; topBottom: number };
 }): string {
   const style = opts.style ?? DEFAULT_IMAGE_STYLE;
   const side = opts.layout === "ad" ? "lower right" : "lower left";
@@ -217,10 +221,18 @@ export function buildListingScenePrompt(opts: {
         : opts.views && opts.views.length > 1
           ? `The ${opts.views.length} attached photos all show our ONE real product pack (${opts.productName}) from different sides: ${opts.views.map((v, i) => `photo ${i + 1} = ${v}`).join(", ")}. Use them together to understand its true 3D shape and every printed side, then put exactly ONE pack into the scene, showing mostly ${({ angle: "its front and one side (a 3/4 view)", open: "it opened, with the product showing" } as Record<string, string>)[opts.views[0]] ?? `its ${opts.views[0]}`}, naturally, as the hero of the picture: held in a hand, standing on the table, or being opened, whichever fits the moment. It takes the scene's own light, shadows and reflections and the camera's perspective, at a believable real-world size next to hands, cups and plates, clearly visible, in sharp focus and never cut off by the edge of the picture.`
           : `The attached photo is our real product pack (${opts.productName}). Put exactly ONE of it into the scene, naturally, as the hero of the picture: held in a hand, standing on the table at a slight angle, or being opened, whichever fits the moment. It takes the scene's own light, shadows and reflections and the camera's perspective, at a believable real-world size next to hands, cups and plates, clearly visible, in sharp focus and never cut off by the edge of the picture.`,
+      opts.packAction && !opts.photoShows
+        ? `HOW THE PACK IS USED (most important): ${opts.packAction}. The pack is part of the action and touched or used by the person, turned at a natural angle (about 20–40 degrees, so one side shows), lit by the same light as the room. NOT a product shot: never standing alone square to the camera, never looking pasted in.`
+        : "",
       "Copy the pack's design exactly: the same shape and proportions, the same colours, the same logo, brand name and illustrations, and every printed word spelled exactly the same. Do not redesign, simplify, translate, mirror or add anything to it. No other pack, jar, box, pouch, packet or label anywhere in the picture.",
       `SHOW EXACTLY THIS, every part clearly visible: ${opts.description.trim()}.`,
       opts.props.length ? `Props, placed naturally (small wooden bowls or loose pieces): ${opts.props.join(", ")}.` : "",
       "Composition: the people, the moment and our pack fill the frame naturally, with the pack in the right half or the centre; keep the top left calm and softly out of focus for a headline.",
+      opts.trim && opts.trim.sides > 0.02
+        ? `Framing: about ${Math.round(opts.trim.sides * 100)}% of the picture will be cut off at BOTH the left and right edges, so keep the pack, the faces and the hands well inside the middle ${Math.round((1 - 2 * opts.trim.sides) * 100 - 6)}% of the width; nothing important near the sides.`
+        : opts.trim && opts.trim.topBottom > 0.02
+          ? `Framing: about ${Math.round(opts.trim.topBottom * 100)}% of the picture will be cut off at BOTH the top and bottom, so keep the pack, the faces and the hands well inside the middle ${Math.round((1 - 2 * opts.trim.topBottom) * 100 - 6)}% of the height.`
+          : "Framing: keep the pack whole, with some space around it; nothing important touching the edges.",
       "Quality: crisp focus on the pack, the people and the food, high detail, bright soft natural light, shallow depth of field with a softly blurred background, real and appetising textures; the look of a professional commercial shoot.",
       `Photography: ${style.look}`,
       `Places: ${style.places}`,

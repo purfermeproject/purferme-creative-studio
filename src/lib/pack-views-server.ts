@@ -2,7 +2,7 @@ import "server-only";
 import sharp from "sharp";
 import { z } from "zod";
 import { isMock, structuredCall } from "./ai";
-import { PACK_VIEWS, pickViewsByRules, type PackView } from "./pack-views";
+import { PACK_VIEWS, packActionByRules, pickViewsByRules, type PackView } from "./pack-views";
 
 const hasAi = () => !isMock() && Boolean(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
 
@@ -27,27 +27,38 @@ export async function classifyPackView(image: Buffer, user: string): Promise<Pac
   }
 }
 
-/** The sides of the pack that suit this scene, best first (at most 3), and why. Falls back to simple rules. */
-export async function choosePackViews(scene: string, available: PackView[], user: string): Promise<{ views: PackView[]; why: string }> {
-  const fallback = { views: pickViewsByRules(scene, available), why: "" };
-  if (available.length <= 1 || !hasAi()) return fallback;
+/**
+ * How the pack is part of this moment (who does what with it), and which sides of it suit the scene, best
+ * first (at most 3). Falls back to simple rules.
+ */
+export async function choosePackViews(
+  scene: string,
+  available: PackView[],
+  user: string,
+  ctx: { hook?: string; productName?: string } = {},
+): Promise<{ views: PackView[]; why: string; action: string }> {
+  const fallback = { views: pickViewsByRules(scene, available), why: "", action: packActionByRules(scene, ctx.hook) };
+  if (!hasAi()) return fallback;
   try {
     const r = await structuredCall({
       schema: z.object({
+        action: z
+          .string()
+          .describe("One sentence: exactly what the person does with the pack in this moment, so it is part of the story (e.g. 'she ties a ribbon round the pack, her gift for her roommate')"),
         views: z.array(z.enum(PACK_VIEWS)).describe("Best first, 1 to 3, only from the available list"),
         why: z.string().describe("A few words, e.g. 'she is reading the ingredients'"),
       }),
-      prompt: `An ad photo will show this scene with our product pack in it:
-"${scene}"
-We have photos of the pack from these sides: ${available.join(", ")}.
-Which sides should the image AI see so it draws the pack correctly in this moment? Put first the side the camera will mostly see (e.g. back if someone reads the ingredients, angle if it is held in a hand, top for a flat lay from above, open if it is being opened). Include front when the name and logo should show. Choose 1 to 3.`,
+      prompt: `An ad photo will show this scene with our product pack (${ctx.productName ?? "a box of cookies"}) in it:
+"${scene}"${ctx.hook ? `\nThe ad's hook: "${ctx.hook}"` : ""}
+1. In one sentence, say exactly what the person does with the pack so it is the centre of the story, not a product standing beside it: they hold it, give it, wrap it, open it, take a cookie from it, pack it into a bag… Keep it true to the scene and the hook.
+2. We have photos of the pack from these sides: ${available.join(", ")}. Which should the image AI see to draw it correctly in that moment? Put first the side the camera will mostly see (back if someone reads the ingredients, angle if it is held, top for a flat lay, open if it is being opened). Include front when the name and logo should show. Choose 1 to 3.`,
       maxTokens: 300,
       effort: "low",
       meta: { user, kind: "pack-view-pick" },
       mock: () => fallback,
     });
     const views = r.views.filter((v, i, a) => available.includes(v) && a.indexOf(v) === i).slice(0, 3);
-    return views.length ? { views, why: r.why } : fallback;
+    return { views: views.length ? views : fallback.views, why: r.why, action: r.action.trim() || fallback.action };
   } catch (e) {
     console.error("choosing pack views failed", e);
     return fallback;

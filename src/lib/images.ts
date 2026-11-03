@@ -8,7 +8,7 @@ import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
 import { compositePack as composite, layoutAd, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
-import { checkPackMatch, findInventedPacks, findMissing } from "./pack-detect";
+import { checkPackMatch, detectPackBox, findInventedPacks, findMissing, type Box } from "./pack-detect";
 
 /** Composite, turning an unusable pack photo into a message the team can act on. */
 async function compositePack(...args: Parameters<typeof composite>) {
@@ -56,11 +56,31 @@ export async function loadReference(url: string | null | undefined): Promise<Ref
 
 /** Generates one image, stores it, logs usage, and returns the asset id. */
 /** Centre-crop and resize to the exact platform size; JPEG keeps photos small enough to store. */
-export async function fitToSize(png: Buffer, w: number, h: number): Promise<Buffer> {
+export async function fitToSize(png: Buffer, w: number, h: number, keep?: Box | null): Promise<Buffer> {
   const m = await sharp(png).metadata();
+  const W = m.width || w;
+  const H = m.height || h;
   // Enlarging (a 1024 px photo to a 2000 px listing) softens it: restore some crispness.
-  const scale = Math.max(w / (m.width || w), h / (m.height || h));
-  const img = sharp(png).resize(w, h, { fit: "cover", position: "centre", kernel: "lanczos3" });
+  const scale = Math.max(w / W, h / H);
+  let img: ReturnType<typeof sharp>;
+  if (keep) {
+    // Cut the platform size so this box (the pack) stays whole: centred if it fits, else moved just enough.
+    const sw = Math.round(W * scale);
+    const sh = Math.round(H * scale);
+    const place = (len: number, full: number, a: number, b: number) => {
+      const centre = Math.round((full - len) / 2);
+      const lo = Math.max(0, Math.round(b * full) - len); // window must end after the box
+      const hi = Math.min(full - len, Math.round(a * full)); // and start before it
+      return lo <= hi ? Math.min(Math.max(centre, lo), hi) : Math.min(Math.max(centre, 0), full - len);
+    };
+    const margin = 0.02;
+    const left = place(w, sw, Math.max(0, keep.x - margin), Math.min(1, keep.x + keep.w + margin));
+    const top = place(h, sh, Math.max(0, keep.y - margin), Math.min(1, keep.y + keep.h + margin));
+    const resized = await sharp(png).resize(sw, sh, { kernel: "lanczos3" }).png().toBuffer();
+    img = sharp(resized).extract({ left, top, width: w, height: h });
+  } else {
+    img = sharp(png).resize(w, h, { fit: "cover", position: "centre", kernel: "lanczos3" });
+  }
   return (scale > 1.3 ? img.sharpen({ sigma: 0.9, m1: 0.6, m2: 2 }) : img).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
 }
 
@@ -190,7 +210,12 @@ export async function generateImage(opts: {
         if (!b64) throw new UserFacingError("The image service returned no image. Try again.");
         inputTokens += res.usage?.input_tokens ?? 0;
         outputTokens += res.usage?.output_tokens ?? 0;
-        const fitted = await fitToSize(Buffer.from(b64, "base64"), opts.target.w, opts.target.h);
+        const raw = Buffer.from(b64, "base64");
+        // An AI-drawn pack can sit near an edge that trimming to the platform size would cut: find it first.
+        const [rw, rh] = size.split("x").map(Number);
+        const trims = Math.abs(rw / rh - opts.target.w / opts.target.h) > 0.02;
+        const keep = opts.adaptPack && trims ? await detectPackBox(raw, opts.user) : null;
+        const fitted = await fitToSize(raw, opts.target.w, opts.target.h, keep);
         if (!opts.lockedPack) return { image: fitted, box: null };
         // Always put our original pack pixels back on top, so the pack is exactly the photo even if the model drifted.
         // When the model painted around it, the scene already has a real shadow, so we don't add ours.

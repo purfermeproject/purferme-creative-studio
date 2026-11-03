@@ -5,7 +5,7 @@ import { db, schema } from "@/db";
 import { errorMessage } from "@/lib/ai";
 import { getBrand, getProduct } from "@/lib/data";
 import { buildImagePrompt, buildImagePromptParts, buildListingScenePrompt } from "@/lib/image-prompt";
-import { defaultSpecFor, findSpec, MAX_SIDE, MIN_SIDE, ratioLabel } from "@/lib/image-specs";
+import { defaultSpecFor, findSpec, generationSizeFor, MAX_SIDE, MIN_SIDE, ratioLabel } from "@/lib/image-specs";
 import { generateImage, loadReference, type Reference } from "@/lib/images";
 import { ConceptSchema } from "@/lib/schemas";
 import { adLayout, PACK_POSITIONS, PACK_SCALES } from "@/lib/pack-composite";
@@ -129,8 +129,9 @@ export async function POST(req: Request) {
     // Photos of the pack from every side: the sides that suit this scene are sent, best first.
     let packRefs: { view: PackView; ref: NonNullable<Reference>; assetId: string | null }[] = [];
     let viewWhy = "";
-    if (packMode === "ai" && reference && !extraPhoto && product.photoAssetIds.length) {
-      const rows = await db
+    let packAction = "";
+    if (packMode === "ai" && reference && !extraPhoto && !input.preview) {
+      const rows = !product.photoAssetIds.length ? [] : await db
         .select({ id: schema.assets.id, label: schema.assets.label, mime: schema.assets.mime, data: schema.assets.dataBase64 })
         .from(schema.assets)
         .where(inArray(schema.assets.id, product.photoAssetIds));
@@ -139,19 +140,26 @@ export async function POST(req: Request) {
         const v = viewOf(r.label);
         if (v && !byView.has(v)) byView.set(v, { ref: { data: Buffer.from(r.data, "base64"), mime: r.mime, name: v.replace(/\W+/g, "-"), label: r.label }, assetId: r.id });
       }
-      if (byView.size) {
-        if (!byView.has("front")) byView.set("front", { ref: reference, assetId: packAssetId });
-        const pick = await choosePackViews(sceneDesc, [...byView.keys()], user);
+      if (!byView.has("front")) byView.set("front", { ref: reference, assetId: packAssetId });
+      // How the person uses the pack in this moment (so it is part of the story), and the sides that suit it.
+      const pick = await choosePackViews(sceneDesc, [...byView.keys()], user, { hook: input.concept.hook, productName: product.name });
+      packAction = pick.action;
+      if (byView.size > 1) {
         packRefs = pick.views.map((v) => ({ view: v, ...byView.get(v)! }));
         viewWhy = pick.why;
       }
     }
+    // The model makes 2:3, 3:2 or square; the platform size is cut from that. Say how much each edge loses.
+    const [gw, gh] = generationSizeFor(spec.w, spec.h).split("x").map(Number);
+    const trim = spec.w / spec.h < gw / gh ? { sides: (1 - spec.w / spec.h / (gw / gh)) / 2, topBottom: 0 } : { sides: 0, topBottom: (1 - gw / gh / (spec.w / spec.h)) / 2 };
     const aiArgs = {
       ...sceneArgs,
       inScene: true,
       aiPack: true,
       photoShows: extraPhoto ? reference?.label || "a photo of the product" : undefined,
       views: packRefs.length ? packRefs.map((p) => p.view) : undefined,
+      packAction: packAction || undefined,
+      trim,
     };
     if (input.preview && (packMode === "scene" || packMode === "ai")) {
       const full = buildListingScenePrompt(packMode === "ai" ? aiArgs : { ...sceneArgs, inScene: true });
@@ -168,6 +176,7 @@ export async function POST(req: Request) {
     const packTag = packMode === "ai" ? " · pack from your photo" : withPack ? " · original pack" : "";
     const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${packTag}${tag}`;
     const run = async (onStage?: (text: string) => void) => {
+      if (packAction) onStage?.(`How the pack is used: ${packAction}`);
       if (packRefs.length) onStage?.(`Using your pack photos: ${packRefs.map((p) => VIEW_NAMES[p.view].replace(/ \(.*\)$/, "").toLowerCase()).join(" + ")}${viewWhy ? ` (${viewWhy})` : ""}`);
       onStage?.(
         packMode === "scene" || packMode === "ai"
