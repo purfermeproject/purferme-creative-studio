@@ -69,11 +69,24 @@ function connectionCause(e: unknown): string {
   return last || "no details";
 }
 
+/**
+ * OpenAI sends 429 both for "too many requests per minute" and for "no quota on this key": tell them apart,
+ * and pass on OpenAI's own words.
+ */
+export function openAiLimitMessage(e: InstanceType<typeof OpenAI.RateLimitError>, what: "images" | "requests"): string {
+  const code = String((e as { code?: string }).code ?? (e.error as { code?: string } | undefined)?.code ?? "");
+  const said = e.message.replace(/^429\s*/, "");
+  if (code === "insufficient_quota" || /quota|billing|credit/i.test(said)) {
+    return `OpenAI says the key in OPENAI_API_KEY has no quota (“${said}”). Credits belong to one organization and project: check the key was made in the same organization as your credits (platform.openai.com → Settings → Billing), and that its project has no monthly budget limit that's been reached (Settings → Limits). If you just added credits, it can take a few minutes.`;
+  }
+  return `OpenAI's speed limit for your account was hit: too many ${what} in a minute (new accounts get only a few; one designed image can take several). The app already waited and tried again. Wait a minute, then make it again; the limit rises automatically as your account's usage tier goes up (platform.openai.com → Settings → Limits). OpenAI said: “${said}”`;
+}
+
 function friendlyApiError(e: unknown): Error {
   if (e instanceof UserFacingError) return e;
   if (e instanceof ForbiddenError) return new UserFacingError(e.message);
   if (e instanceof OpenAI.AuthenticationError) return new UserFacingError("OpenAI rejected the key. Check OPENAI_API_KEY in .env.local.");
-  if (e instanceof OpenAI.RateLimitError) return new UserFacingError("OpenAI is rate-limiting or your credit has run out. Check your OpenAI billing, then try again.");
+  if (e instanceof OpenAI.RateLimitError) return new UserFacingError(openAiLimitMessage(e, "requests"));
   if (e instanceof OpenAI.NotFoundError) return new UserFacingError(`OpenAI model "${OPENAI_TEXT_MODEL}" isn't available on your account. Set OPENAI_MODEL in .env.local (e.g. gpt-5.5 or gpt-4.1).`);
   if (e instanceof OpenAI.BadRequestError) return new UserFacingError(`OpenAI rejected the request: ${e.message}`);
   if (e instanceof OpenAI.APIConnectionError) {
@@ -276,7 +289,8 @@ async function openaiStructuredCall<S extends z.ZodType>(call: StructuredCall<S>
   if (!process.env.OPENAI_API_KEY) {
     throw new UserFacingError("No AI key is set. Add OPENAI_API_KEY (or ANTHROPIC_API_KEY) to .env.local and restart the app.");
   }
-  openaiClient ??= new OpenAI();
+  // Waits and retries on OpenAI's per-minute limits (honouring its retry-after) before giving up.
+  openaiClient ??= new OpenAI({ maxRetries: 4 });
   const { $schema: _ignored, ...rawSchema } = zod.toJSONSchema(call.schema) as Record<string, unknown>;
   void _ignored;
   const jsonSchema = toOpenAIStrictSchema(rawSchema) as Record<string, unknown>;

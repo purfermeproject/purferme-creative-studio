@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import OpenAI, { toFile } from "openai";
 import sharp from "sharp";
 import { db, schema } from "@/db";
-import { UserFacingError, isMock } from "./ai";
+import { UserFacingError, isMock, openAiLimitMessage } from "./ai";
 import { storeAsset } from "./asset-store";
 import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
@@ -30,7 +30,8 @@ function getClient() {
   if (!process.env.OPENAI_API_KEY) {
     throw new UserFacingError("Images need an OpenAI key. Add OPENAI_API_KEY to .env.local and restart the app.");
   }
-  client ??= new OpenAI();
+  // Image limits per minute are low on new accounts: wait and retry (honouring retry-after) before giving up.
+  client ??= new OpenAI({ maxRetries: 5 });
   return client;
 }
 
@@ -347,7 +348,7 @@ export async function generateImage(opts: {
     } catch (e) {
       if (e instanceof UserFacingError) throw e;
       if (e instanceof OpenAI.AuthenticationError) throw new UserFacingError("OpenAI rejected the key. Check OPENAI_API_KEY in .env.local.");
-      if (e instanceof OpenAI.RateLimitError) throw new UserFacingError("OpenAI is rate-limiting or your credit has run out. Check your OpenAI billing, then try again.");
+      if (e instanceof OpenAI.RateLimitError) throw new UserFacingError(openAiLimitMessage(e, "images"));
       if (e instanceof OpenAI.NotFoundError) throw new UserFacingError(`Image model "${IMAGE_MODEL}" isn't available on your OpenAI account. Set OPENAI_IMAGE_MODEL (e.g. gpt-image-1) in .env.local.`);
       if (e instanceof OpenAI.BadRequestError) throw new UserFacingError(`OpenAI refused this image: ${e.message}`);
       if (e instanceof OpenAI.APIConnectionError) {
