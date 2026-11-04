@@ -11,6 +11,7 @@ import { buildDesignedPrompt, designWords, specFromSlide } from "@/lib/designed-
 import { choosePackViews, loadPackViews, loadProductShots } from "@/lib/pack-views-server";
 import { sceneLayout } from "@/lib/ad-layout";
 import { comparisonScene, insetOn, mainImage, panelOn, propsCutout, tilesOn } from "@/lib/listing-images";
+import { isCutout } from "@/lib/pack-composite";
 import { isMock } from "@/lib/ai";
 import { isProductShot, isScenePhoto, type PackView } from "@/lib/pack-views";
 import { compositePack } from "@/lib/pack-composite";
@@ -74,8 +75,25 @@ export async function POST(req: Request) {
             // Only a photo of the real product itself stands beside the pack (never another pack photo).
             photo = chosen && isProductShot(chosen.label) ? chosen.data : null;
           }
+          // On pure white, only a clean cut-out looks right: a cookie photo with its background (a desk, a hand)
+          // would sit there as a rectangle. Use the first cut-out; say so if there's none.
+          const shots = await loadProductShots(product.photoAssetIds, 12);
+          if (photo && !(await isCutout(photo).catch(() => false))) {
+            stage("The chosen cookie photo still has its background, so it's left off the white main image");
+            photo = null;
+          }
           // Our real cookies (refined photo) beside the pack, unless the team picked another photo.
-          if (!photo) photo = (await loadProductShots(product.photoAssetIds, 1))[0]?.data ?? null;
+          if (!photo) {
+            for (const s of shots) {
+              if (await isCutout(s.data).catch(() => false)) {
+                photo = s.data;
+                break;
+              }
+            }
+            if (!photo && shots.length) {
+              stage("Your cookie photos still have their backgrounds, so the main image shows the pack alone. Upload the cookies on a plain white surface (Settings → Products → Our real product) to add them.");
+            }
+          }
           let props: Buffer | null = null;
           if (!isMock() || process.env.OPENAI_API_KEY) {
             const ingredients = scenePropsFor(product).filter((x) => !/chai|coffee/i.test(x));

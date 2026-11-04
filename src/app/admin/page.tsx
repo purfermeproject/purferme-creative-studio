@@ -316,6 +316,11 @@ export default async function AdminPage() {
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={`/api/assets/${aid}`} alt={photoInfo.get(aid)?.label} className="h-28 w-28 rounded-lg border border-line bg-surface-2 object-contain" />
                             <p className="truncate">{photoInfo.get(aid)?.label?.replace("Our product: ", "")}</p>
+                            {photoInfo.get(aid)?.label?.includes("(background removed)") ? (
+                              <p className="text-leaf">✓ Used on the main image</p>
+                            ) : (
+                              <p className="text-amber">Has a background: reference only, not on the white main image</p>
+                            )}
                             <ActionForm action={removeProductPhoto} submitLabel="Remove" submitClassName="text-xs font-semibold text-red underline">
                               <input type="hidden" name="id" value={p.id} />
                               <input type="hidden" name="assetId" value={aid} />

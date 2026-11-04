@@ -455,7 +455,9 @@ export async function uploadProductShot(_: ActionState, fd: FormData): Promise<A
     const asset = await storeAsset({ data: refined, mime: "image/png", kind: "product-photo", label: `${PRODUCT_SHOT_PREFIX}${what}${lifted ? " (background removed)" : " (refined)"}`, user });
     await db.update(schema.products).set({ photoAssetIds: [...product.ids, asset.id], updatedAt: new Date() }).where(eq(schema.products.id, id));
     refresh();
-    return ok(lifted ? "Added: background removed and refined." : "Added and refined (the background wasn't plain, so it was kept).");
+    return lifted
+      ? ok("Added: background removed and refined.")
+      : ok("Added, but its background couldn't be removed (it isn't plain), so it's only used as a reference for how the cookies look, not beside the pack on the white main image. For that, upload the cookies on a plain white surface.");
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Couldn't add the photo.");
   }
