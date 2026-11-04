@@ -147,7 +147,8 @@ export async function POST(req: Request) {
         const v = viewOf(r.label);
         if (v && !byView.has(v)) byView.set(v, { ref: { data: Buffer.from(r.data, "base64"), mime: r.mime, name: v.replace(/\W+/g, "-"), label: r.label }, assetId: r.id });
       }
-      if (!byView.has("front")) byView.set("front", { ref: reference, assetId: packAssetId });
+      // The pack photo in Settings (or the one uploaded with the brief) is always the front.
+      byView.set("front", { ref: reference, assetId: packAssetId });
       // How the person uses the pack in this moment (so it is part of the story), and the sides that suit it.
       const pick = await choosePackViews(sceneDesc, [...byView.keys()], user, { hook: input.concept.hook, productName: product.name });
       packAction = pick.action;

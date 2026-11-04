@@ -87,7 +87,8 @@ export async function loadPackViews(
       if (v && !byView.has(v)) byView.set(v, { ref: { data: Buffer.from(r.data, "base64"), mime: r.mime, name: v.replace(/\W+/g, "-"), label: r.label }, assetId: r.id });
     }
   }
-  if (!byView.has("front")) byView.set("front", { ref: main, assetId: mainAssetId });
+  // The pack photo in Settings is always the front: replacing it changes every image straight away.
+  byView.set("front", { ref: main, assetId: mainAssetId });
   return byView;
 }
 

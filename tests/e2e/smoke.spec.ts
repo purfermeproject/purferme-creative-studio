@@ -1171,3 +1171,38 @@ test("Basics: 404 page, public privacy and terms, backups, errors list, onboardi
     expect(overflow, `${path} scrolls sideways on a phone`).toBeLessThanOrEqual(1);
   }
 });
+
+test("A pack photo can be replaced: the new one is shown, cropped from and used for images", async ({ page }) => {
+  const sharp = (await import("sharp")).default;
+  // Two different packs on a plain backdrop (red, then green), as phone photos would be.
+  const shot = async (colour: string) =>
+    sharp({ create: { width: 900, height: 900, channels: 3, background: "#e9e4da" } })
+      .composite([{ input: await sharp({ create: { width: 360, height: 520, channels: 3, background: colour } }).png().toBuffer(), left: 270, top: 190 }])
+      .jpeg()
+      .toBuffer();
+  const centre = async (url: string) => {
+    const buf = await (await page.request.get(url)).body();
+    const { data, info } = await sharp(buf).flatten({ background: "#ffffff" }).resize(50, 50, { fit: "fill" }).raw().toBuffer({ resolveWithObject: true });
+    const i = (25 * info.width + 25) * info.channels;
+    return [data[i], data[i + 1], data[i + 2]];
+  };
+  await signIn(page);
+  await page.goto("/admin");
+  const card = page.getByTestId("product-pbu");
+  await card.locator("summary").click();
+  for (const [colour, check] of [["#d02020", (c: number[]) => c[0] > 150 && c[1] < 80], ["#20a040", (c: number[]) => c[1] > 120 && c[0] < 80]] as const) {
+    await card.getByLabel(/Original pack photo/).setInputFiles({ name: "pack.jpg", mimeType: "image/jpeg", buffer: await shot(colour) });
+    await card.getByRole("button", { name: "Upload pack photo" }).click();
+    await expect(card.getByText(/Pack photo saved|Pack image uploaded/)).toBeVisible({ timeout: 30_000 });
+    await expect(async () => {
+      const src = await card.getByTestId("pack-preview-pbu").getAttribute("src");
+      expect(check(await centre(src!))).toBe(true);
+    }).toPass({ timeout: 15_000 });
+  }
+  // Adjusting the crop starts from the new (green) photo, not the first one.
+  await card.getByRole("button", { name: "Adjust pack crop" }).click();
+  const source = card.getByRole("img", { name: /photo to crop/ });
+  await expect(source).toBeVisible({ timeout: 30_000 });
+  const c = await centre((await source.getAttribute("src"))!);
+  expect(c[1] > 120 && c[0] < 80).toBe(true);
+});

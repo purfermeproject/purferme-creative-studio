@@ -13,8 +13,14 @@ export async function packSource(productId: string) {
   const photos = p.photoAssetIds.length
     ? await db.select({ id: schema.assets.id, label: schema.assets.label }).from(schema.assets).where(inArray(schema.assets.id, p.photoAssetIds))
     : [];
-  const original = photos.find((a) => a.label.startsWith("Pack photo (original"));
-  return { product: p, sourceId: original?.id ?? assetIdOf(p.packImageUrl) };
+  // The newest original (photos are kept in upload order), so a replaced pack is cropped from the new photo.
+  const byId = new Map(photos.map((a) => [a.id, a]));
+  const original = [...p.photoAssetIds].reverse().map((id) => byId.get(id)).find((a) => a?.label.startsWith("Pack photo (original"));
+  // The current pack's own source photo wins, if it has one.
+  const current = assetIdOf(p.packImageUrl);
+  const [cur] = current ? await db.select({ source: schema.assets.sourceAssetIds }).from(schema.assets).where(eq(schema.assets.id, current)) : [];
+  const source = cur?.source?.find((id) => p.photoAssetIds.includes(id));
+  return { product: p, sourceId: source ?? original?.id ?? current };
 }
 
 /** Crops the pack out of a source photo and makes it the product's pack photo. The source is kept. */
