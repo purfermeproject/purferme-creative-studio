@@ -76,3 +76,9 @@ export function packActionByRules(scene: string, hook = ""): string {
 /** Photos of the real product itself (cookies out of the pack), refined on upload and used as the look of the food. */
 export const PRODUCT_SHOT_PREFIX = "Our product: ";
 export const isProductShot = (label: string | null | undefined) => Boolean(label?.startsWith(PRODUCT_SHOT_PREFIX));
+
+/** Photos of the pack itself (its original upload, a crop, or a side): never a scene to build a slide on. */
+export const isPackPhoto = (label: string | null | undefined) => Boolean(viewOf(label) || /^(pack photo|original pack)/i.test(label ?? ""));
+
+/** A real lifestyle photo (a desk with chai, a tiffin, a kitchen): the only kind that can be a slide's background. */
+export const isScenePhoto = (label: string | null | undefined) => !isPackPhoto(label) && !isProductShot(label);

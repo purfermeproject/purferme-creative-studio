@@ -12,7 +12,7 @@ import { choosePackViews, loadPackViews, loadProductShots } from "@/lib/pack-vie
 import { sceneLayout } from "@/lib/ad-layout";
 import { comparisonScene, insetOn, mainImage, panelOn, propsCutout, tilesOn } from "@/lib/listing-images";
 import { isMock } from "@/lib/ai";
-import type { PackView } from "@/lib/pack-views";
+import { isProductShot, isScenePhoto, type PackView } from "@/lib/pack-views";
 import { compositePack } from "@/lib/pack-composite";
 import sharp from "sharp";
 import { mustShow, sceneSpec, slideStyle } from "@/lib/scene-spec";
@@ -70,7 +70,9 @@ export async function POST(req: Request) {
           let photo: Buffer | null = null;
           if (parsed.data.productPhotoId) {
             if (!product.photoAssetIds.includes(parsed.data.productPhotoId)) throw new UserFacingError("That photo isn't one of this product's photos.");
-            photo = (await loadReference(`/api/assets/${parsed.data.productPhotoId}`))?.data ?? null;
+            const chosen = await loadReference(`/api/assets/${parsed.data.productPhotoId}`);
+            // Only a photo of the real product itself stands beside the pack (never another pack photo).
+            photo = chosen && isProductShot(chosen.label) ? chosen.data : null;
           }
           // Our real cookies (refined photo) beside the pack, unless the team picked another photo.
           if (!photo) photo = (await loadProductShots(product.photoAssetIds, 1))[0]?.data ?? null;
@@ -122,6 +124,14 @@ export async function POST(req: Request) {
         const blocked = checks.checks.filter((c) => c.level === "block");
         if (blocked.length) throw new UserFacingError(`Slide ${slot} can't be made yet: ${blocked.map((c) => c.text).join("; ")}. Edit the words, then try again.`);
 
+        // The team's own photo is used only if it's a real scene (a desk with chai, a kitchen); a pack, side or
+        // nutrition photo as a background makes a bad slide, so the AI makes the scene instead.
+        let ownScene: string | null = null;
+        if (slide.kind !== "comparison" && slide.photoId && product.photoAssetIds.includes(slide.photoId)) {
+          const picked = await loadReference(`/api/assets/${slide.photoId}`);
+          if (picked && isScenePhoto(picked.label)) ownScene = slide.photoId;
+          else stage("The photo picked for this slide is a pack or panel photo, not a scene, so the AI makes the scene from the description instead");
+        }
         const panelViews = PANEL_VIEW[slide.kind];
         if (panelViews) {
           // A side, the back, the nutrition table or the ingredients: the team's real photo, never redrawn.
@@ -168,7 +178,7 @@ export async function POST(req: Request) {
           return;
         }
 
-        if (parsed.data.designed && !(slide.kind !== "comparison" && slide.photoId)) {
+        if (parsed.data.designed && !ownScene) {
           // Each slide in its own world: settings already used by the earlier slides are skipped.
           const used: string[] = [];
           const spare = [...product.greenClaims.filter((c) => c.split(/\s+/).length <= 4), ...productFocus(product).callouts];
@@ -237,8 +247,7 @@ export async function POST(req: Request) {
         const L = sceneLayout(S, layout);
         const props = scenePropsFor(product);
         const packOpts = { data: pack.data, position: "left" as const, scale: L.pack.scale, bottom: L.pack.bottom, liftBackdrop: !pack.label?.includes("cropped") };
-        const own = slide.kind !== "comparison" && slide.photoId ? slide.photoId : null;
-        if (own && !product.photoAssetIds.includes(own)) throw new UserFacingError("The photo chosen for this slide isn't one of this product's photos any more. Pick another.");
+        const own = ownScene;
         const photo = async (prompt: string, target: { w: number; h: number }, label: string, extra: Partial<Parameters<typeof generateImage>[0]> = {}) => {
           const made = await generateImage({ prompt, target, reference: null, user, label, noWriting: true, onStage: stage, ...extra });
           if (made.warning) send({ type: "stage", text: made.warning });

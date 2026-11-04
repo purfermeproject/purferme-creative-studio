@@ -43,3 +43,13 @@ describe("pack views: words that only look similar", () => {
     expect(pickViewsByRules("breakfast ready on the table", ["front", "back", "angle"])).toEqual(["front", "angle"]);
   });
 });
+
+import { isPackPhoto, isScenePhoto } from "@/lib/pack-views";
+
+describe("which photos can be a slide's background", () => {
+  it("never a pack, side, panel or product cut-out; a real scene yes", () => {
+    for (const l of ["Pack view: nutrition panel", "Pack view: left side", "Pack photo (original background)", "Original pack (cropped)", "Our product: cookies (background removed)"]) expect(isScenePhoto(l)).toBe(false);
+    expect(isScenePhoto("Desk with chai")).toBe(true);
+    expect(isPackPhoto("Pack view: back")).toBe(true);
+  });
+});

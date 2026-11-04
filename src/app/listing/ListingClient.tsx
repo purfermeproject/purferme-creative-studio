@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { finishMain, finishSlide } from "@/components/listing-render";
-import { isProductShot, viewOf } from "@/lib/pack-views";
+import { isProductShot, isScenePhoto, viewOf } from "@/lib/pack-views";
 import type { BrandKit } from "@/lib/brand-kit";
 import { LISTING_LABELS, LISTING_PLATFORMS, LISTING_SIZE, SLIDE_KIND_LABELS, SLIDE_KINDS, type ListingPlan, type ListingPlatform, type Slide, type SlideCheck } from "@/lib/listing-plan";
 import { readNdjson } from "@/lib/ndjson";
@@ -188,7 +188,11 @@ function PlanEditor({
   const [working, setWorking] = useState<string | null>(null);
   const [stages, setStages] = useState<Record<string, string[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [photoId, setPhotoId] = useState(product.photos[0]?.id ?? "");
+  // Beside the pack on the main image: only photos of the real product itself; by default the first of them.
+  const shots = product.photos.filter((p) => isProductShot(p.label));
+  // A slide's background can only be a real lifestyle photo, never a pack or panel photo.
+  const scenes = product.photos.filter((p) => isScenePhoto(p.label));
+  const [photoId, setPhotoId] = useState("");
   /** designed = the AI lays out each slide like a finished brand post, each in its own setting; clean = photo + words added by the app. */
   const [look, setLook] = useState<"designed" | "clean">("designed");
   /** Claim labels on the main image: fine on Shopify; Amazon and Flipkart don't allow text on the main image. */
@@ -340,19 +344,19 @@ function PlanEditor({
               ) : null}
             </span>
           </label>
-          {product.photos.length ? (
+          {shots.length > 1 ? (
             <label className="block max-w-sm">
               <span className="label">Beside the pack</span>
               <select className="input" value={photoId} onChange={(e) => setPhotoId(e.target.value)}>
-                <option value="">Our real cookies (if uploaded), else just the pack</option>
-                {product.photos.map((p) => (
+                <option value="">Our real cookies (first photo)</option>
+                {shots.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
                   </option>
                 ))}
               </select>
             </label>
-          ) : (
+          ) : shots.length ? null : (
             <p className="hint">Add photos of your real cookies in Settings → Products → Our real product: they stand beside the pack here and every image uses them.</p>
           )}
           <Stages list={stages.main} error={errors.main} />
@@ -414,7 +418,7 @@ function PlanEditor({
                         onChange={(e) => setSlide(i, { photoId: e.target.value || undefined })}
                       >
                         <option value="">AI makes it from the description</option>
-                        {product.photos.map((p) => (
+                        {scenes.map((p) => (
                           <option key={p.id} value={p.id}>
                             Your photo: {p.label}
                           </option>
@@ -430,7 +434,7 @@ function PlanEditor({
                       </label>
                     )}
                     <SceneSummary scene={s.scene} ownPhoto={Boolean(s.photoId)} />
-                    {!product.photos.length ? (
+                    {!scenes.length ? (
                       <p className="hint">Real photos beat AI: add lifestyle shots (a tiffin, a desk with chai, a kitchen) under More product photos in Settings → Products, then pick one here.</p>
                     ) : null}
                   </div>
