@@ -145,8 +145,6 @@ export async function structuredCall<S extends z.ZodType>(call: StructuredCall<S
     return call.schema.parse(value);
   }
 
-  // Paid calls only: a per-person hourly limit (sample mode is free).
-  await (await import("./rate-limit")).checkRate(call.meta.user, "ai");
   if (textProvider() === "openai") return openaiStructuredCall(call);
 
   const anthropic = getClient();

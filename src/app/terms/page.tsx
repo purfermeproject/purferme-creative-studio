@@ -13,7 +13,6 @@ export default function Terms() {
         <li>Access is personal: use your own sign-in and don&apos;t share it. Admins decide who gets in and what each person can do.</li>
         <li>AI output is a draft. Every claim, number and image must be checked by a person before it is published; the compliance checks support, but don&apos;t replace, review by a food-regulatory consultant.</li>
         <li>Upload only photos and material the company owns or is allowed to use. Don&apos;t upload customers&apos; personal data.</li>
-        <li>Use the AI fairly: there are hourly limits per person to protect the budget.</li>
         <li>What you create here belongs to the company.</li>
         <li>The studio is provided as is for internal use; features may change.</li>
       </ul>
