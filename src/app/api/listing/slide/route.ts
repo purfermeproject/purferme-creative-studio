@@ -81,26 +81,38 @@ export async function POST(req: Request) {
             const ingredients = scenePropsFor(product).filter((x) => !/chai|coffee/i.test(x));
             if (ingredients.length) {
               stage(`Making small piles of the real ingredients on white: ${ingredients.join(", ")}`);
-              const made = await generateImage({
-                prompt: buildListingPhotoPrompt({
-                  description: `small, neat, appetising piles of ${ingredients.join(", ")} in one low row from left to right, on a pure white seamless background, soft even studio light, seen from the front, slightly above; nothing else at all`,
-                  shape: "wide",
-                  style: brand.imageStyle,
-                }),
-                target: { w: 1536, h: 1024 },
-                reference: null,
-                user,
-                label: "Listing main props",
-                photoOnly: true,
-                noWriting: true,
-                onStage: stage,
-              });
-              const bytes = await loadAsset(made.id);
-              props = bytes ? await propsCutout(Buffer.from(bytes.dataBase64, "base64")) : null;
+              // Nice to have: if this step fails, the main image is made without the piles rather than not at all.
+              try {
+                const made = await generateImage({
+                  prompt: buildListingPhotoPrompt({
+                    description: `small, neat, appetising piles of ${ingredients.join(", ")} in one low row from left to right, on a pure white seamless background, soft even studio light, seen from the front, slightly above; nothing else at all`,
+                    shape: "wide",
+                    style: brand.imageStyle,
+                  }),
+                  target: { w: 1536, h: 1024 },
+                  reference: null,
+                  user,
+                  label: "Listing main props",
+                  photoOnly: true,
+                  noWriting: true,
+                  onStage: stage,
+                });
+                const bytes = await loadAsset(made.id);
+                props = bytes ? await propsCutout(Buffer.from(bytes.dataBase64, "base64")) : null;
+                if (!props) stage("Couldn't cut the ingredient piles out cleanly, so the main image is made without them");
+              } catch (e) {
+                console.error("main image ingredient piles failed", e);
+                stage(`Couldn't make the ingredient piles (${errorMessage(e)}), so the main image is made without them`);
+              }
             }
           }
           stage(`Placing your real pack${photo ? " and your real cookies" : ""}${props ? " with the ingredients" : ""} on pure white (${S}×${S})`);
-          const data = await mainImage(pack.data, S, photo, props);
+          const data = await mainImage(pack.data, S, photo, props).catch((e) => {
+            // Never lose the main image to the extras: fall back to the pack and cookies, then the pack alone.
+            console.error("main image with extras failed", e);
+            stage("Something in the extras failed, so the main image is made with your pack and cookies only");
+            return mainImage(pack.data, S, photo, null).catch(() => mainImage(pack.data, S, null, null));
+          });
           const a = await storeAsset({ data, mime: "image/jpeg", kind: "listing", label: "Listing main", user, size: { w: S, h: S }, sourceAssetIds: [] });
           const claims = parsed.data.mainClaims ? (row?.plan.main.claims ?? []).filter(Boolean).slice(0, 3) : [];
           if (claims.length) {

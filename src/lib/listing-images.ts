@@ -194,5 +194,7 @@ export async function panelOn(bg: Buffer, photo: Buffer, S: number, centred = fa
 /** Ingredient props cut out of a photo on white, for the main image (null if the backdrop can't be removed). */
 export async function propsCutout(photo: Buffer): Promise<Buffer | null> {
   const cut = await removeBackdrop(photo).catch(() => null);
-  return cut ? sharp(cut.png).trim({ threshold: 1 }).png().toBuffer() : null;
+  if (!cut) return null;
+  // trim() throws on an image with nothing left in it.
+  return sharp(cut.png).trim({ threshold: 1 }).png().toBuffer().catch(() => null);
 }
