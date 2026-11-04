@@ -9,6 +9,7 @@ import { mockImageSvg } from "./image-prompt";
 import { generationSizeFor } from "./image-specs";
 import { compositePack as composite, layoutAd, PackPhotoError, paintAroundInputs, preparePack, type PackPosition, type PackScale } from "./pack-composite";
 import { checkDesignText } from "./designed-ad-server";
+import { checkRate } from "./rate-limit";
 import { checkPackMatch, detectPackBox, findInventedPacks, findMissing, type Box } from "./pack-detect";
 
 /** Composite, turning an unusable pack photo into a message the team can act on. */
@@ -137,6 +138,7 @@ export async function generateImage(opts: {
   let warning = "";
 
   // With an OpenAI key, images are always real, even while text generation is in mock mode.
+  if (!isMock() || process.env.OPENAI_API_KEY) await checkRate(opts.user, "image");
   if (isMock() && !process.env.OPENAI_API_KEY) {
     mime = "image/svg+xml";
     data = Buffer.from(mockImageSvg(`${opts.target.w}x${opts.target.h}`, opts.label, { drawPack: !opts.lockedPack && !opts.layoutPack && !opts.photoOnly })).toString("base64");

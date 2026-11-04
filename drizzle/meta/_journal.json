@@ -141,6 +141,13 @@
       "when": 1793510670387,
       "tag": "0019_listing_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793764056221,
+      "tag": "0020_app_errors",
+      "breakpoints": true
     }
   ]
 }

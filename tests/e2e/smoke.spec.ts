@@ -1134,3 +1134,40 @@ test("Roles: a viewer can look but not create; the server refuses too", async ({
   await expect(v.getByRole("button", { name: "Analyse again" })).toHaveCount(0);
   await ctx.close();
 });
+
+test("Basics: 404 page, public privacy and terms, backups, errors list, onboarding, and no sideways scrolling on a phone", async ({ page }) => {
+  // Privacy and terms can be read before signing in.
+  await page.goto("/privacy");
+  await expect(page.getByTestId("privacy")).toContainText("What we store");
+  await page.goto("/terms");
+  await expect(page.getByTestId("terms")).toContainText("AI output is a draft");
+
+  await signIn(page);
+  const missing = await page.goto("/no-such-page");
+  expect(missing?.status()).toBe(404);
+  await expect(page.getByTestId("not-found")).toContainText("There's no page here");
+
+  await page.goto("/create");
+  await expect(page.getByTestId("setup-checklist")).toContainText("Getting started");
+
+  const backup = await page.request.get("/api/admin/backup");
+  expect(backup.status()).toBe(200);
+  const data = await backup.json();
+  expect(data.products.length).toBeGreaterThan(0);
+  expect(data.assets[0]).not.toHaveProperty("dataBase64");
+
+  // A browser error is recorded and listed for the admins.
+  await page.request.post("/api/client-error", { data: { message: "Test error from e2e", where: "/create" } });
+  await page.goto("/admin#errors");
+  await expect(page.getByTestId("error-list")).toContainText("Test error from e2e");
+
+  await page.goto("/account");
+  await expect(page.getByTestId("account")).toContainText("Delete your account");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ["/create", "/library", "/listing", "/admin", "/account", "/privacy"]) {
+    await page.goto(path);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, `${path} scrolls sideways on a phone`).toBeLessThanOrEqual(1);
+  }
+});

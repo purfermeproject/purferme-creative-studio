@@ -7,7 +7,7 @@ import { PackViewsUploader } from "./PackViewsUploader";
 import { isProductShot, PACK_VIEWS, VIEW_NAMES, viewOf } from "@/lib/pack-views";
 import { getAllPlatformRules, getBrand, getProducts, getTerms } from "@/lib/data";
 import { PLATFORMS, PLATFORM_LABELS, PRODUCT_STATUSES, ROLES } from "@/lib/types";
-import { asc } from "drizzle-orm";
+import { asc, desc } from "drizzle-orm";
 import { currentUser, roleOf } from "@/auth";
 import { db, schema } from "@/db";
 import { formatEvidence, formatUrls } from "@/lib/product-knowledge";
@@ -86,6 +86,8 @@ export default async function AdminPage() {
     db.select().from(schema.userRoles).orderBy(asc(schema.userRoles.email)),
   ]);
   const myRole = user ? await roleOf(user) : "viewer";
+  const canAdmin = can(myRole, "roles");
+  const recentErrors = canAdmin ? await db.select().from(schema.appErrors).orderBy(desc(schema.appErrors.createdAt)).limit(15).catch(() => []) : [];
   const photoInfo = new Map((await assetInfo(products.flatMap((p) => p.photoAssetIds))).map((a) => [a.id, a]));
   const isAdmin = can(myRole, "settings");
   const blocked = products.filter((p) => p.status === "blocked");
@@ -599,6 +601,42 @@ export default async function AdminPage() {
           ))}
         </ActionForm>
       </Section>
+
+      {canAdmin ? (
+        <Section id="backups" title="Backups" intro="Your database host keeps automatic point-in-time backups (Neon: restore any moment in the history window from its console). Download a copy of the team's work as well, e.g. once a week.">
+          <div className="card flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-ink-soft">One JSON file: products, brand, rules, claims terms, creatives and versions, listing plans, results and roles. Images are listed, not included (the database backup holds them).</p>
+            <a href="/api/admin/backup" className="btn-secondary" download data-testid="backup-download">
+              Download a backup
+            </a>
+          </div>
+        </Section>
+      ) : null}
+
+      {canAdmin ? (
+        <Section id="errors" title="Errors" intro="Problems people hit, from the server and their browsers, newest first. The reference on an error page matches the one here.">
+          {recentErrors.length ? (
+            <ul className="card divide-y divide-line text-sm" data-testid="error-list">
+              {recentErrors.map((e) => (
+                <li key={e.id} className="space-y-0.5 py-2">
+                  <p>
+                    <span className="chip mr-2">{e.source}</span>
+                    <strong>{e.message.slice(0, 200)}</strong>
+                  </p>
+                  <p className="text-xs text-ink-soft">
+                    {e.where} · {e.user || "unknown user"} · {e.createdAt.toLocaleString("en-IN")}
+                    {e.digest ? ` · ref ${e.digest}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="card text-sm text-ink-soft" data-testid="error-list-empty">
+              No errors recorded.
+            </p>
+          )}
+        </Section>
+      ) : null}
 
       <Section
         id="roles"

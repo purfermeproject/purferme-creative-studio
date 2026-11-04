@@ -20,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
     "@auth/drizzle-adapter": "^1.11.3",
+    "@vercel/analytics": "2.0.1",
     "@vercel/blob": "^2.8.1",
     "drizzle-orm": "^0.45.3",
     "jszip": "^3.10.2",

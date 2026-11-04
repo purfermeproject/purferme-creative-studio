@@ -1,3 +1,5 @@
+import { SetupChecklist, type SetupStep } from "@/components/SetupChecklist";
+import { isProductShot, viewOf } from "@/lib/pack-views";
 import { desc, eq } from "drizzle-orm";
 import { currentUser, roleOf } from "@/auth";
 import { Workspace } from "@/components/workspace/Workspace";
@@ -135,7 +137,18 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       : null;
   const recent: RecentCreative[] = recentRows.map((r) => ({ ...r.c, productName: r.productName ?? "", updatedAt: r.c.updatedAt.toISOString() }));
 
+  // First-run guide: what makes images come out right.
+  const labels = [...photoLabels.values()];
+  const setup: SetupStep[] = [
+    { label: "Add your logo and brand colours", done: Boolean(brand.kit.logoUrl), href: "/admin#brand-kit", why: "on every image" },
+    { label: "Upload each product's pack photo", done: products.some((p) => p.packImageUrl), href: "/admin#products", why: "the real pack in every image" },
+    { label: "Add photos of your real cookies", done: labels.some((l) => isProductShot(l)), href: "/admin#products", why: "so the food looks like yours" },
+    { label: "Upload the pack from every side", done: labels.filter((l) => viewOf(l)).length >= 3, href: "/admin#products", why: "sides, back and nutrition for listings" },
+    { label: "Fill in ingredients and nutrition", done: products.some((p) => p.ingredients.trim() && p.nutrition.trim()), href: "/admin#products", why: "the only facts images may quote" },
+  ];
   return (
+    <>
+    <SetupChecklist steps={setup} />
     <Workspace
       initialPlatform={platform}
       products={cards}
@@ -158,5 +171,6 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
       initialBrief={initialBrief}
       initialCompetitorId={competitorRows.some((c) => c.id === competitorParam) ? competitorParam : ""}
     />
+    </>
   );
 }

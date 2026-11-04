@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import Link from "next/link";
+import { Analytics } from "@vercel/analytics/next";
 import { authDisabled, currentUser, roleOf, signOut } from "@/auth";
 import { ROLE_HINTS, ROLE_LABELS } from "@/lib/roles";
 import { Nav } from "@/components/Nav";
@@ -75,10 +76,25 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           {children}
         </main>
         <footer className="mx-auto max-w-[90rem] px-4 pb-10 text-sm text-ink-soft sm:px-6">
-          <p className="border-t border-line pt-4">
-            Compliance checks support, but don&apos;t replace, review by a food-regulatory consultant.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+            <p>Compliance checks support, but don&apos;t replace, review by a food-regulatory consultant.</p>
+            <nav className="flex gap-4" aria-label="Legal and account">
+              <Link href="/privacy" className="hover:text-ink">
+                Privacy
+              </Link>
+              <Link href="/terms" className="hover:text-ink">
+                Terms
+              </Link>
+              {email ? (
+                <Link href="/account" className="hover:text-ink">
+                  Your account
+                </Link>
+              ) : null}
+            </nav>
+          </div>
         </footer>
+        {/* Page-visit counts, cookie-free; only reports when deployed on Vercel with Web Analytics switched on. */}
+        <Analytics />
       </body>
     </html>
   );

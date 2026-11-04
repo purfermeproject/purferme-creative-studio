@@ -77,6 +77,8 @@ const config: NextAuthConfig = {
       const { pathname } = request.nextUrl;
       if (authDisabled) return true;
       if (pathname.startsWith("/login") || pathname.startsWith("/api/auth")) return true;
+      // The privacy policy and terms are public, so they can be read before signing in.
+      if (pathname === "/privacy" || pathname === "/terms") return true;
       return isAllowedEmail(auth?.user?.email);
     },
   },

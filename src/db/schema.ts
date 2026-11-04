@@ -404,3 +404,15 @@ export const listingPlans = pgTable("listing_plans", {
   updatedBy: text("updated_by").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("listing_plans_product_platform_idx").on(t.productId, t.platform)]);
+
+/** Errors from the server and the browser, so admins can see what went wrong (Settings → Errors). */
+export const appErrors = pgTable("app_errors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  source: text("source").notNull(),
+  where: text("where_at").notNull().default(""),
+  message: text("message").notNull(),
+  detail: text("detail").notNull().default(""),
+  user: text("user").notNull().default(""),
+  digest: text("digest").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

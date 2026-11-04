@@ -76,10 +76,10 @@ export function BrandKitEditor({ initial }: { initial: BrandKit }) {
 
   return (
     <div className="card space-y-6" data-testid="brand-kit">
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
         <div className="space-y-2">
           <p className="label">Logo</p>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <div className="flex size-24 items-center justify-center rounded-lg border border-dashed border-line bg-[repeating-conic-gradient(#ccc_0%_25%,#fff_0%_50%)] bg-[length:16px_16px]">
               {kit.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -88,11 +88,12 @@ export function BrandKitEditor({ initial }: { initial: BrandKit }) {
                 <span className="text-xs text-neutral-600">No logo</span>
               )}
             </div>
-            <div className="space-y-2 text-sm">
+            <div className="min-w-0 space-y-2 text-sm">
               <input
                 type="file"
                 accept="image/png,image/webp"
                 aria-label="Upload logo"
+                className="max-w-full"
                 onChange={async (e) => {
                   const f = e.target.files?.[0];
                   if (!f) return;
@@ -117,7 +118,7 @@ export function BrandKitEditor({ initial }: { initial: BrandKit }) {
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 [&>*]:min-w-0">
           {(Object.keys(COLOR_LABELS) as (keyof BrandKit["colors"])[]).map((key) => (
             <label key={key} className="block text-sm">
               <span className="mb-1 block font-semibold">{COLOR_LABELS[key]}</span>
@@ -139,7 +140,7 @@ export function BrandKitEditor({ initial }: { initial: BrandKit }) {
           ))}
         </div>
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 [&>*]:min-w-0">
         <FontPicker label="Headline font" value={kit.headingFont} onChange={(f) => setKit((k) => ({ ...k, headingFont: f }))} />
         <FontPicker label="Body font" value={kit.bodyFont} onChange={(f) => setKit((k) => ({ ...k, bodyFont: f }))} />
       </div>

@@ -40,6 +40,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         Ad concepts for Meta, Amazon and Flipkart, checked against the claims library before anything goes live. Team members only.
       </p>
 
+      {params.deleted ? (
+        <p role="status" className="mt-6 rounded-xl border border-leaf/30 bg-green-bg p-4 text-leaf" data-testid="account-deleted">
+          Your account was deleted and you&apos;re signed out.
+        </p>
+      ) : null}
       {params.sent ? (
         <p role="status" className="mt-6 rounded-xl border border-leaf/30 bg-green-bg p-4 text-leaf">
           Check your inbox for a sign-in link. It expires in 24 hours.
