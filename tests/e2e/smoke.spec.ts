@@ -929,7 +929,9 @@ test("Listing images: the team's plan is loaded and checked, images are made in 
   // Fixing the words clears the flag.
   await page.getByLabel("Slide 2 header").fill("Sweet The Old Way");
   await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByTestId("slot-2")).toContainText("Passes the claim rules");
+  await expect(page.getByTestId("checks-2")).not.toContainText("Natural");
+  // The pointer repeats the sub-header (jaggery): said once only, so it's flagged and left out of the image.
+  await expect(page.getByTestId("checks-2")).toContainText("Pointer repeats the header or sub-header");
 
   // A slide can use the team's own photo instead of an AI photo.
   await page.getByLabel("Slide 5 photo").selectOption({ label: "Your photo: Cookies out of the pack" });
@@ -946,8 +948,46 @@ test("Listing images: the team's plan is loaded and checked, images are made in 
   // Another product: the AI writes the plan in the same format.
   await page.getByLabel("Product").selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
   await page.getByRole("button", { name: "Let the AI plan it" }).click();
-  await expect(page.getByTestId("slot-7")).toBeVisible();
-  await expect(page.getByLabel("Slide 1 header")).toHaveValue("Only Good Stuff Inside");
+  // Always the standard stack: 3D pack, left, right, back, nutrition, ingredients, how to enjoy, ours vs others.
+  await expect(page.getByTestId("slot-8")).toBeVisible();
+  await expect(page.getByLabel("Slide 1 type")).toHaveValue("hero3d");
+  await expect(page.getByLabel("Slide 8 type")).toHaveValue("comparison");
+  await expect(page.getByTestId("photo-checklist")).toContainText("Left side");
+});
+
+test("Listing stack: a side of the pack is placed from the team's real photo, and ingredients are listed from the product's facts", async ({ page }) => {
+  const sharp = (await import("sharp")).default;
+  // A "left side" photo: a tall panel with printed lines, on a plain backdrop.
+  const panel = await sharp({ create: { width: 360, height: 620, channels: 3, background: { r: 245, g: 238, b: 220 } } })
+    .composite([{ input: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="620"><rect width="360" height="90" fill="#4a1942"/><text x="20" y="60" font-size="34" fill="#fff">FUN FACTS</text><text x="20" y="160" font-size="22" fill="#4a1942">Foxtail millet: one of the</text><text x="20" y="190" font-size="22" fill="#4a1942">oldest grains</text></svg>'), left: 0, top: 0 }])
+    .jpeg()
+    .toBuffer();
+  const bg = await sharp({ create: { width: 900, height: 900, channels: 3, background: "#e9e4da" } }).composite([{ input: panel, left: 270, top: 140 }]).jpeg().toBuffer();
+  await signIn(page);
+  await page.goto("/admin");
+  const card = page.getByTestId("product-choc");
+  await card.locator("summary").click();
+  const facts = card.locator("form", { has: page.locator('textarea[name="ingredients"]') });
+  await facts.locator('textarea[name="ingredients"]').fill("Foxtail millet (23.8%), Rolled oats (16.4%), Jaggery, Butter, Cocoa (4%), Almonds, Cashews");
+  await facts.getByRole("button", { name: "Save" }).click();
+  await expect(facts.getByRole("status").or(facts.getByText(/saved/i)).first()).toBeVisible();
+  await card.getByTestId("pack-views-choc").getByLabel(/Pack photos from every side/).setInputFiles({ name: "pack-left.jpg", mimeType: "image/jpeg", buffer: bg });
+  await card.getByTestId("pack-views-choc").getByRole("button", { name: "Upload" }).click();
+  await expect(card.getByTestId("pack-views-log")).toContainText("Added: left side.", { timeout: 30_000 });
+
+  await page.goto("/listing");
+  await page.getByLabel("Product", { exact: true }).selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
+  await page.getByRole("button", { name: /Let the AI plan it|New AI plan/ }).click();
+  await expect(page.getByLabel("Slide 2 type")).toHaveValue("side-left");
+  await expect(page.getByTestId("photo-checklist")).toContainText("✓ Left side");
+  await page.getByTestId("slot-2").getByRole("button", { name: "Make image 3" }).click();
+  await expect(page.getByTestId("slot-2").locator("img")).toBeVisible({ timeout: 60_000 });
+  // No right-side photo yet: it says exactly which photo to add.
+  await page.getByTestId("slot-3").getByRole("button", { name: "Make image 4" }).click();
+  await expect(page.getByTestId("slot-3")).toContainText("needs a photo of the right side of the pack", { timeout: 30_000 });
+  // Ingredients without a photo: listed from the product's facts.
+  await page.getByTestId("slot-6").getByRole("button", { name: "Make image 7" }).click();
+  await expect(page.getByTestId("slot-6").locator("img")).toBeVisible({ timeout: 60_000 });
 });
 
 test("Listing images: import the team's slide table (paste or Word file) and use it for the chosen platforms", async ({ page }) => {
@@ -967,7 +1007,7 @@ test("Listing images: import the team's slide table (paste or Word file) and use
   await page.getByRole("button", { name: "Read the plan" }).click();
   const preview = page.getByTestId("import-preview");
   await expect(preview).toContainText("Real Nuts, Real Crunch");
-  await expect(preview).toContainText("Comparison table");
+  await expect(preview).toContainText("Comparison: ours vs others");
   await preview.getByLabel("Product for table 1").selectOption({ label: "Chocolate Cookies, millet & oats, 240g" });
   await preview.getByLabel(/Flipkart/).check();
   await page.getByRole("button", { name: "Use this plan" }).click();

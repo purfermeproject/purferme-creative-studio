@@ -3,14 +3,15 @@ import { authErrorStatus, requireRole } from "@/auth";
 import { errorMessage, structuredCall } from "@/lib/ai";
 import { latestPlaybook } from "@/lib/competitors";
 import { getBrand, getProduct } from "@/lib/data";
-import { LISTING_LABELS, LISTING_PLATFORMS, LISTING_RULES, ListingPlanSchema, SavedPlanSchema, TEAM_PLANS } from "@/lib/listing-plan";
+import { LISTING_LABELS, LISTING_PLATFORMS, LISTING_RULES, ListingPlanSchema, SavedPlanSchema, standardSlides, TEAM_PLANS, toStandardStack } from "@/lib/listing-plan";
+import { productFocus } from "@/lib/product-focus";
 import { checkPlan, savePlan } from "@/lib/listing-store";
 import { mockListingPlan } from "@/lib/mocks";
 import { buildListingPlanPrompt } from "@/lib/prompts";
 
 export const maxDuration = 300;
 
-const Make = z.object({ productId: z.string().uuid(), platform: z.enum(LISTING_PLATFORMS), source: z.enum(["ai", "team"]) });
+const Make = z.object({ productId: z.string().uuid(), platform: z.enum(LISTING_PLATFORMS), source: z.enum(["ai", "team", "standard"]) });
 const Save = z.object({
   productId: z.string().uuid(),
   platform: z.enum(LISTING_PLATFORMS),
@@ -54,6 +55,17 @@ export async function POST(req: Request) {
         meta: { user, kind: "listing-plan", productId },
         mock: () => mockListingPlan(product),
       });
+    }
+    if (source !== "team") {
+      // Always the standard stack, in order: the AI's slide of each kind, or a sound default where it has none.
+      const defaults = standardSlides(product, productFocus(product));
+      plan = source === "standard" ? { main: { note: `${product.name} readable at thumbnail size.` }, slides: defaults } : { ...plan!, slides: toStandardStack(plan!, defaults) };
+    }
+    if (!plan.main.claims?.length) {
+      // Labels for the main image, only from approved claims: what's left out first (0% maida, no refined sugar).
+      const short = product.greenClaims.filter((c) => c.split(/\s+/).length <= 4);
+      const firsts = [...short.filter((c) => /maida|sugar|palm|preserv/i.test(c)), ...short].filter((c, i, a) => a.indexOf(c) === i);
+      plan = { ...plan, main: { ...plan.main, claims: firsts.slice(0, 3) } };
     }
     const row = await savePlan(productId, platform, plan, user, false);
     return Response.json({ plan: row.plan, images: row.images, checks: await checkPlan(row.plan, platform, product) });

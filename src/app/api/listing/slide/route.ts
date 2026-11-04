@@ -1,18 +1,22 @@
+import { productFocus, scenePropsFor } from "@/lib/product-focus";
 import { z } from "zod";
 import { authErrorStatus, requireRole } from "@/auth";
 import { errorMessage, UserFacingError } from "@/lib/ai";
 import { storeAsset } from "@/lib/asset-store";
-import { getBrand, getProduct } from "@/lib/data";
+import { getBrand, getProduct, getTerms } from "@/lib/data";
+import { scan } from "@/lib/compliance";
 import { buildListingPhotoPrompt, buildListingScenePrompt } from "@/lib/image-prompt";
 import { generateImage, loadAsset, loadReference } from "@/lib/images";
 import { buildDesignedPrompt, designWords, specFromSlide } from "@/lib/designed-ad";
-import { choosePackViews, loadPackViews } from "@/lib/pack-views-server";
+import { choosePackViews, loadPackViews, loadProductShots } from "@/lib/pack-views-server";
 import { sceneLayout } from "@/lib/ad-layout";
-import { comparisonScene, insetOn, mainImage, tilesOn } from "@/lib/listing-images";
+import { comparisonScene, insetOn, mainImage, panelOn, propsCutout, tilesOn } from "@/lib/listing-images";
+import { isMock } from "@/lib/ai";
+import type { PackView } from "@/lib/pack-views";
 import { compositePack } from "@/lib/pack-composite";
 import sharp from "sharp";
-import { mustShow, propsFromIngredients, sceneSpec, slideStyle } from "@/lib/scene-spec";
-import { LISTING_PLATFORMS, LISTING_SIZE } from "@/lib/listing-plan";
+import { mustShow, sceneSpec, slideStyle } from "@/lib/scene-spec";
+import { ingredientItems, LISTING_PLATFORMS, LISTING_SIZE, PANEL_VIEW } from "@/lib/listing-plan";
 import { checkPlan, getPlan, setSlotImage } from "@/lib/listing-store";
 
 export const maxDuration = 300;
@@ -27,6 +31,8 @@ const Body = z.object({
   productPhotoId: z.string().uuid().nullable().optional(),
   /** A finished, designed slide (the AI lays out the words, callouts or table and the pack), each slide in its own setting. */
   designed: z.boolean().default(false),
+  /** Main image: add the claim labels (0% Maida, No Refined Sugar). Amazon and Flipkart don't allow text on the main image. */
+  mainClaims: z.boolean().default(false),
 });
 
 /**
@@ -66,9 +72,43 @@ export async function POST(req: Request) {
             if (!product.photoAssetIds.includes(parsed.data.productPhotoId)) throw new UserFacingError("That photo isn't one of this product's photos.");
             photo = (await loadReference(`/api/assets/${parsed.data.productPhotoId}`))?.data ?? null;
           }
-          stage(`Placing your real pack${photo ? " and the product photo" : ""} on pure white, filling about 85% (${S}×${S})`);
-          const data = await mainImage(pack.data, S, photo);
+          // Our real cookies (refined photo) beside the pack, unless the team picked another photo.
+          if (!photo) photo = (await loadProductShots(product.photoAssetIds, 1))[0]?.data ?? null;
+          let props: Buffer | null = null;
+          if (!isMock() || process.env.OPENAI_API_KEY) {
+            const ingredients = scenePropsFor(product).filter((x) => !/chai|coffee/i.test(x));
+            if (ingredients.length) {
+              stage(`Making small piles of the real ingredients on white: ${ingredients.join(", ")}`);
+              const made = await generateImage({
+                prompt: buildListingPhotoPrompt({
+                  description: `small, neat, appetising piles of ${ingredients.join(", ")} in one low row from left to right, on a pure white seamless background, soft even studio light, seen from the front, slightly above; nothing else at all`,
+                  shape: "wide",
+                  style: brand.imageStyle,
+                }),
+                target: { w: 1536, h: 1024 },
+                reference: null,
+                user,
+                label: "Listing main props",
+                photoOnly: true,
+                noWriting: true,
+                onStage: stage,
+              });
+              const bytes = await loadAsset(made.id);
+              props = bytes ? await propsCutout(Buffer.from(bytes.dataBase64, "base64")) : null;
+            }
+          }
+          stage(`Placing your real pack${photo ? " and your real cookies" : ""}${props ? " with the ingredients" : ""} on pure white (${S}×${S})`);
+          const data = await mainImage(pack.data, S, photo, props);
           const a = await storeAsset({ data, mime: "image/jpeg", kind: "listing", label: "Listing main", user, size: { w: S, h: S }, sourceAssetIds: [] });
+          const claims = parsed.data.mainClaims ? (row?.plan.main.claims ?? []).filter(Boolean).slice(0, 3) : [];
+          if (claims.length) {
+            const red = scan(claims.join("\n"), platform === "shopify" ? "meta" : platform, product.slug, await getTerms()).hits.filter((h) => h.severity === "red");
+            if (red.length) throw new UserFacingError(`These labels can't go on the main image: ${red.map((h) => h.matches.join(", ")).join("; ")}. Edit them in the plan.`);
+            // The labels are drawn in the browser in the brand font, then attached.
+            send({ type: "done", slot, image: { id: a.id, url: a.url }, final: false, claims });
+            controller.close();
+            return;
+          }
           await setSlotImage(productId, platform, "main", a.id);
           send({ type: "done", slot, image: { id: a.id, url: a.url }, final: true });
           controller.close();
@@ -82,15 +122,75 @@ export async function POST(req: Request) {
         const blocked = checks.checks.filter((c) => c.level === "block");
         if (blocked.length) throw new UserFacingError(`Slide ${slot} can't be made yet: ${blocked.map((c) => c.text).join("; ")}. Edit the words, then try again.`);
 
+        const panelViews = PANEL_VIEW[slide.kind];
+        if (panelViews) {
+          // A side, the back, the nutrition table or the ingredients: the team's real photo, never redrawn.
+          const packAssetId = /^\/api\/assets\/([0-9a-f-]{36})$/i.exec(product.packImageUrl ?? "")?.[1] ?? null;
+          const byView = await loadPackViews(product.photoAssetIds, pack, packAssetId);
+          const view = panelViews.find((v) => byView.has(v as PackView)) as PackView | undefined;
+          const list = slide.kind === "ingredients" && !view ? ingredientItems(product.ingredients) : null;
+          if (!view && !list?.length) {
+            throw new UserFacingError(
+              `Slide ${slot} needs a photo of the ${panelViews[0]} of the pack${slide.kind === "ingredients" ? " (or the product's ingredients filled in)" : ""}. Add it in Tools → Settings → Products → ${product.name} → Pack from every side, then make it again.`,
+            );
+          }
+          const used: string[] = [];
+          for (let i = 0; i < slot - 1; i++) used.push(specFromSlide(row.plan.slides[i], used).setting.key);
+          const setting = specFromSlide(slide, used).setting;
+          stage(`Background: ${setting.place}; ${setting.mood}`);
+          const bg = await generateImage({
+            prompt: buildListingPhotoPrompt({
+              description: `${setting.place}, ${setting.light}, everything softly out of focus; ${scenePropsFor(product).join(", ")} on ${setting.surface} along the bottom; the middle and the right of the picture calm and plain`,
+              shape: "square",
+              style: brand.imageStyle,
+            }),
+            target: { w: S, h: S },
+            reference: null,
+            user,
+            label: `Listing slide ${slot} background`,
+            photoOnly: true,
+            noWriting: true,
+            onStage: stage,
+          });
+          const bgBytes = await loadAsset(bg.id);
+          if (!bgBytes) throw new UserFacingError("An image couldn't be saved. Try again.");
+          let data: Buffer;
+          if (view) {
+            stage(`Placing your real photo of the ${view} large and sharp (unchanged, so every word stays readable)`);
+            data = await panelOn(Buffer.from(bgBytes.dataBase64, "base64"), byView.get(view)!.ref.data, S, !slide.feature.trim());
+          } else {
+            stage("No ingredients photo yet: listing the ingredients from the product's facts instead");
+            data = await sharp(Buffer.from(bgBytes.dataBase64, "base64")).resize(S, S, { fit: "cover" }).jpeg({ quality: 92 }).toBuffer();
+          }
+          const a = await storeAsset({ data, mime: "image/jpeg", kind: "listing", label: `Listing slide ${slot} base`, user, size: { w: S, h: S } });
+          send({ type: "done", slot, image: { id: a.id, url: a.url }, final: false, panel: brand.kit.colors.primary, generic: null, list });
+          controller.close();
+          return;
+        }
+
         if (parsed.data.designed && !(slide.kind !== "comparison" && slide.photoId)) {
           // Each slide in its own world: settings already used by the earlier slides are skipped.
           const used: string[] = [];
-          for (let i = 0; i < slot - 1; i++) used.push(specFromSlide(row.plan.slides[i], used).setting.key);
-          const design = specFromSlide(slide, used);
+          const spare = [...product.greenClaims.filter((c) => c.split(/\s+/).length <= 4), ...productFocus(product).callouts];
+          for (let i = 0; i < slot - 1; i++) used.push(specFromSlide(row.plan.slides[i], used, spare).setting.key);
+          const design = specFromSlide(slide, used, spare);
           const packAssetId = /^\/api\/assets\/([0-9a-f-]{36})$/i.exec(product.packImageUrl ?? "")?.[1] ?? null;
+          // Every word drawn (including any filled-in pointer) goes through the compliance terms.
+          const red = scan(designWords(design).join("\n"), platform === "shopify" ? "meta" : platform, product.slug, await getTerms()).hits.filter((h) => h.severity === "red");
+          if (red.length) throw new UserFacingError(`These words can't go on slide ${slot}: ${red.map((h) => `${h.matches.join(", ")} (${h.label})`).join("; ")}. Edit the slide, then try again.`);
           const byView = await loadPackViews(product.photoAssetIds, pack, packAssetId);
           const pick = await choosePackViews(`${slide.scene}. ${slide.header}`, [...byView.keys()], user, { hook: slide.header, productName: product.name });
+          if (slide.kind === "hero3d") {
+            // A 3D shot needs the pack's depth: the angle and a side, with the front for the print.
+            const want = (["angle", "front", "left side", "right side"] as PackView[]).filter((v) => byView.has(v)).slice(0, 3);
+            if (want.length) pick.views = want;
+            pick.action = "shown as a premium 3D product shot at a 3/4 angle, standing tall on a round podium, our cookies and ingredients arranged around its base";
+          } else if (slide.kind === "comparison") {
+            pick.action = "standing upright on the left, front facing the camera";
+          }
           const refs = pick.views.map((v) => byView.get(v)!.ref);
+          const foodRefs = await loadProductShots(product.photoAssetIds);
+          if (foodRefs.length) stage(`Using ${foodRefs.length} photo${foodRefs.length > 1 ? "s" : ""} of your real cookies, so the food looks like yours`);
           stage(`Setting and feeling: ${design.setting.place}; ${design.setting.mood}`);
           stage(`Designing slide ${slot}: “${design.headline}”${design.callouts.length ? `, callouts: ${design.callouts.map((c) => c.label).join(", ")}` : ""}${design.table ? `, a comparison table` : ""}`);
           if (byView.size > 1) stage(`Using your pack photos: ${pick.views.join(" + ")}`);
@@ -103,16 +203,19 @@ export async function POST(req: Request) {
               w: S,
               h: S,
               forWhat: `a ${platform === "amazon" ? "Amazon" : platform === "flipkart" ? "Flipkart" : "marketplace"} listing image`,
-              props: propsFromIngredients(product.ingredients),
+              props: scenePropsFor(product),
               views: byView.size > 1 ? pick.views : undefined,
               packAction: pick.action,
+              foodPhotos: foodRefs.length || undefined,
               look: brand.imageStyle.look,
               people: brand.imageStyle.people,
               avoid: brand.imageStyle.avoid,
+              type: brand.imageStyle.type,
             }),
             target: { w: S, h: S },
             reference: refs[0],
             moreReferences: refs.slice(1),
+            foodReferences: foodRefs,
             designedWords: designWords(design),
             // The team's description: every part of it must be in the picture.
             mustShow: mustShow(slide.scene),
@@ -132,7 +235,7 @@ export async function POST(req: Request) {
         const spec = sceneSpec(slide.scene);
         const layout = slideStyle(slide);
         const L = sceneLayout(S, layout);
-        const props = propsFromIngredients(product.ingredients);
+        const props = scenePropsFor(product);
         const packOpts = { data: pack.data, position: "left" as const, scale: L.pack.scale, bottom: L.pack.bottom, liftBackdrop: !pack.label?.includes("cropped") };
         const own = slide.kind !== "comparison" && slide.photoId ? slide.photoId : null;
         if (own && !product.photoAssetIds.includes(own)) throw new UserFacingError("The photo chosen for this slide isn't one of this product's photos any more. Pick another.");

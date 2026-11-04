@@ -91,6 +91,8 @@ export async function generateImage(opts: {
   reference: Reference;
   /** More photos sent with the reference (the same pack from other sides). */
   moreReferences?: NonNullable<Reference>[];
+  /** Photos of the real food (our cookies), sent after the pack photos; never compared as a pack. */
+  foodReferences?: NonNullable<Reference>[];
   user: string;
   label: string;
   frameIndex?: number | null;
@@ -162,7 +164,7 @@ export async function generateImage(opts: {
           model: IMAGE_MODEL,
           prompt: opts.prompt,
           image: await Promise.all(
-            [ref!, ...(opts.lockedPack ? [] : (opts.moreReferences ?? []))].map((r, i) => toFile(r.data, `${i + 1}-${r.name}.${r.mime.split("/")[1] ?? "png"}`, { type: r.mime })),
+            [ref!, ...(opts.lockedPack ? [] : [...(opts.moreReferences ?? []), ...(opts.foodReferences ?? [])])].map((r, i) => toFile(r.data, `${i + 1}-${r.name}.${r.mime.split("/")[1] ?? "png"}`, { type: r.mime })),
           ),
           // Only the gpt-image-1 family accepts input_fidelity; newer models keep the reference faithfully by default.
           ...(withFidelity ? { input_fidelity: "high" as const } : {}),

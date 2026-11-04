@@ -1,6 +1,7 @@
-import { comparisonLayout, sceneLayout } from "@/lib/ad-layout";
+import { comparisonLayout, panelBox, sceneLayout } from "@/lib/ad-layout";
+import { withoutRepeats } from "@/lib/product-focus";
 import type { BrandKit } from "@/lib/brand-kit";
-import type { Slide } from "@/lib/listing-plan";
+import { PANEL_VIEW, type Slide } from "@/lib/listing-plan";
 import { sceneSpec, slideStyle } from "@/lib/scene-spec";
 import { loadBrandFont, uploadAsset } from "./fonts";
 import { fit, headline, wrap } from "./overlay-render";
@@ -123,7 +124,9 @@ export function featureItems(slide: Slide): string[] {
     .filter(Boolean);
   const crossed = spec.crossed.map((c) => `No ${c}`);
   const seen = new Set<string>();
-  return [...crossed, ...parts].filter((p) => {
+  // One idea is said once: a pointer that repeats the header or sub-header is left out.
+  const fresh = withoutRepeats(slide.header, slide.sub, [...crossed, ...parts], [], 10).kept;
+  return fresh.filter((p) => {
     const k = p.toLowerCase().replace(/^(no|0\s?%)\s+/, "");
     if (seen.has(k)) return false;
     seen.add(k);
@@ -143,6 +146,8 @@ export async function finishSlide(opts: {
   slot: number;
   panel: string;
   generic?: { shape: "jar" | "box"; labelY: number; width: number } | null;
+  /** Ingredients slide without an ingredients photo: the list to draw, from the product's facts. */
+  list?: string[] | null;
 }): Promise<{ id: string; url: string }> {
   const base = await loadImage(opts.baseUrl);
   await Promise.all([loadBrandFont(opts.kit.headingFont), loadBrandFont(opts.kit.bodyFont)]);
@@ -154,13 +159,79 @@ export async function finishSlide(opts: {
   if (!ctx) throw new Error("Couldn't draw the slide.");
   ctx.drawImage(base, 0, 0, S, S);
   const sans = `"${opts.kit.headingFont.name}", sans-serif`;
-  const serif = `"${opts.kit.bodyFont.name}", Georgia, serif`;
+  // Headlines in the bold sans (the team found the serif too soft for these).
+  const serif = sans;
   const colour = opts.panel;
   const s = opts.slide;
 
-  if (s.kind === "comparison" && s.comparison) {
+  if (PANEL_VIEW[s.kind]) {
+    // A side, the back, nutrition or ingredients: header across the top, pointers down the left, the real photo (or the list) right.
+    const B = panelBox(S, !s.feature.trim());
+    headline(ctx, { header: s.header, sub: s.sub, left: Math.round(S * 0.06), top: Math.round(S * 0.05), width: Math.round(S * 0.88), size: Math.round(S * 0.084), colour, serif, sans, maxBottom: B.top - S * 0.02 });
+    const items = featureItems(s).slice(0, 4);
+    const pillW = Math.round(S * 0.31);
+    const pillH = Math.round(S * 0.1);
+    items.forEach((item, i) => {
+      const x = Math.round(S * 0.05);
+      const y = B.top + i * (pillH + S * 0.03);
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.15)";
+      ctx.shadowBlur = S * 0.012;
+      ctx.fillStyle = `rgba(${CREAM},0.95)`;
+      ctx.beginPath();
+      ctx.roundRect(x, y, pillW, pillH, pillH / 2);
+      ctx.fill();
+      ctx.restore();
+      drawIcon(ctx, item, x + pillH / 2, y + pillH / 2, pillH * 0.32, colour);
+      const t = fit(ctx, item, pillW - pillH * 1.15, 2, Math.round(S * 0.03), (px) => `800 ${px}px ${sans}`);
+      ctx.font = `800 ${t.size}px ${sans}`;
+      ctx.fillStyle = colour;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      t.lines.forEach((l, k) => ctx.fillText(l, x + pillH * 0.98, y + pillH / 2 + (k - (t.lines.length - 1) / 2) * t.size * 1.12));
+    });
+    if (opts.list?.length) {
+      // The ingredients, exactly as on file, each on its own row with its percentage picked out.
+      const rows = opts.list.slice(0, 10);
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.18)";
+      ctx.shadowBlur = S * 0.02;
+      ctx.fillStyle = `rgba(${CREAM},0.96)`;
+      ctx.beginPath();
+      ctx.roundRect(B.left, B.top, B.width, B.height, S * 0.03);
+      ctx.fill();
+      ctx.restore();
+      const rowH = (B.height - S * 0.06) / rows.length;
+      rows.forEach((r, i) => {
+        const cy = B.top + S * 0.03 + rowH * i + rowH / 2;
+        const pct = /\(([^)]*%[^)]*)\)/.exec(r)?.[1] ?? "";
+        const name = r.replace(/\s*\([^)]*%[^)]*\)/, "").trim();
+        const size = Math.round(Math.min(rowH * 0.42, S * 0.032));
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "left";
+        ctx.fillStyle = colour;
+        const t = fit(ctx, name, B.width * (pct ? 0.66 : 0.88), 1, size, (px) => `800 ${px}px ${sans}`);
+        ctx.font = `800 ${t.size}px ${sans}`;
+        ctx.fillText(t.lines.join(" "), B.left + S * 0.035, cy);
+        if (pct) {
+          ctx.font = `800 ${size}px ${sans}`;
+          ctx.textAlign = "right";
+          ctx.fillStyle = opts.kit.colors.accent;
+          ctx.fillText(pct, B.left + B.width - S * 0.035, cy);
+        }
+        if (i < rows.length - 1) {
+          ctx.strokeStyle = "rgba(42,27,56,0.15)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(B.left + S * 0.035, cy + rowH / 2);
+          ctx.lineTo(B.left + B.width - S * 0.035, cy + rowH / 2);
+          ctx.stroke();
+        }
+      });
+    }
+  } else if (s.kind === "comparison" && s.comparison) {
     const C = comparisonLayout(S);
-    headline(ctx, { header: s.header, sub: s.sub, left: C.header.left, top: C.header.top, width: C.header.width, size: Math.round(S * 0.072), colour, serif, sans, centred: true, maxBottom: C.table.top - S * 0.02 });
+    headline(ctx, { header: s.header, sub: s.sub, left: C.header.left, top: C.header.top, width: C.header.width, size: Math.round(S * 0.084), colour, serif, sans, centred: true, maxBottom: C.table.top - S * 0.02 });
     // The generic name on the plain container's label.
     if (opts.generic) {
       const size = Math.round(S * 0.026);
@@ -235,7 +306,7 @@ export async function finishSlide(opts: {
   } else {
     const style = slideStyle(s);
     const L = sceneLayout(S, style);
-    headline(ctx, { header: s.header, sub: s.sub, left: L.header.left, top: L.header.top, width: L.header.width, size: Math.round(S * 0.07), colour, serif, sans, maxBottom: L.pack.top - S * 0.015 });
+    headline(ctx, { header: s.header, sub: s.sub, left: L.header.left, top: L.header.top, width: L.header.width, size: Math.round(S * 0.082), colour, serif, sans, maxBottom: L.pack.top - S * 0.015 });
     const items = featureItems(s);
     if (style === "card" && items.length) {
       const C = L.card;
@@ -348,4 +419,45 @@ export async function finishSlide(opts: {
   if (!blob) throw new Error("Couldn't export the slide.");
   const a = await uploadAsset(blob, { kind: "listing", label: `Listing slide ${opts.slot}` }, `slide-${opts.slot}.jpg`);
   return { id: a.id, url: a.url };
+}
+
+/** The main image with its claim labels (e.g. 0% Maida, No Refined Sugar) as round badges at the top left. Saved as "Listing main". */
+export async function finishMain(opts: { baseUrl: string; kit: BrandKit; claims: string[] }): Promise<{ id: string; url: string }> {
+  const base = await loadImage(opts.baseUrl);
+  await loadBrandFont(opts.kit.headingFont);
+  const S = base.naturalWidth;
+  const c = document.createElement("canvas");
+  c.width = S;
+  c.height = S;
+  const ctx = c.getContext("2d");
+  if (!ctx) throw new Error("Couldn't draw the labels.");
+  ctx.drawImage(base, 0, 0, S, S);
+  const sans = `"${opts.kit.headingFont.name}", sans-serif`;
+  const r = Math.round(S * 0.075);
+  opts.claims.slice(0, 3).forEach((claim, i) => {
+    const cx = Math.round(S * 0.04) + r;
+    const cy = Math.round(S * 0.04) + r + i * (r * 2 + S * 0.02);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.18)";
+    ctx.shadowBlur = S * 0.012;
+    ctx.fillStyle = opts.kit.colors.primary;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = opts.kit.colors.accent;
+    ctx.lineWidth = Math.max(3, S * 0.004);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.9, 0, Math.PI * 2);
+    ctx.stroke();
+    const t = fit(ctx, claim, r * 1.5, 3, Math.round(r * 0.34), (px) => `800 ${px}px ${sans}`);
+    ctx.font = `800 ${t.size}px ${sans}`;
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    t.lines.forEach((l, k) => ctx.fillText(l, cx, cy + (k - (t.lines.length - 1) / 2) * t.size * 1.1));
+  });
+  const blob = await new Promise<Blob | null>((res) => c.toBlob(res, "image/jpeg", 0.92));
+  if (!blob) throw new Error("Couldn't export the image.");
+  return uploadAsset(blob, { kind: "listing", label: "Listing main" }, "listing-main.jpg");
 }

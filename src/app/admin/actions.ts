@@ -19,7 +19,7 @@ import { detectPackBox } from "@/lib/pack-detect";
 import { savePackCrop } from "@/lib/pack-source";
 import { isCutout } from "@/lib/pack-composite";
 import sharp from "sharp";
-import { PACK_VIEWS, viewFromFilename, viewLabel, type PackView } from "@/lib/pack-views";
+import { PACK_VIEWS, PRODUCT_SHOT_PREFIX, viewFromFilename, viewLabel, type PackView } from "@/lib/pack-views";
 import { classifyPackView } from "@/lib/pack-views-server";
 
 /** Product photos are placed into images unchanged, so they need to be big enough to look sharp. */
@@ -425,6 +425,42 @@ export async function uploadPackView(_: ActionState, fd: FormData): Promise<Acti
   }
 }
 
+/**
+ * A photo of the real product (e.g. our cookies out of the pack). Refined on upload: a plain background is
+ * removed, the edges trimmed, and light, colour and sharpness gently lifted. Images then draw the food from it.
+ */
+export async function uploadProductShot(_: ActionState, fd: FormData): Promise<ActionState> {
+  try {
+    const { user } = await requireRole("settings");
+    const id = String(fd.get("id") ?? "");
+    const file = fd.get("file");
+    if (!(file instanceof File) || file.size === 0) return fail("Choose a photo first.");
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return fail("Use a PNG, JPG or WebP photo.");
+    if (file.size > 5 * 1024 * 1024) return fail("Photos must be under 5 MB.");
+    const problem = await photoProblem(file);
+    if (problem) return fail(problem);
+    const [product] = await db.select({ ids: schema.products.photoAssetIds }).from(schema.products).where(eq(schema.products.id, id));
+    if (!product) return fail("That product no longer exists.");
+    if (product.ids.length >= 12) return fail("A product can have up to 12 photos. Remove one first.");
+    const raw = await sharp(Buffer.from(await file.arrayBuffer())).rotate().toBuffer();
+    const lifted = await removeBackdrop(raw).catch(() => null);
+    let img = sharp(lifted?.png ?? raw);
+    if (lifted) img = sharp(await img.png().toBuffer()).trim({ threshold: 1 });
+    const refined = await img
+      .modulate({ brightness: 1.04, saturation: 1.08 })
+      .sharpen({ sigma: 0.8, m1: 0.5, m2: 1.5 })
+      .png()
+      .toBuffer();
+    const what = String(fd.get("label") ?? "").trim().slice(0, 40) || "real product";
+    const asset = await storeAsset({ data: refined, mime: "image/png", kind: "product-photo", label: `${PRODUCT_SHOT_PREFIX}${what}${lifted ? " (background removed)" : " (refined)"}`, user });
+    await db.update(schema.products).set({ photoAssetIds: [...product.ids, asset.id], updatedAt: new Date() }).where(eq(schema.products.id, id));
+    refresh();
+    return ok(lifted ? "Added: background removed and refined." : "Added and refined (the background wasn't plain, so it was kept).");
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Couldn't add the photo.");
+  }
+}
+
 /** Corrects which side a pack photo shows. */
 export async function setPackView(_: ActionState, fd: FormData): Promise<ActionState> {
   try {
@@ -458,7 +494,7 @@ export async function removeProductPhoto(_: ActionState, fd: FormData): Promise<
   }
 }
 
-const STYLE_KEYS = ["look", "places", "people", "props", "mood", "avoid"] as const;
+const STYLE_KEYS = ["look", "places", "people", "props", "mood", "avoid", "type"] as const;
 
 /** Photography direction for every generated image. Empty fields fall back to the defaults. */
 export async function saveImageStyle(_: ActionState, fd: FormData): Promise<ActionState> {

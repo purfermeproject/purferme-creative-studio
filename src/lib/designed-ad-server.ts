@@ -2,6 +2,7 @@ import "server-only";
 import sharp from "sharp";
 import { z } from "zod";
 import { isMock, structuredCall } from "./ai";
+import { focusLine, productFocus, withoutRepeats } from "./product-focus";
 import { calloutFor, compareDesignText, pickSetting, seedOf, SETTINGS, type DesignSpec } from "./designed-ad";
 
 const hasAi = () => !isMock() && Boolean(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
@@ -30,7 +31,7 @@ const PlanSchema = z.object({
  */
 export async function planDesign(
   c: { hook: string; angle: string; headline?: string; body?: string; scene: string },
-  product: { name: string; ingredients: string; greenClaims: string[] },
+  product: { name: string; ingredients: string; greenClaims: string[]; messagingPriorities?: string[] },
   user: string,
   /** Spreads the images of one ad (and different ads) across different settings. */
   seed = 0,
@@ -41,7 +42,7 @@ export async function planDesign(
     headline: c.hook.trim(),
     sub: c.headline && c.headline !== c.hook ? c.headline : "",
     layout: "callouts-left",
-    callouts: (fromClaims.length ? fromClaims : product.ingredients.split(/[,;]/).map((s) => s.replace(/\(.*?\)/g, "").trim()).filter(Boolean).slice(0, 3)).map(calloutFor),
+    callouts: withoutRepeats(c.hook, c.headline && c.headline !== c.hook ? c.headline : "", fromClaims.length ? fromClaims : product.ingredients.split(/[,;]/).map((s) => s.replace(/\(.*?\)/g, "").trim()).filter(Boolean).slice(0, 3)).kept.map(calloutFor),
     scene: c.scene,
     setting,
   };
@@ -55,13 +56,15 @@ The scene: ${c.scene}
 Approved claims (callouts and table rows may ONLY use these, reworded at most slightly): ${product.greenClaims.join("; ") || "none"}.
 Ingredients (callouts may name these): ${product.ingredients}.
 Settings to choose from (pick the one that tells THIS ad's story and emotion best; images should not all look the same): ${SETTINGS.map((s) => `${s.key} = ${s.place} (${s.mood})`).join("; ")}.
+${focusLine(productFocus(product))}
+NO REPEATING: a word or idea in the headline or sub-line is never repeated in a callout (if the sub-line says "millets and oats", no callout says millet or oats); each callout says something new.
 Keep the hook's idea in the headline (shorten it to 2–5 words if needed). Never invent a number, a health claim, a certification or a competitor brand.`,
       maxTokens: 1500,
       effort: "low",
       meta: { user, kind: "design-plan" },
       mock: () => ({ headline: fallback.headline, sub: fallback.sub, layout: "callouts-left" as const, callouts: fallback.callouts.map((x) => x.label), scene: fallback.scene, setting: setting.key, emotion: setting.mood }),
     });
-    const callouts = r.callouts.slice(0, 6).map(calloutFor);
+    const callouts = withoutRepeats(r.headline, r.sub, r.callouts, [...product.greenClaims.filter((x) => x.split(/\s+/).length <= 4), ...productFocus(product).callouts], 6).kept.map(calloutFor);
     const layout = r.layout === "comparison" && !r.table?.rows.length ? "callouts-left" : r.layout;
     const base = SETTINGS.find((s) => s.key === r.setting) ?? setting;
     const chosen = { key: base.key, place: base.place, light: base.light, surface: base.surface, colours: base.colours, mood: r.emotion.trim() || base.mood };

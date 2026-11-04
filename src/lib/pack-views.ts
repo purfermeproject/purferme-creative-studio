@@ -1,6 +1,6 @@
 /** Photos of the pack from every side, stored as product photos labelled "Pack view: <side>". Pure helpers (no server code). */
 
-export const PACK_VIEWS = ["front", "back", "left side", "right side", "top", "bottom", "angle", "open"] as const;
+export const PACK_VIEWS = ["front", "back", "left side", "right side", "top", "bottom", "angle", "open", "nutrition panel", "ingredients panel"] as const;
 export type PackView = (typeof PACK_VIEWS)[number];
 
 export const VIEW_NAMES: Record<PackView, string> = {
@@ -12,6 +12,8 @@ export const VIEW_NAMES: Record<PackView, string> = {
   bottom: "Bottom",
   angle: "3/4 angle (front and a side)",
   open: "Open (product showing)",
+  "nutrition panel": "Nutrition panel (close-up)",
+  "ingredients panel": "Ingredients panel (close-up)",
 };
 
 const PREFIX = "Pack view: ";
@@ -25,9 +27,11 @@ export function viewOf(label: string | null | undefined): PackView | null {
 /** A side guessed from the file name (pack-back.jpg, IMG_side_left.png …), or null. */
 export function viewFromFilename(name: string): PackView | null {
   const n = name.toLowerCase().replace(/\.[a-z0-9]+$/, "").replace(/[_\-.]+/g, " ");
+  if (/\bnutrition|\bnutritional|\bnutri\b|\bnutrients?\b/.test(n)) return "nutrition panel";
+  if (/\bingredients?\b/.test(n)) return "ingredients panel";
   if (/\bopen(ed)?\b|\binside\b/.test(n)) return "open";
   if (/\b(3 ?4|three quarter|angle|angled|perspective)\b/.test(n)) return "angle";
-  if (/\bback\b|\brear\b|\bingredients?\b|\bnutrition\b/.test(n)) return "back";
+  if (/\bback\b|\brear\b/.test(n)) return "back";
   if (/\bleft\b/.test(n)) return "left side";
   if (/\bright\b|\bside\b/.test(n)) return "right side";
   if (/\btop\b/.test(n)) return "top";
@@ -68,3 +72,7 @@ export function packActionByRules(scene: string, hook = ""): string {
   if (/\b(bag|tiffin|office|desk|commute|travel|hostel|college|school)/.test(s)) return "the person is putting the pack into a bag or tiffin, or taking it out, holding it at an angle";
   return "the person holds the pack in one hand at a natural angle while doing what the scene describes";
 }
+
+/** Photos of the real product itself (cookies out of the pack), refined on upload and used as the look of the food. */
+export const PRODUCT_SHOT_PREFIX = "Our product: ";
+export const isProductShot = (label: string | null | undefined) => Boolean(label?.startsWith(PRODUCT_SHOT_PREFIX));

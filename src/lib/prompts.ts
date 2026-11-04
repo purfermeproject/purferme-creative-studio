@@ -1,3 +1,4 @@
+import { focusLine, productFocus } from "./product-focus";
 import type { Deliverable, Objective, Platform } from "./types";
 import { OBJECTIVES, PLATFORM_LABELS } from "./types";
 import type { Landscape } from "./landscape";
@@ -470,7 +471,7 @@ export function buildListingPlanPrompt(
   input: { platform: string; rules: string[]; example: { name: string; plan: unknown } | null; playbook?: PlaybookContext | null; landscape?: Landscape | null; hasQr: boolean },
 ): string {
   const evidence = (product.claimEvidence ?? []).filter((e) => e.claim.trim() && e.evidence.trim());
-  return `You plan the product image stack for an Indian D2C food brand's ${input.platform} listing: the main image and 7 slides after it.
+  return `You plan the product image stack for an Indian D2C food brand's ${input.platform} listing: the main image and 8 slides after it, in a fixed order.
 
 ${brand.brandContext}
 ${brand.hardRules}
@@ -488,8 +489,10 @@ ${input.playbook ? `\n${playbookBlock(input.playbook)}` : ""}${input.landscape ?
 
 HOW THE TEAM BUILDS AN IMAGE STACK:
 ${input.rules.map((r) => `- ${r}`).join("\n")}
-- kind: "lifestyle" (a person in a real setting), "closeup" (the food itself, hands allowed) or "comparison" (a table against an unbranded generic version; fill comparison.rows with facts true for most of that category).
-- The real pack photo is placed next to every photo afterwards, so the scene describes the moment, never the pack.
+- The 8 slides, in this order, with these kinds: 1 "hero3d" (the pack in 3D on a styled background, with 2 pointers), 2 "side-left", 3 "side-right" and 4 "back" (each shows the team's real photo of that side of the pack: the header and sub-header introduce it; pointers only name what is truly printed there, or leave the feature empty), 5 "nutrition" (the real nutrition panel; call out fibre and carbs only with the verified numbers), 6 "ingredients" (every ingredient, as on the pack), 7 "usage" (how to enjoy it: with chai, coffee, peanut butter, in the tiffin… as pointers; a person in a real setting), 8 "comparison" (comparison.us is our brand "Puŕ Fermé", comparison.them is an unbranded generic version like "Regular biscuits"; rows are facts true for most of that category).
+- ${focusLine(productFocus(product))}
+- NO REPEATING: a word or idea in a slide's header or sub-header never appears again in its pointers (the feature); each pointer says something new.
+- main.claims: 2–3 short claim labels for the main image (e.g. "0% Maida", "No Refined Sugar"), only from the allowed claims.
 ${
   input.example
     ? `
@@ -498,5 +501,5 @@ ${JSON.stringify(input.example.plan)}
 `
     : ""
 }
-Write 7 slides. Headers 2–5 words, benefit first. Sub-headers one short line. One feature per slide. Every lifestyle slide names who is in it and where. Use only allowed claims and product facts; never a red claim, health effect, "superfood", "healthy", "guilt-free" or "gluten free", and never name a competitor.`;
+Write the 8 slides in that order. Headers 2–5 words, benefit first, each slide with its own scene and feeling. Sub-headers one short line. One feature per slide. Every lifestyle slide names who is in it and where. Use only allowed claims and product facts; never a red claim, health effect, "superfood", "healthy", "guilt-free" or "gluten free", and never name a competitor.`;
 }

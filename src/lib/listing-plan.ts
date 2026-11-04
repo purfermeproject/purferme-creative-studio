@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { scan, type ScanHit, type Term } from "./compliance";
 import type { Platform } from "./types";
+import { withoutRepeats } from "./product-focus";
 
 /**
  * Marketplace image stacks, the way the team plans them: a main image, then 6–8 slides, each with a
@@ -14,12 +15,31 @@ export const LISTING_LABELS: Record<ListingPlatform, string> = { amazon: "Amazon
 /** Square master size per platform (Amazon and Flipkart zoom from 1000+; Shopify recommends 2048). */
 export const LISTING_SIZE: Record<ListingPlatform, number> = { amazon: 2000, flipkart: 2000, shopify: 2048 };
 
-export const SLIDE_KINDS = ["lifestyle", "closeup", "comparison"] as const;
+export const SLIDE_KINDS = ["hero3d", "side-left", "side-right", "back", "nutrition", "ingredients", "usage", "comparison", "lifestyle", "closeup"] as const;
 export type SlideKind = (typeof SLIDE_KINDS)[number];
 export const SLIDE_KIND_LABELS: Record<SlideKind, string> = {
+  hero3d: "3D pack with a background",
+  "side-left": "Left side of the pack",
+  "side-right": "Right side of the pack",
+  back: "Back of the pack",
+  nutrition: "Nutrition facts",
+  ingredients: "Ingredients",
+  usage: "How to enjoy it (chai, coffee…)",
+  comparison: "Comparison: ours vs others",
   lifestyle: "Person in a real setting",
   closeup: "Food close-up",
-  comparison: "Comparison table",
+};
+
+/** The team's standard stack: after the white main image, these 8 slides in this order. */
+export const STANDARD_STACK: SlideKind[] = ["hero3d", "side-left", "side-right", "back", "nutrition", "ingredients", "usage", "comparison"];
+
+/** Slides built from the team's real pack photos (placed unchanged, so small print stays exact), and which side each needs. */
+export const PANEL_VIEW: Partial<Record<SlideKind, string[]>> = {
+  "side-left": ["left side"],
+  "side-right": ["right side"],
+  back: ["back"],
+  nutrition: ["nutrition panel", "back"],
+  ingredients: ["ingredients panel"],
 };
 
 export const SlideSchema = z.object({
@@ -48,8 +68,9 @@ export type Slide = z.infer<typeof SavedSlideSchema>;
 export const ListingPlanSchema = z.object({
   main: z.object({
     note: z.string().describe("What the main image must make clear at thumbnail size (from the pack itself: name, size, hero ingredients)"),
+    claims: z.array(z.string()).optional().describe("2–3 short claim labels for the main image, e.g. '0% Maida', 'No Refined Sugar' (only approved claims)"),
   }),
-  slides: z.array(SlideSchema).describe("6–8 slides, in order"),
+  slides: z.array(SlideSchema).describe("8 slides, in the standard order"),
   principles: z.array(z.string()).optional().describe("The few rules this plan follows, in plain words"),
 });
 export const SavedPlanSchema = ListingPlanSchema.extend({ slides: z.array(SavedSlideSchema) });
@@ -57,8 +78,11 @@ export type ListingPlan = z.infer<typeof SavedPlanSchema>;
 
 /** How the team builds an image stack (from their listing analysis); used to brief the planner and to check plans. */
 export const LISTING_RULES = [
-  "Main image: the real pack only, on pure white, filling about 85% of the frame; the product itself (cookies, a spoon of spread) may sit beside it. Name, size and hero ingredients must read at thumbnail size.",
-  "Every slide after the main image has a person in a real Indian setting (kitchen, office desk at 11 am, school tiffin, home gym), except a close-up or a comparison.",
+  "Main image: the real pack on pure white with our real cookies beside it and small piles of the real ingredients, attractive and appetising; 2–3 short claim labels (e.g. 0% Maida, No Refined Sugar) where the marketplace allows them. Name, size and hero ingredients must read at thumbnail size.",
+  "The stack after the main image, in this order: 2) the pack in 3D with a background, 3) the left side of the pack, 4) the right side, 5) the back, 6) nutrition facts, 7) ingredients, 8) how to enjoy it (with chai, coffee, peanut butter…), 9) a comparison: ours vs others.",
+  "No repeating: an idea or word in the header or sub-header never appears again in that slide's pointers; each pointer says something new.",
+  "Cookies: market fibre and complex carbs (from millets and oats), and show them with chai or coffee.",
+  "Lifestyle and usage slides show a person in a real Indian setting (kitchen, office desk at 11 am, school tiffin, home gym); each slide has its own setting and feeling.",
   "Benefit first: the header says what the shopper gets (“Stay Full For Longer”), not what the product is.",
   "One feature per slide: the technical proof (a number, an ingredient, a certification) sits as a small callout next to the pack.",
   "Use the stories competitors don't tell: where it comes from (farm, traceability QR), what's left out, how it's eaten.",
@@ -87,6 +111,10 @@ export function checkSlide(slide: Slide, platform: ListingPlatform, productSlug:
   }
   if (words(slide.header) > 5) checks.push({ level: "tip", text: `Header is ${words(slide.header)} words; keep it to 2–5 so it reads at a glance.` });
   if (words(slide.sub) > 12) checks.push({ level: "tip", text: `Sub-header is ${words(slide.sub)} words; keep it to one short line.` });
+  const repeats = withoutRepeats(slide.header, slide.sub, slide.feature.split("|").map((x) => x.trim()).filter(Boolean), [], 10).dropped;
+  if (repeats.length && slide.kind !== "comparison") {
+    checks.push({ level: "review", text: `Pointer repeats the header or sub-header: ${repeats.join(", ")}. It's left out of the image (one idea is said once); write something new instead.` });
+  }
   if (slide.feature.split("|").filter((x) => x.trim()).length > 4) checks.push({ level: "tip", text: "More than 4 parts in the feature: one feature per slide reads better." });
   if (slide.kind === "lifestyle" && !PERSON.test(slide.scene)) checks.push({ level: "tip", text: "No person in the photo description: every lifestyle slide should show someone in a real setting." });
   if (slide.kind === "comparison" && !slide.comparison?.rows.length) checks.push({ level: "block", text: "Comparison slide has no rows yet." });
@@ -242,3 +270,65 @@ export const TEAM_PLANS: Record<string, ListingPlan> = {
     ],
   },
 };
+
+/** What the team's stack looks like before any AI wording: a sound default for any product, in the standard order. */
+export function standardSlides(p: { name: string; greenClaims: string[]; ingredients: string }, focus: { callouts: string[]; usage: string[] }): Slide[] {
+  const claim = (re: RegExp) => p.greenClaims.find((c) => re.test(c));
+  const topIngredients = p.ingredients
+    .replace(/\([^)]*\)/g, "")
+    .split(/[,;]/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  const rows = [
+    claim(/maida/i) ? { label: "Maida", us: "No", them: "Yes" } : null,
+    claim(/sugar/i) ? { label: "Refined sugar", us: "No", them: "Yes" } : null,
+    claim(/palm/i) ? { label: "Palm oil", us: "No", them: "Often" } : null,
+    claim(/preserv/i) ? { label: "Preservatives", us: "No", them: "Often" } : null,
+    claim(/millet/i) ? { label: "Millets", us: "Yes", them: "Rarely" } : null,
+  ].filter((r): r is { label: string; us: string; them: string } => Boolean(r));
+  return [
+    { kind: "hero3d", header: "Meet Your New Favourite", sub: `${p.name.split(",")[0]}, baked to crunch`, feature: focus.callouts.join(" | "), scene: "The pack as a premium 3D product shot at a 3/4 angle on a round podium, our cookies and ingredients around it" },
+    { kind: "side-left", header: "Turn It Around", sub: "Everything on the side of the pack", feature: "", scene: "The real left side of the pack, on a soft, warm background" },
+    { kind: "side-right", header: "Made The Honest Way", sub: "The other side of the story", feature: "", scene: "The real right side of the pack, on a soft, warm background" },
+    { kind: "back", header: "Nothing To Hide", sub: "Read the back: every word", feature: "", scene: "The real back of the pack, on a soft background" },
+    { kind: "nutrition", header: "Fuel That Lasts", sub: "Nutrition per 100 g, as printed on the pack", feature: focus.callouts.join(" | "), scene: "The real nutrition panel, large and readable, on a clean background" },
+    { kind: "ingredients", header: "Only Real Ingredients", sub: topIngredients.length ? `${topIngredients.join(", ")} and more` : "Every ingredient, as on the pack", feature: "", scene: "The real ingredients, as small piles around the list" },
+    { kind: "usage", header: "Your Anytime Snack", sub: "Four ways to enjoy it", feature: focus.usage.join(" | "), scene: "A cosy table with a cup of chai, a cup of coffee and a jar of peanut butter, a hand dipping a cookie in chai" },
+    {
+      kind: "comparison",
+      header: "Ours vs Regular Biscuits",
+      sub: "See why families are switching",
+      feature: "",
+      scene: "A warm kitchen table",
+      comparison: { us: "Puŕ Fermé", them: "Regular biscuits", rows: rows.length ? rows : [{ label: "Millets", us: "Yes", them: "Rarely" }] },
+    },
+  ];
+}
+
+/** Puts any plan into the standard order: a slide of each kind where the plan has one, the default where it doesn't. */
+export function toStandardStack(plan: { slides: Slide[] }, defaults: Slide[]): Slide[] {
+  const pool = [...plan.slides];
+  return STANDARD_STACK.map((kind, i) => {
+    const j = pool.findIndex((s) => s.kind === kind);
+    if (j >= 0) return pool.splice(j, 1)[0];
+    return defaults[i];
+  });
+}
+
+/** The ingredients as separate items, percentages kept ("Foxtail millet (23.8%), Oats (16.4%), …"), commas inside brackets respected. */
+export function ingredientItems(text: string, max = 12): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of text.replace(/^\s*ingredients?\s*:\s*/i, "")) {
+    if (ch === "(" || ch === "[") depth++;
+    if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+    if ((ch === "," || ch === ";") && depth === 0) {
+      if (cur.trim()) out.push(cur.trim());
+      cur = "";
+    } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim().replace(/\.$/, ""));
+  return out.slice(0, max);
+}

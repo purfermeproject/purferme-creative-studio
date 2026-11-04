@@ -4,7 +4,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { BrandKitEditor } from "./BrandKitEditor";
 import { PackCropper } from "./PackCropper";
 import { PackViewsUploader } from "./PackViewsUploader";
-import { PACK_VIEWS, VIEW_NAMES, viewOf } from "@/lib/pack-views";
+import { isProductShot, PACK_VIEWS, VIEW_NAMES, viewOf } from "@/lib/pack-views";
 import { getAllPlatformRules, getBrand, getProducts, getTerms } from "@/lib/data";
 import { PLATFORMS, PLATFORM_LABELS, PRODUCT_STATUSES, ROLES } from "@/lib/types";
 import { asc } from "drizzle-orm";
@@ -302,12 +302,34 @@ export default async function AdminPage() {
                   ) : null}
                   <PackViewsUploader productId={p.id} productName={p.name} />
                 </div>
+                <div className="w-full space-y-3 border-t border-line pt-4" data-testid={`product-shots-${p.slug}`}>
+                  <p className="label">Our real product (out of the pack)</p>
+                  <p className="hint">Photos of the real cookies (or spread, bar…): whole, broken, a stack. Each is refined when you upload it (plain background removed, edges trimmed, light and sharpness lifted), and every image then makes the food look exactly like yours. The white main image places it next to the pack.</p>
+                  {p.photoAssetIds.some((aid) => isProductShot(photoInfo.get(aid)?.label)) ? (
+                    <ul className="flex flex-wrap gap-3">
+                      {p.photoAssetIds
+                        .filter((aid) => isProductShot(photoInfo.get(aid)?.label))
+                        .map((aid) => (
+                          <li key={aid} className="w-28 space-y-1 text-xs" data-testid="product-shot">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={`/api/assets/${aid}`} alt={photoInfo.get(aid)?.label} className="h-28 w-28 rounded-lg border border-line bg-surface-2 object-contain" />
+                            <p className="truncate">{photoInfo.get(aid)?.label?.replace("Our product: ", "")}</p>
+                            <ActionForm action={removeProductPhoto} submitLabel="Remove" submitClassName="text-xs font-semibold text-red underline">
+                              <input type="hidden" name="id" value={p.id} />
+                              <input type="hidden" name="assetId" value={aid} />
+                            </ActionForm>
+                          </li>
+                        ))}
+                    </ul>
+                  ) : null}
+                  <PackViewsUploader productId={p.id} productName={p.name} mode="product" />
+                </div>
                 <div className="w-full space-y-3 border-t border-line pt-4" data-testid={`photos-${p.slug}`}>
                   <p className="label">More product photos</p>
                   <p className="hint">Back of pack, product out of the pack, jar open, and real lifestyle shots (a tiffin, a desk with chai, a family kitchen). Images can place any of these unchanged, and Listing images can use a lifestyle shot as a slide&apos;s photo instead of AI.</p>
-                  {p.photoAssetIds.some((aid) => !viewOf(photoInfo.get(aid)?.label)) ? (
+                  {p.photoAssetIds.some((aid) => !viewOf(photoInfo.get(aid)?.label) && !isProductShot(photoInfo.get(aid)?.label)) ? (
                     <ul className="flex flex-wrap gap-3">
-                      {p.photoAssetIds.filter((aid) => !viewOf(photoInfo.get(aid)?.label)).map((aid) => (
+                      {p.photoAssetIds.filter((aid) => !viewOf(photoInfo.get(aid)?.label) && !isProductShot(photoInfo.get(aid)?.label)).map((aid) => (
                         <li key={aid} className="w-28 space-y-1 text-xs">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={`/api/assets/${aid}`} alt={photoInfo.get(aid)?.label || "Product photo"} className="h-28 w-28 rounded-lg border border-line bg-surface-2 object-contain" />
@@ -568,6 +590,7 @@ export default async function AdminPage() {
               ["props", "Props and food styling", "What's around the product and how food looks."],
               ["mood", "Colour and mood", "Palette, warmth, contrast, feeling."],
               ["avoid", "Avoid", "Things that make images look fake or off-brand."],
+              ["type", "Text on images", "The font style for headlines, sub-lines and callouts on designed images (and how big)."],
             ] as const
           ).map(([k, label, hint]) => (
             <Field key={k} label={label} hint={hint}>

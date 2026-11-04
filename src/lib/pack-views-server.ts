@@ -13,7 +13,7 @@ export async function classifyPackView(image: Buffer, user: string): Promise<Pac
     const small = await sharp(image).rotate().flatten({ background: "#ffffff" }).resize(768, 768, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
     const r = await structuredCall({
       schema: z.object({ view: z.enum(PACK_VIEWS) }),
-      prompt: `This is a photo of a food product pack. Which side does it show? front = the main face with the brand name and big product picture; back = ingredients, nutrition table, barcode; left side / right side = a narrow side panel; top / bottom = the lid or base; angle = a 3/4 view showing the front and one side together; open = the pack opened with the product visible.`,
+      prompt: `This is a photo of a food product pack. Which side does it show? front = the main face with the brand name and big product picture; back = ingredients, nutrition table, barcode; left side / right side = a narrow side panel; top / bottom = the lid or base; angle = a 3/4 view showing the front and one side together; open = the pack opened with the product visible; nutrition panel = a close-up of just the nutrition table; ingredients panel = a close-up of just the ingredients list.`,
       image: { mediaType: "image/jpeg", base64: small.toString("base64") },
       maxTokens: 300,
       effort: "low",
@@ -37,6 +37,8 @@ export async function choosePackViews(
   user: string,
   ctx: { hook?: string; productName?: string } = {},
 ): Promise<{ views: PackView[]; why: string; action: string }> {
+  // Close-ups of a panel are for their own slides, not for drawing the pack in a scene.
+  available = available.filter((v) => !v.endsWith("panel"));
   const fallback = { views: pickViewsByRules(scene, available), why: "", action: packActionByRules(scene, ctx.hook) };
   if (!hasAi()) return fallback;
   try {
@@ -87,4 +89,20 @@ export async function loadPackViews(
   }
   if (!byView.has("front")) byView.set("front", { ref: main, assetId: mainAssetId });
   return byView;
+}
+
+/** Photos of the real product itself (refined on upload), at most `max`, for the AI to copy the food from. */
+export async function loadProductShots(photoAssetIds: string[], max = 2): Promise<{ data: Buffer; mime: string; name: string; label?: string }[]> {
+  if (!photoAssetIds.length) return [];
+  const { db, schema } = await import("@/db");
+  const { inArray } = await import("drizzle-orm");
+  const { isProductShot } = await import("./pack-views");
+  const rows = await db
+    .select({ id: schema.assets.id, label: schema.assets.label, mime: schema.assets.mime, data: schema.assets.dataBase64 })
+    .from(schema.assets)
+    .where(inArray(schema.assets.id, photoAssetIds));
+  return rows
+    .filter((r) => isProductShot(r.label))
+    .slice(0, max)
+    .map((r, i) => ({ data: Buffer.from(r.data, "base64"), mime: r.mime, name: `our-product-${i + 1}`, label: r.label }));
 }

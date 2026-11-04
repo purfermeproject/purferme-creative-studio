@@ -100,3 +100,11 @@ export function adScene(w: number, h: number) {
     maxBottom: Math.round(wide ? h * 0.92 : packTop - h * 0.015),
   };
 }
+
+/** Where the real panel photo (a side, the back, the nutrition table) sits on a panel slide; the words go at the top and left. */
+export function panelBox(S: number, centred = false) {
+  // With no pointers down the left, the photo (or the list) takes the middle.
+  return centred
+    ? { left: Math.round(S * 0.17), top: Math.round(S * 0.27), width: Math.round(S * 0.66), height: Math.round(S * 0.68) }
+    : { left: Math.round(S * 0.4), top: Math.round(S * 0.27), width: Math.round(S * 0.55), height: Math.round(S * 0.66) };
+}

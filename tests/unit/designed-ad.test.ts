@@ -14,17 +14,20 @@ describe("callouts", () => {
 describe("specFromSlide", () => {
   it("turns a feature slide into callouts and a comparison slide into a table", () => {
     const f = specFromSlide({ header: "Only Good Stuff Inside", sub: "No maida, no palm oil, no white sugar.", feature: "No Maida | No Palm Oil | No White Sugar", scene: "a mother hugging her son in a sunlit kitchen", kind: "feature" });
-    expect(f.layout).toBe("callouts-left");
-    expect(f.callouts.map((c) => c.crossed)).toEqual([true, true, true]);
+    // Every pointer repeats the sub-header here, so none is drawn twice.
+    expect(f.callouts).toEqual([]);
+    const g = specFromSlide({ header: "Only Good Stuff Inside", sub: "Baked the honest way.", feature: "No Maida | No Palm Oil | No White Sugar", scene: "a mother hugging her son in a sunlit kitchen", kind: "feature" });
+    expect(g.layout).toBe("callouts-left");
+    expect(g.callouts.map((c) => c.crossed)).toEqual([true, true, true]);
     const c = specFromSlide({ header: "Better Than Regular Biscuits", sub: "See why families are switching.", feature: "", scene: "kitchen table", kind: "comparison", comparison: { us: "PurFerme", them: "Regular Biscuit", rows: [{ label: "Maida", us: "No", them: "Yes" }] } });
     expect(c.layout).toBe("comparison");
-    expect(designWords(c)).toEqual(["Better Than Regular Biscuits", "See why families are switching.", "PurFerme", "Regular Biscuit", "Maida", "No", "Yes"]);
+    expect(designWords(c)).toEqual(["Better Than Regular Biscuits", "See why families are switching.", "Ours", "Others", "PurFerme", "Regular Biscuit", "Maida", "No", "Yes"]);
   });
 });
 
 describe("designed prompt", () => {
   it("lists every word exactly, forbids others, and keeps one real pack", () => {
-    const spec = specFromSlide({ header: "Real Nuts, Real Crunch", sub: "Almonds and cashews in every bite.", feature: "Almonds, Cashews | Cocoa | Cardamom | Cinnamon", scene: "a warm kitchen table", kind: "feature" });
+    const spec = specFromSlide({ header: "Real Nuts, Real Crunch", sub: "Baked into every single bite.", feature: "Almonds, Cashews | Cocoa | Cardamom | Cinnamon", scene: "a warm kitchen table", kind: "feature" });
     const p = buildDesignedPrompt(spec, { ...opts, views: ["front", "angle"] });
     expect(p).toContain("“Real Nuts, Real Crunch”");
     expect(p).toContain("“Cardamom”, icon: two green cardamom pods");

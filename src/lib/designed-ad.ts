@@ -1,3 +1,5 @@
+import { withoutRepeats } from "./product-focus";
+
 /**
  * "Designed" images: the image AI lays out the whole ad like a finished brand post (a big headline with
  * hand-drawn accents, a sub-line, the real pack as the hero, callouts with icons or a comparison table,
@@ -6,7 +8,7 @@
 
 export type Callout = { label: string; icon: string; crossed: boolean };
 export type DesignTable = { us: string; them: string; rows: { label: string; us: string; them: string }[] };
-export type DesignLayout = "callouts-left" | "callouts-both" | "comparison" | "badge";
+export type DesignLayout = "callouts-left" | "callouts-both" | "comparison" | "badge" | "hero3d";
 /** Where an image happens and how it feels: every image in a set gets its own. */
 export type Setting = { key: string; place: string; light: string; surface: string; mood: string; colours: string };
 
@@ -66,6 +68,12 @@ export type DesignSpec = {
 };
 
 const ICONS: [RegExp, string][] = [
+  [/\bchai\b|\btea\b/i, "a steaming glass of cutting chai"],
+  [/coffee/i, "a cup of coffee"],
+  [/peanut butter/i, "a spoonful of peanut butter"],
+  [/\bmilk\b/i, "a glass of milk"],
+  [/on the go|travel|\bbag\b/i, "a small backpack"],
+  [/carb/i, "a few golden grains"],
   [/maida|refined flour|flour/i, "a small heap of white flour"],
   [/palm/i, "an oil drop"],
   [/sugar/i, "three sugar cubes"],
@@ -109,13 +117,24 @@ export function specFromSlide(
   },
   /** Settings the earlier slides of the stack already use, so this one gets its own. */
   used: string[] = [],
+  /** Other approved points to fill in for any callout dropped for repeating the header or sub-header. */
+  spare: string[] = [],
 ): DesignSpec {
   const setting = pickSetting(slide.scene, `${slide.header} ${slide.sub}`, used, seedOf(slide.header) + used.length);
-  const parts = slide.feature
-    .split("|")
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .slice(0, 6);
+  // Each idea is said once: a pointer never repeats the header or sub-header.
+  const parts = withoutRepeats(
+    slide.header,
+    slide.sub,
+    slide.feature
+      .split("|")
+      .map((p) => p.trim())
+      .filter(Boolean),
+    spare,
+    6,
+  ).kept;
+  if (slide.kind === "hero3d") {
+    return { headline: slide.header, sub: slide.sub, layout: "hero3d", callouts: parts.slice(0, 3).map(calloutFor), scene: slide.scene, setting };
+  }
   if (slide.kind === "comparison" && slide.comparison?.rows.length) {
     return { headline: slide.header, sub: slide.sub, layout: "comparison", callouts: [], table: { ...slide.comparison, rows: slide.comparison.rows.slice(0, 5) }, scene: slide.scene, setting };
   }
@@ -134,7 +153,7 @@ export function specFromSlide(
 /** Every piece of text the design draws (the pack's own print aside), for the compliance scan and the read-back. */
 export function designWords(spec: DesignSpec): string[] {
   const words = [spec.headline, spec.sub, ...spec.callouts.map((c) => c.label), spec.badge ?? "", spec.cta ?? ""];
-  if (spec.table) words.push(spec.table.us, spec.table.them, ...spec.table.rows.flatMap((r) => [r.label, r.us, r.them]));
+  if (spec.table) words.push("Ours", "Others", spec.table.us, spec.table.them, ...spec.table.rows.flatMap((r) => [r.label, r.us, r.them]));
   // Ticks and crosses are drawn as marks, not words.
   return words.map((w) => w.trim()).filter((w) => w && !/^[✓✗✔✘x×]$/i.test(w));
 }
@@ -156,6 +175,10 @@ export type DesignPromptOpts = {
   /** The brand's own image style rules (Settings → Image style). */
   people?: string;
   avoid?: string;
+  /** The font style for the words (Settings → Image style → Text on images). */
+  type?: string;
+  /** How many photos of our real food (cookies) are attached after the pack photos. */
+  foodPhotos?: number;
 };
 
 /** The image prompt for a designed ad, in the style of the team's examples. */
@@ -174,7 +197,10 @@ export function buildDesignedPrompt(spec: DesignSpec, o: DesignPromptOpts): stri
   const placement: Record<DesignLayout, string> = {
     "callouts-left": `The pack stands large in the centre-right, slightly turned; a column of ${spec.callouts.length} callouts runs down the left side.`,
     "callouts-both": `The pack stands large in the centre, slightly turned; the callouts sit in two columns, half on the left and half on the right of the pack.`,
-    comparison: "The pack stands large on the left, slightly turned; the comparison table sits on the right.",
+    comparison:
+      "Our pack stands on the left, slightly turned, with a small plum tag above it reading “Ours”; at the far right stands a plain, unbranded generic biscuit packet (a plain white or grey wrapper with no logo, no brand name and no words) with a small grey tag above it reading “Others”; the comparison table sits between them.",
+    hero3d:
+      "The pack is the hero: a premium, realistic 3D product shot at a 3/4 angle (the front and one side visible, with real depth and thickness), standing tall in the centre on a round podium, dramatic soft light and gentle reflections; the callouts float at the sides.",
     badge: "The pack stands large in the centre, slightly turned; one small card sits on the right.",
   };
   return [
@@ -182,10 +208,11 @@ export function buildDesignedPrompt(spec: DesignSpec, o: DesignPromptOpts): stri
     `LAYOUT: headline and sub-line at the top${people ? " (left-aligned on the left, the people on the right)" : ", centred"}. ${placement[spec.layout]} A few whole and broken cookies in the foreground on ${spec.setting.surface}.`,
     "",
     "TEXT: draw EXACTLY these words, spelled exactly as written, with the same capital letters, and NO other words anywhere in the picture (only the print on our pack is allowed besides them):",
-    `- HEADLINE, the largest text, 1–2 lines, a very bold rounded serif in deep plum ${o.primary}, with three short hand-drawn ${o.accent} spark strokes on each side and a ${o.accent} brush underline under it: ${q(spec.headline)}`,
-    spec.sub ? `- SUB-LINE, one line just under the headline, a bold clean sans-serif in plum: ${q(spec.sub)}` : "",
+    `- FONT for all the words: ${o.type ?? "an extra-bold, heavy, modern geometric sans-serif (like Poppins ExtraBold), never thin, script or serif"}.`,
+    `- HEADLINE, the largest text, BIG and BOLD (each line about 11–13% of the image height, 1–2 lines, spanning most of the width), in deep plum ${o.primary}, with three short hand-drawn ${o.accent} spark strokes on each side and a ${o.accent} brush underline under it: ${q(spec.headline)}`,
+    spec.sub ? `- SUB-LINE, one line just under the headline, bold and large (about half the headline's size), in plum: ${q(spec.sub)}` : "",
     spec.callouts.length
-      ? `- CALLOUTS, each a soft cream rounded pill or circle with a gentle shadow, a small, simple, realistic illustrated icon and its label in bold plum sans-serif (each label exactly once):\n${calloutLines.join("\n")}`
+      ? `- CALLOUTS, each a soft cream rounded pill or circle with a gentle shadow, a small, simple, realistic illustrated icon and its label in big, bold plum letters that read easily on a phone (each label exactly once):\n${calloutLines.join("\n")}`
       : "",
     spec.table
       ? `- COMPARISON TABLE on a rounded cream card with a soft shadow: three columns. Column headers: ${q(spec.table.us)} on a plum band with white text, ${q(spec.table.them)} on a pale pink band. Each row has a small line icon and its label in the first column; our column is pale green with a green tick and the value; their column is pale pink with a red cross and the value. Rows:\n${spec.table.rows.map((r, i) => `   ${i + 1}. ${q(r.label)} | ours: ${q(r.us)} | theirs: ${q(r.them)}`).join("\n")}`
@@ -194,6 +221,9 @@ export function buildDesignedPrompt(spec: DesignSpec, o: DesignPromptOpts): stri
     spec.cta ? `- A rounded ${o.accent} button with white bold text near the bottom left: ${q(spec.cta)}` : "",
     "",
     `PACK: ${packLine} Show exactly ONE pack, large and in sharp focus as the hero, standing on ${spec.setting.surface}${o.packAction ? ` (${o.packAction})` : ""}, slightly turned so it looks real, lit by the same light as the scene, with a soft shadow. Copy its design exactly: the same shape and proportions, colours, logo, brand name, illustrations and every printed word spelled exactly the same. Do not redesign, simplify, mirror or add anything to it. No other pack, box, jar or packet anywhere.`,
+    o.foodPhotos
+      ? `OUR REAL FOOD: the last ${o.foodPhotos === 1 ? "attached photo shows" : `${o.foodPhotos} attached photos show`} our real product out of the pack. Every cookie (or piece of food) in the picture must look exactly like it: the same colour, texture, size, shape, cracks and visible nuts, oats and millet. Never draw a generic or different-looking cookie.`
+      : "",
     `SCENE (the most important part: show exactly this, as the team wrote it, every person, object and place in it): ${spec.scene}. ${people ? "Real Indian people, candid and natural, behind or beside the pack, never covering it or the text; their faces and body language carry the feeling below. " : ""}`,
     `SETTING (this image's own world, matching the scene above; never a generic beige studio): ${spec.setting.place}; ${spec.setting.light}; the pack and props on ${spec.setting.surface}; the background softly out of focus${o.props.length ? `; small real props: ${o.props.join(", ")}` : ""}.`,
     `EMOTION: ${spec.setting.mood}. Colour palette: ${spec.setting.colours} (the headline stays plum so it reads; the callout pills stay soft cream).`,

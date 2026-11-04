@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { finishSlide } from "@/components/listing-render";
+import { finishMain, finishSlide } from "@/components/listing-render";
+import { isProductShot, viewOf } from "@/lib/pack-views";
 import type { BrandKit } from "@/lib/brand-kit";
 import { LISTING_LABELS, LISTING_PLATFORMS, LISTING_SIZE, SLIDE_KIND_LABELS, SLIDE_KINDS, type ListingPlan, type ListingPlatform, type Slide, type SlideCheck } from "@/lib/listing-plan";
 import { readNdjson } from "@/lib/ndjson";
@@ -190,6 +191,9 @@ function PlanEditor({
   const [photoId, setPhotoId] = useState(product.photos[0]?.id ?? "");
   /** designed = the AI lays out each slide like a finished brand post, each in its own setting; clean = photo + words added by the app. */
   const [look, setLook] = useState<"designed" | "clean">("designed");
+  /** Claim labels on the main image: fine on Shopify; Amazon and Flipkart don't allow text on the main image. */
+  const [mainClaims, setMainClaims] = useState(platform === "shopify");
+  const strictMain = platform !== "shopify";
   const S = LISTING_SIZE[platform];
 
   const setSlide = (i: number, patch: Partial<Slide>) => {
@@ -221,17 +225,22 @@ function PlanEditor({
       const res = await fetch("/api/listing/slide", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ productId: product.id, platform, slot, productPhotoId: slot === "main" && photoId ? photoId : null, designed: look === "designed" }),
+        body: JSON.stringify({ productId: product.id, platform, slot, productPhotoId: slot === "main" && photoId ? photoId : null, designed: look === "designed", mainClaims }),
       });
-      const done = await readNdjson<{ image: { id: string; url: string }; final: boolean; panel?: string; generic?: { shape: "jar" | "box"; labelY: number; width: number } | null }>(
+      const done = await readNdjson<{ image: { id: string; url: string }; final: boolean; panel?: string; generic?: { shape: "jar" | "box"; labelY: number; width: number } | null; list?: string[] | null; claims?: string[] }>(
         res,
         () => {},
         add,
       );
       let url = done.image.url;
-      if (!done.final && slot !== "main") {
-        add("Adding the header, sub-header and feature in your brand fonts");
-        const fin = await finishSlide({ baseUrl: done.image.url, kit, slide: plan.slides[slot - 1], slot, panel: done.panel ?? kit.colors.primary, generic: done.generic });
+      if (!done.final && slot === "main") {
+        add(`Adding the labels: ${(done.claims ?? []).join(", ")}`);
+        const fin = await finishMain({ baseUrl: done.image.url, kit, claims: done.claims ?? [] });
+        await call("/api/listing/attach", "POST", { productId: product.id, platform, slot: id, assetId: fin.id });
+        url = fin.url;
+      } else if (!done.final && slot !== "main") {
+        add("Adding the header, sub-header and pointers in your brand fonts");
+        const fin = await finishSlide({ baseUrl: done.image.url, kit, slide: plan.slides[slot - 1], slot, panel: done.panel ?? kit.colors.primary, generic: done.generic, list: done.list });
         await call("/api/listing/attach", "POST", { productId: product.id, platform, slot: id, assetId: fin.id });
         url = fin.url;
       }
@@ -293,6 +302,8 @@ function PlanEditor({
         ) : null}
       </div>
 
+      <PhotoChecklist photos={product.photos} hasPack={product.hasPack} />
+
       {/* Main image */}
       <article className="grid gap-5 rounded-3xl border border-line bg-surface p-5 md:grid-cols-[16rem_minmax(0,1fr)]" data-testid="slot-main">
         <Preview url={saved.images.main} label="Main image" sub="Pack on pure white" />
@@ -302,13 +313,38 @@ function PlanEditor({
             <h3 className="display text-2xl">Main image</h3>
           </div>
           <p className="text-sm text-ink-soft">
-            Your real pack on pure white, filling about 85% of the frame ({S}×{S}). {plan.main.note}
+            Your real pack and your real cookies on pure white, with small piles of the real ingredients ({S}×{S}). {plan.main.note}
           </p>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" checked={mainClaims} onChange={(e) => setMainClaims(e.target.checked)} aria-label="Claim labels on the main image" />
+            <span>
+              Claim labels on the main image
+              {canEdit ? (
+                <input
+                  className="input mt-1 py-1 text-sm"
+                  aria-label="Main image labels"
+                  value={(plan.main.claims ?? []).join(", ")}
+                  placeholder="0% Maida, No Refined Sugar"
+                  onChange={(e) => {
+                    setPlan((p) => ({ ...p, main: { ...p.main, claims: e.target.value.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 3) } }));
+                    setDirty(true);
+                  }}
+                />
+              ) : (
+                <span className="block text-ink-soft">{(plan.main.claims ?? []).join(" · ")}</span>
+              )}
+              {mainClaims && strictMain ? (
+                <span className="mt-1 block text-xs text-red" role="alert">
+                  {platform === "amazon" ? "Amazon" : "Flipkart"} doesn&apos;t allow text, badges or graphics on the main image: it can get the listing suppressed. Keep the labels for the next images, or upload this one to Shopify only.
+                </span>
+              ) : null}
+            </span>
+          </label>
           {product.photos.length ? (
             <label className="block max-w-sm">
               <span className="label">Beside the pack</span>
               <select className="input" value={photoId} onChange={(e) => setPhotoId(e.target.value)}>
-                <option value="">Nothing, just the pack</option>
+                <option value="">Our real cookies (if uploaded), else just the pack</option>
                 {product.photos.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -317,7 +353,7 @@ function PlanEditor({
               </select>
             </label>
           ) : (
-            <p className="hint">Add a real photo of the product itself (e.g. a stack of cookies) in Settings → Products to stand it beside the pack.</p>
+            <p className="hint">Add photos of your real cookies in Settings → Products → Our real product: they stand beside the pack here and every image uses them.</p>
           )}
           <Stages list={stages.main} error={errors.main} />
           <button type="button" className="btn-primary" onClick={() => void make("main")} disabled={!!working || !canRun || !product.hasPack}>
@@ -719,5 +755,36 @@ function SceneSummary({ scene, ownPhoto }: { scene: string; ownPhoto: boolean })
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** The real photos the standard stack is built from, and which are still missing (added in Settings → Products). */
+function PhotoChecklist({ photos, hasPack }: { photos: { id: string; label: string }[]; hasPack: boolean }) {
+  const views = new Set(photos.map((p) => viewOf(p.label)).filter(Boolean));
+  const items: [string, boolean, string][] = [
+    ["Front of the pack", hasPack, "images 1, 2, 9"],
+    ["Our real cookies (out of the pack)", photos.some((p) => isProductShot(p.label)), "image 1 and every scene"],
+    ["Left side", views.has("left side"), "image 3"],
+    ["Right side", views.has("right side"), "image 4"],
+    ["Back", views.has("back"), "image 5"],
+    ["Nutrition panel close-up", views.has("nutrition panel") || views.has("back"), "image 6"],
+    ["Ingredients panel close-up", views.has("ingredients panel"), "image 7 (else the list is drawn from the product's facts)"],
+    ["3/4 angle", views.has("angle"), "image 2 (helps the 3D shot)"],
+  ];
+  const missing = items.filter(([, ok]) => !ok).length;
+  return (
+    <section className="rounded-2xl border border-line bg-surface-2 p-4 text-sm" data-testid="photo-checklist">
+      <p className="font-semibold">
+        Photos for this stack {missing ? <span className="chip-amber ml-1">{missing} to add</span> : <span className="chip-green ml-1">all here</span>}
+      </p>
+      <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+        {items.map(([label, ok, used]) => (
+          <li key={label} className={ok ? "text-leaf" : "text-ink-soft"}>
+            {ok ? "✓" : "○"} {label} <span className="text-xs text-ink-soft">· {used}</span>
+          </li>
+        ))}
+      </ul>
+      {missing ? <p className="hint mt-2">Add them in Tools → Settings → Products → this product → Pack from every side / Our real product. Several at once is fine.</p> : null}
+    </section>
   );
 }

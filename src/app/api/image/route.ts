@@ -1,3 +1,4 @@
+import { scenePropsFor } from "@/lib/product-focus";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { authErrorStatus, requireRole } from "@/auth";
@@ -10,14 +11,14 @@ import { generateImage, loadReference, type Reference } from "@/lib/images";
 import { ConceptSchema } from "@/lib/schemas";
 import { adLayout, PACK_POSITIONS, PACK_SCALES } from "@/lib/pack-composite";
 import { adScene } from "@/lib/ad-layout";
-import { mustShow, propsFromIngredients, sceneSpec } from "@/lib/scene-spec";
+import { mustShow, sceneSpec } from "@/lib/scene-spec";
 import { PLATFORM_LABELS, PLATFORMS } from "@/lib/types";
 import { inArray } from "drizzle-orm";
 import { buildDesignedPrompt, designWords, type DesignSpec } from "@/lib/designed-ad";
 import { planDesign } from "@/lib/designed-ad-server";
 import { scan } from "@/lib/compliance";
 import { viewOf, VIEW_NAMES, type PackView } from "@/lib/pack-views";
-import { choosePackViews } from "@/lib/pack-views-server";
+import { choosePackViews, loadProductShots } from "@/lib/pack-views-server";
 
 export const maxDuration = 300;
 
@@ -125,7 +126,7 @@ export async function POST(req: Request) {
     const A = adScene(spec.w, spec.h);
     const sceneArgs = {
       description: sceneDesc,
-      props: propsFromIngredients(product.ingredients),
+      props: scenePropsFor(product),
       style: brand0.imageStyle,
       layout: "ad" as const,
       productName: product.name,
@@ -158,8 +159,11 @@ export async function POST(req: Request) {
     // The model makes 2:3, 3:2 or square; the platform size is cut from that. Say how much each edge loses.
     const [gw, gh] = generationSizeFor(spec.w, spec.h).split("x").map(Number);
     const trim = spec.w / spec.h < gw / gh ? { sides: (1 - spec.w / spec.h / (gw / gh)) / 2, topBottom: 0 } : { sides: 0, topBottom: (1 - gw / gh / (spec.w / spec.h)) / 2 };
+    // Our real cookies (refined photos) so the food looks like ours, not a generic cookie.
+    const foodRefs = packMode === "ai" && !extraPhoto && !input.preview ? await loadProductShots(product.photoAssetIds) : [];
     const aiArgs = {
       ...sceneArgs,
+      foodPhotos: foodRefs.length || undefined,
       inScene: true,
       aiPack: true,
       photoShows: extraPhoto ? reference?.label || "a photo of the product" : undefined,
@@ -206,13 +210,15 @@ export async function POST(req: Request) {
           w: spec.w,
           h: spec.h,
           forWhat: `${PLATFORM_LABELS[input.platform]}, ${spec.label}`,
-          props: propsFromIngredients(product.ingredients),
+          props: scenePropsFor(product),
           views: packRefs.length ? packRefs.map((p) => p.view) : undefined,
           packAction: packAction || undefined,
           trim,
+          foodPhotos: foodRefs.length || undefined,
           look: brand0.imageStyle.look,
           people: brand0.imageStyle.people,
           avoid: brand0.imageStyle.avoid,
+          type: brand0.imageStyle.type,
         })
       : packMode === "ai" ? buildListingScenePrompt(aiArgs) : packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: true }) : buildImagePrompt({ ...promptInput, packInScene: packMode === "locked" });
     const fallbackPrompt = packMode === "scene" ? buildListingScenePrompt({ ...sceneArgs, inScene: false }) : buildImagePrompt(promptInput);
@@ -222,6 +228,7 @@ export async function POST(req: Request) {
     const label = `${spec.label}${input.concept.frames.length > 1 ? ` · scene ${input.frameIndex + 1}` : ""}${packTag}${tag}`;
     const run = async (onStage?: (text: string) => void) => {
       if (packAction) onStage?.(`How the pack is used: ${packAction}`);
+      if (foodRefs.length) onStage?.(`Using ${foodRefs.length} photo${foodRefs.length > 1 ? "s" : ""} of your real product, so the food looks like yours`);
       if (packRefs.length) onStage?.(`Using your pack photos: ${packRefs.map((p) => VIEW_NAMES[p.view].replace(/ \(.*\)$/, "").toLowerCase()).join(" + ")}${viewWhy ? ` (${viewWhy})` : ""}`);
       if (design) onStage?.(`Setting and feeling: ${design.setting.place}; ${design.setting.mood}`);
       if (design) onStage?.(`Designing it: “${design.headline}”${design.sub ? ` / “${design.sub}”` : ""}${design.callouts.length ? `, callouts: ${design.callouts.map((c) => c.label).join(", ")}` : ""}${design.table ? `, a comparison table (${design.table.rows.length} rows)` : ""}; words checked against your compliance terms`);
@@ -240,6 +247,7 @@ export async function POST(req: Request) {
         target: { w: spec.w, h: spec.h },
         reference: packMode === "ai" ? (packRefs[0]?.ref ?? reference) : null,
         moreReferences: packRefs.slice(1).map((p) => p.ref),
+        foodReferences: foodRefs,
         // Compared with the real pack only when the pack itself was sent (an extra photo, e.g. loose cookies, isn't a pack).
         adaptPack: packMode === "ai" && reference && !extraPhoto ? { assetId: packAssetId } : null,
         fallbackPrompt: packMode === "ai" ? undefined : fallbackPrompt,

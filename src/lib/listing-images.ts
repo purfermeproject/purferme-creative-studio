@@ -1,7 +1,8 @@
 import "server-only";
 import sharp, { type OverlayOptions } from "sharp";
-import { comparisonLayout } from "./ad-layout";
+import { comparisonLayout, panelBox } from "./ad-layout";
 import { preparePack } from "./pack-composite";
+import { removeBackdrop } from "./cutout";
 
 /**
  * Listing images composed from real photos: our pack is only ever scaled, never redrawn. Words are
@@ -37,11 +38,19 @@ async function groundShadow(centreX: number, floor: number, width: number, size:
  * Main image: the real pack on pure white, filling ~85% of the height. With a real photo of the product
  * itself (a cookie stack, a spoon of spread), it stands at the left, a little in front, as in the team's sample.
  */
-export async function mainImage(pack: Buffer, size: number, productPhoto?: Buffer | null): Promise<Buffer> {
+export async function mainImage(pack: Buffer, size: number, productPhoto?: Buffer | null, props?: Buffer | null): Promise<Buffer> {
   const S = size;
   const floor = Math.round(S * 0.93);
   const p = await standing(pack, S * 0.86, productPhoto ? S * 0.62 : S * 0.9);
   const layers: OverlayOptions[] = [];
+  if (props) {
+    // Small piles of the real ingredients in a low row behind the pack and the cookies (cut out, on pure white).
+    const m = await sharp(props).metadata();
+    const w = Math.round(S * 0.96);
+    const h = Math.min(Math.round(S * 0.2), Math.round(((m.height ?? 1) / (m.width ?? 1)) * w));
+    const row = await sharp(props).resize(w, h, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+    layers.push({ input: row, left: Math.round((S - w) / 2), top: Math.min(S - h, Math.round(floor - h * 0.75)) });
+  }
   if (productPhoto) {
     const x = await standing(productPhoto, S * 0.58, S * 0.34);
     const total = x.width * 0.85 + p.width;
@@ -147,4 +156,43 @@ export async function comparisonScene(scene: Buffer, pack: Buffer, size: number)
   // Where the browser writes the generic name: the middle of the container's blank label.
   const labelY = Math.round(C.them.floor - gh + gh * (jar ? 0.58 : 0.51));
   return { data, generic: { shape: jar ? "jar" : "box", labelY, width: gw } };
+}
+
+
+/**
+ * A panel slide: the team's real photo of one side of the pack, placed large and sharp (never redrawn, so
+ * the small print stays exact) on a soft photographed background. Cut out when it has a plain backdrop,
+ * else shown as a rounded card.
+ */
+export async function panelOn(bg: Buffer, photo: Buffer, S: number, centred = false): Promise<Buffer> {
+  const B = panelBox(S, centred);
+  const base = await sharp(bg).resize(S, S, { fit: "cover" }).png().toBuffer();
+  const cut = await removeBackdrop(photo).catch(() => null);
+  const layers: OverlayOptions[] = [];
+  const src = cut?.png ?? (await sharp(photo).rotate().png().toBuffer());
+  const m = await sharp(src).metadata();
+  const k = Math.min(B.width / (m.width ?? 1), B.height / (m.height ?? 1));
+  const w = Math.max(1, Math.round((m.width ?? 1) * k));
+  const h = Math.max(1, Math.round((m.height ?? 1) * k));
+  const left = B.left + Math.round((B.width - w) / 2);
+  const top = B.top + Math.round((B.height - h) / 2);
+  if (cut) {
+    const sh = await groundShadow(left + w / 2, top + h, w, S);
+    if (sh) layers.push(sh);
+    layers.push({ input: await sharp(src).resize(w, h, { kernel: "lanczos3" }).sharpen({ sigma: 0.6 }).png().toBuffer(), left, top });
+  } else {
+    const r = Math.round(S * 0.02);
+    const pad = Math.round(S * 0.012);
+    const sh = await cardShadow(left - pad, top - pad, w + pad * 2, h + pad * 2, r + pad, S);
+    if (sh) layers.push(sh);
+    layers.push({ input: svg(w + pad * 2, h + pad * 2, `<rect width="${w + pad * 2}" height="${h + pad * 2}" rx="${r + pad}" fill="#fffdf8"/>`), left: left - pad, top: top - pad });
+    layers.push({ input: await rounded(await sharp(src).resize(w, h, { kernel: "lanczos3" }).sharpen({ sigma: 0.6 }).png().toBuffer(), w, h, r), left, top });
+  }
+  return sharp(base).composite(layers).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+}
+
+/** Ingredient props cut out of a photo on white, for the main image (null if the backdrop can't be removed). */
+export async function propsCutout(photo: Buffer): Promise<Buffer | null> {
+  const cut = await removeBackdrop(photo).catch(() => null);
+  return cut ? sharp(cut.png).trim({ threshold: 1 }).png().toBuffer() : null;
 }

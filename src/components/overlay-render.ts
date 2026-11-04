@@ -254,11 +254,11 @@ export function headline(
   let subSize = 0;
   let blockH = 0;
   for (;;) {
-    subSize = Math.round(size * 0.46);
+    subSize = Math.round(size * 0.5);
     // Every word of the header and sub-header, at whatever size fits.
     ctx.font = `800 ${size}px ${o.serif}`;
     hLines = wrap(ctx, unquote(o.header), o.width);
-    ctx.font = `400 ${subSize}px ${o.sans}`;
+    ctx.font = `700 ${subSize}px ${o.sans}`;
     sLines = o.sub.trim() ? wrap(ctx, unquote(o.sub), o.width * 0.95) : [];
     blockH = hLines.length * size * 1.02 + (sLines.length ? subSize * 0.5 + sLines.length * subSize * 1.22 : 0) + subSize * 1.1;
     if (o.top + blockH <= o.maxBottom || size <= o.size * 0.5) break;
@@ -320,7 +320,7 @@ export function headline(
         ctx.shadowBlur = subSize * 0.3;
       }
       ctx.fillStyle = white ? "rgba(255,255,255,0.92)" : INK;
-      ctx.font = `500 ${subSize}px ${o.sans}`;
+      ctx.font = `700 ${subSize}px ${o.sans}`;
       for (const l of sLines) {
         ctx.fillText(l, x, y);
         y += subSize * 1.22;
@@ -349,7 +349,7 @@ export function headline(
   if (sLines.length) {
     y += subSize * 0.5;
     ctx.fillStyle = INK;
-    ctx.font = `400 ${subSize}px ${o.sans}`;
+    ctx.font = `700 ${subSize}px ${o.sans}`;
     for (const l of sLines) {
       ctx.fillText(l, x, y);
       y += subSize * 1.22;
@@ -381,7 +381,7 @@ export function sceneTextLayout(W: number, H: number) {
     left,
     top,
     width: Math.round(W * 0.82),
-    hookSize: Math.round(short * (tall ? 0.084 : 0.072)),
+    hookSize: Math.round(short * (tall ? 0.095 : 0.085)),
     /** The hook block ends here at the latest. */
     hookBottom: Math.round(top + H * (tall ? 0.2 : 0.26)),
     logoW: Math.round(W * (tall ? 0.22 : 0.18)),
@@ -397,7 +397,6 @@ export function sceneTextLayout(W: number, H: number) {
  */
 function drawSceneText(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | null, kit: BrandKit, o: OverlayOptions, W: number, H: number) {
   const L = sceneTextLayout(W, H);
-  const serif = `"${kit.bodyFont.name}", Georgia, serif`;
   const sans = `"${kit.headingFont.name}", sans-serif`;
   const choice = o.textColour ?? "auto";
   const tone = choice === "auto" ? pickTone(ctx, { left: L.left, top: L.top, width: L.width, height: Math.max(1, L.hookBottom - L.top) }) : choice;
@@ -422,7 +421,8 @@ function drawSceneText(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | n
       width: L.width,
       size: Math.round(L.hookSize * o.textScale),
       colour: tone === "white" ? "#ffffff" : tone === "brand" ? kit.colors.primary : INK,
-      serif,
+      // Bold sans for the hook (the team found the serif too soft).
+      serif: sans,
       sans,
       maxBottom: L.hookBottom,
       tone: tone === "white" ? "white" : "cream",

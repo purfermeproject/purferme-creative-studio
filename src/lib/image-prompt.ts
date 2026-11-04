@@ -30,7 +30,7 @@ export type ImageSize = `${number}x${number}`;
 
 /** Pure, testable: turns one frame of a concept into an image-model prompt. */
 /** The brand's photography style, edited in Settings → Image style. */
-export type ImageStyle = { look: string; places: string; people: string; props: string; mood: string; avoid: string };
+export type ImageStyle = { look: string; places: string; people: string; props: string; mood: string; avoid: string; type: string };
 
 export const DEFAULT_IMAGE_STYLE: ImageStyle = {
   look: "Real photography, not CGI: 35mm lens, natural window or daylight, shallow depth of field, true-to-life colours, gentle film grain. One clear focal point.",
@@ -39,6 +39,7 @@ export const DEFAULT_IMAGE_STYLE: ImageStyle = {
   props: "Few props, all real and relevant to the moment; food looks real and slightly imperfect (crumbs, a broken piece); nothing glossy or plastic.",
   mood: "Warm, honest and a little witty; muted, natural colours with a warm cast; calm backgrounds.",
   avoid: "Stock-photo smiles, studio seamless backdrops, floating objects, extra fingers, garbled text, oversaturated colours, fake bokeh lights.",
+  type: "Headline: an extra-bold, heavy, modern geometric sans-serif (like Poppins ExtraBold or Montserrat Black), very large and easy to read on a phone. Sub-line, callouts and table: a bold sans-serif from the same family, large. Never thin, script, handwritten or serif fonts.",
 };
 
 export function withImageStyleDefaults(s: Partial<ImageStyle> | null | undefined): ImageStyle {
@@ -210,6 +211,8 @@ export function buildListingScenePrompt(opts: {
   packAction?: string;
   /** Share of each edge that will be cut off to reach the platform size (0–0.5). */
   trim?: { sides: number; topBottom: number };
+  /** How many photos of our real food are attached after the pack photos. */
+  foodPhotos?: number;
 }): string {
   const style = opts.style ?? DEFAULT_IMAGE_STYLE;
   const side = opts.layout === "ad" ? "lower right" : "lower left";
@@ -223,6 +226,9 @@ export function buildListingScenePrompt(opts: {
           : `The attached photo is our real product pack (${opts.productName}). Put exactly ONE of it into the scene, naturally, as the hero of the picture: held in a hand, standing on the table at a slight angle, or being opened, whichever fits the moment. It takes the scene's own light, shadows and reflections and the camera's perspective, at a believable real-world size next to hands, cups and plates, clearly visible, in sharp focus and never cut off by the edge of the picture.`,
       opts.packAction && !opts.photoShows
         ? `HOW THE PACK IS USED (most important): ${opts.packAction}. The pack is part of the action and touched or used by the person, turned at a natural angle (about 20–40 degrees, so one side shows), lit by the same light as the room. NOT a product shot: never standing alone square to the camera, never looking pasted in.`
+        : "",
+      opts.foodPhotos
+        ? `OUR REAL FOOD: the last ${opts.foodPhotos === 1 ? "attached photo shows" : `${opts.foodPhotos} attached photos show`} our real product out of the pack; any of it in the scene (a cookie in a hand, on a plate) must look exactly like it: the same colour, texture, size, shape and visible nuts and grains.`
         : "",
       "Copy the pack's design exactly: the same shape and proportions, the same colours, the same logo, brand name and illustrations, and every printed word spelled exactly the same. Do not redesign, simplify, translate, mirror or add anything to it. No other pack, jar, box, pouch, packet or label anywhere in the picture.",
       `SHOW EXACTLY THIS, every part clearly visible: ${opts.description.trim()}.`,
